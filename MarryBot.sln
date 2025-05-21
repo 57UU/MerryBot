@@ -1,11 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35931.197 d17.13
+VisualStudioVersion = 17.13.35931.197
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarryBot", "MarryBot\MarryBot.csproj", "{735BC317-94EB-4F4C-BE84-8552C51F97EA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NapcatClient", "NapcatClient\NapcatClient.csproj", "{D98B03D5-094C-4283-B1D8-A1032D3CE63F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataProvider", "DataProvider\DataProvider.csproj", "{B05BC633-F715-90FF-76AB-44CA0EAE0596}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "plugins", "plugins\plugins.csproj", "{20FE0F71-BEBC-DA11-601B-F6D834C8EA50}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +25,14 @@ Global
 		{D98B03D5-094C-4283-B1D8-A1032D3CE63F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D98B03D5-094C-4283-B1D8-A1032D3CE63F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D98B03D5-094C-4283-B1D8-A1032D3CE63F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B05BC633-F715-90FF-76AB-44CA0EAE0596}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B05BC633-F715-90FF-76AB-44CA0EAE0596}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B05BC633-F715-90FF-76AB-44CA0EAE0596}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B05BC633-F715-90FF-76AB-44CA0EAE0596}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20FE0F71-BEBC-DA11-601B-F6D834C8EA50}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20FE0F71-BEBC-DA11-601B-F6D834C8EA50}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20FE0F71-BEBC-DA11-601B-F6D834C8EA50}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20FE0F71-BEBC-DA11-601B-F6D834C8EA50}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

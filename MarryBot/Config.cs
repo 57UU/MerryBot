@@ -12,6 +12,7 @@ public class Config
         try
         {
             await load();
+            await save();
         }
         catch (Exception)
         {
@@ -46,6 +47,7 @@ public class Config
     }
     public string napcat_server = "ws://<host>:<port>/";
     public string napcat_token = "napcat";
+    public List<long> qq_groups = [];
 
 
 }

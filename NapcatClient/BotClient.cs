@@ -20,7 +20,7 @@ public class BotClient
         WebSocket.OnError += WebSocket_OnError;
         WebSocket.OnClose += WebSocket_OnClose;
         WebSocket.Connect();
-        this.Actions = new Actions(WebSocket);
+        this.Actions = new Actions(WebSocket,Logger);
     }
     public BotClient(string address, string token) : this(address, token, new ConsoleLogger())
     {
@@ -39,7 +39,7 @@ public class BotClient
 
     private void WebSocket_OnMessage(object? sender, MessageEventArgs e)
     {
-        Logger.Info($"websocket on message: {e.Data}");
+        Logger.Trace($"websocket on message: {e.Data}");
         var message = JsonConvert.DeserializeObject<Dictionary<string, dynamic>>(e.Data)!;
         dynamic echo;
         if (message.TryGetValue("echo", out echo) && echo is string)

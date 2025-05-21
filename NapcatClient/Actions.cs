@@ -6,9 +6,11 @@ namespace NapcatClient.Action;
 public class Actions
 {
     readonly WebSocket WebSocket;
-    public Actions(WebSocket WebSocket)
+    readonly ISimpleLogger Logger;
+    public Actions(WebSocket WebSocket, ISimpleLogger logger)
     {
         this.WebSocket = WebSocket;
+        Logger = logger;
     }
     private static SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
     private ulong echoCount = 0;
@@ -17,6 +19,7 @@ public class Actions
         var echo = $"{echoCount++}";
         act.Echo = echo;
         var json = BotUtils.serilize(act);
+        Logger.Info($"sending: {json}");
         await Task.Run(() =>
         {
             WebSocket.Send(json);
@@ -25,6 +28,7 @@ public class Actions
     }
     internal void AddResponse(string echo, Dictionary<string, dynamic> response)
     {
+        Logger.Info($"return: {echo}");
         responses.Add(echo, response);
         responseSemaphore.Release();
     }
@@ -76,5 +80,5 @@ public class Act
     [JsonProperty(PropertyName = "params")]
     public Dictionary<string, dynamic> Parameters { set; get; }
     [JsonProperty(PropertyName = "echo")]
-    public string Echo { internal set; get; } = "NapcatClient";
+    public string Echo { internal set; get; } = string.Empty;
 }

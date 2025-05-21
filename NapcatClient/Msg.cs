@@ -1,7 +1,12 @@
-﻿using Newtonsoft.Json;
+﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
+global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
+using System.Text;
 namespace NapcatClient;
+
+
+
 
 /// <summary>
 ///  view https://napneko.github.io/onebot/sement for details
@@ -9,12 +14,41 @@ namespace NapcatClient;
 public class Message
 {
     [JsonProperty(PropertyName = "type")]
-    public string MessageType { set; get; }
+    public string MessageType {set; get; }
     [JsonProperty(PropertyName = "data")]
-    public Dictionary<string, dynamic> Data { set; get; } = new();
+    public Detail Data {internal set; get; } = new();
     public Message(string messageType)
     {
         this.MessageType = messageType;
+    }
+    public Message(string messageType, Dictionary<string, dynamic> data)
+    {
+        this.MessageType = messageType;
+        this.Data = data;
+    }
+    public override string ToString()
+    {
+        return ToPreviewText();
+    }
+    public string ToPreviewText()
+    {
+        StringBuilder stringBuilder = new StringBuilder($"{MessageType}:");
+        switch (MessageType)
+        {
+            case Str.Text:
+                stringBuilder.Append(Data["text"]);
+                break;
+            case Str.At:
+                stringBuilder.Append(Data["qq"]);
+                break;
+            case Str.Image:
+                stringBuilder.Append(Data["file"]);
+                break;
+            default: 
+                stringBuilder.Append(Data.GetString());
+                break;
+        }
+        return stringBuilder.ToString();
     }
     public static List<Message> ParseMessageChain(dynamic messages)
     {
@@ -48,4 +82,10 @@ public class Message
         message.Data["summary"] = summary;
         return message;
     }
+    public static class Str
+    {
+        public const string Image = "image";
+        public const string Text = "text";
+        public const string At = "at";
+    } 
 }
