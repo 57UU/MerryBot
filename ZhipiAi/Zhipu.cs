@@ -61,7 +61,7 @@ public class ZhipuAi
             var url=para["url"];
             var browser = new Browser();
             var html= await browser.view(url);
-            return $"该网页的HTML内容如下:{html}";
+            return $"该网页主要HTML内容如下:{html}";
         };
         RegisterTool(browserDef);
 

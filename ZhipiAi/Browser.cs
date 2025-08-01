@@ -9,21 +9,28 @@ namespace ZhipiAi;
 
 public class Browser
 {
-    IWebDriver driver = new OpenQA.Selenium.Firefox.FirefoxDriver();
+    IWebDriver driver;
+    OpenQA.Selenium.Firefox.FirefoxOptions options = new();
     string jsReader;
+    SemaphoreSlim mutex = new(1);
     public Browser()
     {
-        jsReader = System.IO.File.ReadAllText("readWeb.js",Encoding.UTF8);
+        options.AddArgument("--headless");
+        driver = new OpenQA.Selenium.Firefox.FirefoxDriver();
+        jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
     }
     public Task<string> view(string url)
     {
-        return Task.Run(() =>
+        mutex.Wait();
+        var task= Task.Run(() =>
         {
             driver.Navigate().GoToUrl(ToStandardUri(url));
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
             return result;
         });
+        mutex.Release();
+        return task;
     }
     public static Uri ToStandardUri(string raw)
     {
