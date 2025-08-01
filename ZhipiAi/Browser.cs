@@ -12,13 +12,13 @@ namespace ZhipiAi;
 public class Browser
 {
     IWebDriver driver;
-    OpenQA.Selenium.Firefox.FirefoxOptions options = new();
+    OpenQA.Selenium.Chrome.ChromeOptions options = new();
     string jsReader,getSearchResult;
     SemaphoreSlim mutex = new(1);
     public Browser()
     {
         options.AddArgument("--headless");
-        driver = new OpenQA.Selenium.Firefox.FirefoxDriver(options);
+        driver = new OpenQA.Selenium.Chrome.ChromeDriver(options);
         jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
         getSearchResult = File.ReadAllText("getSearchResult.js",Encoding.UTF8);
     }
