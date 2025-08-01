@@ -3,6 +3,7 @@ using System;
 using System.Text.Json;
 using ZhipuClient;
 
+
 Config.Initialize().Wait();
 var config=Config.instance;
 string token = ((JsonElement)config.Variables["ai-token"]).GetString();

@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.Tasks;
-using WebSocketSharp;
+using ZhipiAi;
 
 namespace ZhipuClient;
 
@@ -31,6 +31,7 @@ public class ZhipuAi
     List<ToolDef> Tools { get; set; } = new();
     Dictionary<string,FunctionDef> funtionMapper=new();
     string prompt;
+    Browser browser = new();
     public ZhipuAi(string token,string prompt)
     {
         this.token = token;
@@ -47,8 +48,22 @@ public class ZhipuAi
         var watch = new ToolDef();
         watch.Function.Name = "getTime";
         watch.Function.Description = "查看现在的时间";
-        watch.Function.FunctionCall = (parameters) => "北京时间:" + DateTime.Now.ToString(); ;
+        watch.Function.FunctionCall = async(parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
+        var browserDef = new ToolDef();
+        browserDef.Function.Name = "view_web";
+        browserDef.Function.Description = "查看网页内容";
+        browserDef.Function.Parameters.Properties.Add("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
+        browserDef.Function.FunctionCall = async(parameters) =>
+        {
+            var p = parameters.GetString();
+            var para=JsonSerializer.Deserialize<Dictionary<string,string>>(p);
+            var url=para["url"];
+            var browser = new Browser();
+            var html= await browser.view(url);
+            return $"该网页的HTML内容如下:{html}";
+        };
+        RegisterTool(browserDef);
 
     }
     void RegisterTool(ToolDef tool)
@@ -138,7 +153,7 @@ public class ZhipuAi
                     //tool call
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
                     {
-                        currentHistory.Add(HandleFunctionCall(f.Function,f.Id));
+                        currentHistory.Add(await HandleFunctionCall(f.Function,f.Id));
                     }
                 }
                 else
@@ -159,7 +174,7 @@ public class ZhipuAi
             }
 
             response = response.Trim();
-            if (!response.IsNullOrEmpty())
+            if (!string.IsNullOrEmpty(response))
             {
                 yield return response;
             }
@@ -168,7 +183,7 @@ public class ZhipuAi
 
 
     }
-    ToolMessage HandleFunctionCall(Function func,string id)
+    async Task<ToolMessage> HandleFunctionCall(Function func,string id)
     {
         ToolMessage message = new();
         message.Role = TOOL;
@@ -176,7 +191,7 @@ public class ZhipuAi
         funtionMapper.TryGetValue(func.Name,out var tool);
         if (tool != null)
         {
-            message.Content = tool.FunctionCall.Invoke(func.Arguments);
+            message.Content = await tool.FunctionCall.Invoke(func.Arguments);
         }
         else
         {
@@ -282,7 +297,7 @@ public class ToolDef
 }
 
 
-public delegate string FunctionCall(JsonElement parameter);
+public delegate Task<string> FunctionCall(JsonElement parameter);
 // 函数信息
 public class FunctionDef
 {

@@ -9,12 +9,13 @@
 
   <ItemGroup>
     <PackageReference Include="ConsoleTables" Version="2.6.2" />
-    <PackageReference Include="OpenAI" Version="2.1.0" />
-    <PackageReference Include="System.Drawing.Common" Version="9.0.4" />
+    <PackageReference Include="OpenAI" Version="2.2.0" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.7" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
+    <ProjectReference Include="..\ZhipiAi\ZhipiAi.csproj" />
   </ItemGroup>
 
 </Project>
