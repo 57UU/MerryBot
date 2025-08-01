@@ -124,7 +124,8 @@ internal class Logic
                                 (s) => PluginStorageDatabase.StorePluginData(attribute.Name, s),
                                 () => PluginStorageDatabase.GetPluginData(attribute.Name)
                                 ),
-                            botClient
+                            botClient,
+                            Config.instance.Variables
                             );
                     // 创建构造函数参数数组
                     object[] constructorParameters = [interop];

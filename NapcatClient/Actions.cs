@@ -66,6 +66,14 @@ public class Actions
         messages.Add(Message.Text(text));
         return await SendGroupMessage(groupId, messages);
     }
+    public async Task<Dictionary<string, dynamic>> ReplyGroupMessage(long groupId,long messageId, string text)
+    {
+        List<Message> messages = new List<Message>();
+        messages.Add(Message.Reply(messageId));
+        messages.Add(Message.Text(text));
+        return await SendGroupMessage(groupId, messages);
+    }
+
 
 }
 public class Act

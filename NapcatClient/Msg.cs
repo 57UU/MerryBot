@@ -75,11 +75,16 @@ public class Message
         message.Data["qq"] = target;
         return message;
     }
-    public static Message Reply(string base64, string summary)
+    public static Message Image(string base64, string summary)
     {
-        Message message = new Message("image");
+        Message message = new Message("reply");
         message.Data["file"] = $"base64://{base64}";
-        message.Data["summary"] = summary;
+        return message;
+    }
+    public static Message Reply(long id)
+    {
+        Message message = new Message("reply");
+        message.Data["id"] = id;
         return message;
     }
     public static class Str

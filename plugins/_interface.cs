@@ -30,7 +30,8 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
-    BotClient BotClient
+    BotClient BotClient,
+    Detail Variables
     )
 {
     /// <summary>
@@ -41,6 +42,21 @@ public record PluginInterop(
     internal T? FindPlugin<T>() where T : Plugin
     {
         return this.PluginInfoGetter().First(i => i.Instance is T).Instance as T;
+    }
+    internal T GetVariable<T>(string key,T defaultValue)
+    {
+        Variables.TryGetValue(key, out var value);
+        if (value is null)
+        {
+            return defaultValue;
+        }
+        var realValue=(JsonElement)value ;
+        return realValue.Deserialize<T>();
+    }
+    internal T? GetVariable<T>(string key)
+    {
+        Variables.TryGetValue(key, out var value);
+        return value;
     }
 }
 public abstract class Plugin
