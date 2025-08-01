@@ -60,7 +60,11 @@ public class ZhipuAi
             var para=JsonSerializer.Deserialize<Dictionary<string,string>>(p);
             var url=para["url"];
             var html= await browser.view(url);
-            return $"该网页主要HTML内容如下:{html}";
+            if (html.Length > 3000)
+            {
+                html = html.Substring(0, 2500)+"[省略过长内容]";
+            }
+            return $"该网页主要内容如下:{html}";
         };
         RegisterTool(browserDef);
 

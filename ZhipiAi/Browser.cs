@@ -16,20 +16,22 @@ public class Browser
     public Browser()
     {
         options.AddArgument("--headless");
-        driver = new OpenQA.Selenium.Firefox.FirefoxDriver();
+        driver = new OpenQA.Selenium.Firefox.FirefoxDriver(options);
         jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
     }
     public Task<string> view(string url)
     {
-        mutex.Wait();
+        
         var task= Task.Run(() =>
         {
+            mutex.Wait();
             driver.Navigate().GoToUrl(ToStandardUri(url));
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
-            return result;
+            mutex.Release();
+            return result.Replace(" ","").Replace("\n","").Replace("\r","");
         });
-        mutex.Release();
+        
         return task;
     }
     public static Uri ToStandardUri(string raw)

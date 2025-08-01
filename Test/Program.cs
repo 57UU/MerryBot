@@ -4,10 +4,6 @@ using System.Text.Json;
 using ZhipiAi;
 using ZhipuClient;
 
-Browser browser = new Browser();
-var t1=browser.view("https://57u.tech");
-Task.WaitAll(new Task[] { t1 });
-Console.WriteLine(t1.Result);
 
 Config.Initialize().Wait();
 var config=Config.instance;
