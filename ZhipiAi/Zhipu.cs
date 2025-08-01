@@ -205,9 +205,16 @@ public class ZhipuAi
         message.Role = TOOL;
         message.Id = id;
         funtionMapper.TryGetValue(func.Name,out var tool);
+        Console.WriteLine($"Func Call:{func.Name} {func.Arguments}");
         if (tool != null)
         {
-            message.Content = await tool.FunctionCall.Invoke(func.Arguments);
+            try
+            {
+                message.Content = await tool.FunctionCall.Invoke(func.Arguments);
+            }catch(Exception e)
+            {
+                message.Content = "调用失败: " + e.Message;
+            }
         }
         else
         {

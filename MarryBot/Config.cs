@@ -1,5 +1,7 @@
-﻿using System.Text.Json;
+﻿using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Unicode;
 
 namespace MarryBot;
 
@@ -28,6 +30,7 @@ public class Config
             WriteIndented = true,
             IncludeFields = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         };
         var json = JsonSerializer.Serialize(instance, options: options);
         await Utils.write(SETTING, json);

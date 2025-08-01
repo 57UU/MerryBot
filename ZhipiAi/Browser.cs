@@ -37,11 +37,17 @@ public class Browser
             await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
-            mutex.Release();
             return trim(result);
         });
-        
-        return task;
+
+        return task.ContinueWith((t) => {
+            mutex.Release();
+            if (t.Status == TaskStatus.RanToCompletion)
+            {
+                return t.Result;
+            }
+            return $"调用失败 {t.Exception}";
+        });
     }
     public Task<string> Search(string keyword)
     {
@@ -53,11 +59,18 @@ public class Browser
             await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result = executor.ExecuteScript(getSearchResult).ToString();
-            mutex.Release();
+            
             return trim(result);
         });
 
-        return task;
+        return task.ContinueWith((t) => {
+            mutex.Release();
+            if (t.Status == TaskStatus.RanToCompletion)
+            {
+                return t.Result;
+            }
+            return $"调用失败 {t.Exception}";
+        });
     }
     public static Uri ToStandardUri(string raw)
     {
