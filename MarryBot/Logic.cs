@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using CommonLib;
 
 namespace MarryBot;
 
@@ -155,7 +156,7 @@ internal class Logic
         }
     }
 }
-class PluginLogger(string tag) : NapcatClient.ISimpleLogger
+class PluginLogger(string tag) : ISimpleLogger
 {
     private readonly NLog.Logger _logger = NLog.LogManager.GetLogger($"plugin:{tag}");
 

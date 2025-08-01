@@ -1,4 +1,4 @@
-﻿namespace NapcatClient;
+﻿namespace CommonLib;
 
 public interface ISimpleLogger
 {
@@ -9,7 +9,7 @@ public interface ISimpleLogger
     public void Error(string message);
     public void Fatal(string message);
 }
-class ConsoleLogger : ISimpleLogger
+public class ConsoleLogger : ISimpleLogger
 {
     public void Debug(string message)
     {

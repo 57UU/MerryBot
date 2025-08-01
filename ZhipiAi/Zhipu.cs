@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.Tasks;
 using ZhipiAi;
+using CommonLib;
 
 namespace ZhipuClient;
 
@@ -32,6 +33,7 @@ public class ZhipuAi
     Dictionary<string,FunctionDef> funtionMapper=new();
     string prompt;
     Browser browser = new();
+    public ISimpleLogger Logger { set; private get; } = new ConsoleLogger();
     public ZhipuAi(string token,string prompt)
     {
         this.token = token;
@@ -205,21 +207,26 @@ public class ZhipuAi
         message.Role = TOOL;
         message.Id = id;
         funtionMapper.TryGetValue(func.Name,out var tool);
-        Console.WriteLine($"Func Call:{func.Name} {func.Arguments}");
+        Logger.Info($"FuncCall:{func.Name} {func.Arguments}");
         if (tool != null)
         {
             try
             {
                 message.Content = await tool.FunctionCall.Invoke(func.Arguments);
-            }catch(Exception e)
+                Logger.Info("function result:"+message.Content);
+            }
+            catch(Exception e)
             {
                 message.Content = "调用失败: " + e.Message;
+                Logger.Warn("function error:"+e.Message);
             }
         }
         else
         {
             message.Content = "Error: " + func.Name + " not found";
+            Logger.Warn("function not found:"+func.Name);
         }
+        
         return message;
     }
     public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages)

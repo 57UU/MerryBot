@@ -1,6 +1,7 @@
 ﻿using NapcatClient.Action;
 using Newtonsoft.Json;
 using WebSocketSharp;
+using CommonLib;
 
 namespace NapcatClient;
 

@@ -1,4 +1,5 @@
 ﻿using NapcatClient;
+using CommonLib;
 
 namespace MarryBot;
 

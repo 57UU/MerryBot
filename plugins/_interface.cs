@@ -3,7 +3,7 @@ global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
 using NapcatClient;
 using NapcatClient.Action;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using CommonLib;
 
 namespace BotPlugin;
 

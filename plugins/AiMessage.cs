@@ -20,6 +20,7 @@ public class AiMessage : Plugin
         var token = interop.GetVariable("ai-token", "");
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         zhipu = new ZhipuAi(token, prompt);
+        zhipu.Logger = Logger;
     }
     ZhipuAi zhipu;
     bool isContainsNew(string message)

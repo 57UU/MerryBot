@@ -12,4 +12,8 @@
     <PackageReference Include="websocketsharp.core" Version="1.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
+  </ItemGroup>
+
 </Project>
