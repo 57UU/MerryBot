@@ -35,7 +35,7 @@ public class ZhipuAi
     public ZhipuAi(string token,string prompt)
     {
         this.token = token;
-        this.prompt = prompt+$"\n今天是{DateTime.Now}";
+        this.prompt = prompt;
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
@@ -133,7 +133,7 @@ public class ZhipuAi
         if (!history.ContainsKey(id))
         {
             history.Add(id, new List<ZhipuMessage>());
-            history[id].Add(SystemPrompt);
+            history[id].Add(SystemPrompt.GenerateWithTime());
         }
         var currentHistory = history[id];
         var userQuery = new ZhipuMessage()
@@ -285,6 +285,14 @@ public class ZhipuMessage
 
     [JsonPropertyName("content")]
     public string Content { get; set; }
+    public ZhipuMessage GenerateWithTime()
+    {
+        return new ZhipuMessage()
+        {
+            Role = Role,
+            Content = Content + $"\n现在是{DateTime.Now}",
+        };
+    }
 }
 public class AssistantMessage : ZhipuMessage
 {
