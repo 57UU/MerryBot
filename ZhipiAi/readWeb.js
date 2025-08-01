@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 获取页面中所有a标签的href属性
  * @returns {Array<string>} - 包含所有href属性值的数组
  */
@@ -60,31 +60,41 @@ function removeInvisibleElements(doc) {
   // 移除display为none的元素
   doc.querySelectorAll('[style*="display:none"], [hidden]').forEach(el => el.remove());
 
-  // 移除嵌套的div
-  removeNestedDivs(doc);
+  // 移除只有一个子元素的元素
+  removeSingleChildElements(doc);
 
   // 移除空元素
   removeEmptyElements(doc);
 }
 
 /**
- * 移除嵌套的div元素
+ * 移除只有一个子元素的元素，将子元素的内容提升到父元素
  * @param {HTMLElement} doc - 文档元素
  */
-function removeNestedDivs(doc) {
-  // 获取所有div元素
-  const divs = doc.querySelectorAll('div');
-
-  divs.forEach(div => {
-    // 检查是否只有一个子元素，且该子元素也是div
-    while (div.childNodes.length === 1 && div.firstChild.tagName && div.firstChild.tagName.toLowerCase() === 'div') {
-      const childDiv = div.firstChild;
-      // 将子div的所有子节点移动到当前div
-      while (childDiv.firstChild) {
-        div.insertBefore(childDiv.firstChild, childDiv);
+function removeSingleChildElements(doc) {
+  // 获取所有元素
+  const allElements = doc.querySelectorAll('*');
+  
+  // 转换为数组，避免在遍历过程中DOM修改导致的问题
+  const elementsToProcess = Array.from(allElements);
+  
+  elementsToProcess.forEach(el => {
+    // 检查是否只有一个子元素，且该子元素是元素节点
+    while (el.childNodes.length === 1 && el.firstChild.nodeType === 1) {
+      const childEl = el.firstChild;
+      
+      // 避免处理a标签，因为我们要保留其href属性
+      if (childEl.tagName.toLowerCase() === 'a') {
+        break;
       }
-      // 移除子div
-      div.removeChild(childDiv);
+      
+      // 将子元素的所有子节点移动到当前元素
+      while (childEl.firstChild) {
+        el.insertBefore(childEl.firstChild, childEl);
+      }
+      
+      // 移除子元素
+      el.removeChild(childEl);
     }
   });
 }
@@ -94,18 +104,50 @@ function removeNestedDivs(doc) {
  * @param {HTMLElement} doc - 文档元素
  */
 function removeEmptyElements(doc) {
-  // 获取所有元素
+  // 递归检查元素是否为空
+  function isElementEmpty(el) {
+    // 没有子节点
+    if (el.childNodes.length === 0) {
+      return true;
+    }
+    
+    // 检查所有子节点
+    let allEmpty = true;
+    for (let i = 0; i < el.childNodes.length; i++) {
+      const node = el.childNodes[i];
+      
+      // 文本节点：检查是否只包含空白
+      if (node.nodeType === 3) {
+        if (node.textContent.trim() !== '') {
+          allEmpty = false;
+          break;
+        }
+      }
+      // 元素节点：递归检查
+      else if (node.nodeType === 1) {
+        if (!isElementEmpty(node)) {
+          allEmpty = false;
+          break;
+        }
+      }
+      // 其他类型的节点（如注释）：视为空
+    }
+    
+    return allEmpty;
+  }
+  
+  // 获取所有元素并检查
   const allElements = doc.querySelectorAll('*');
+  const elementsToRemove = [];
   
   allElements.forEach(el => {
-    // 检查元素是否为空（没有子节点或只有空白节点）
-    const isEmpty = el.childNodes.length === 0 || 
-                    (el.childNodes.length === 1 && el.firstChild.nodeType === 3 && el.firstChild.textContent.trim() === '');
-    
-    if (isEmpty) {
-      el.remove();
+    if (isElementEmpty(el)) {
+      elementsToRemove.push(el);
     }
   });
+  
+  // 批量移除元素，避免在遍历时修改DOM
+  elementsToRemove.forEach(el => el.remove());
 }
 
 /**

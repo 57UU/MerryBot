@@ -5,7 +5,7 @@ using ZhipiAi;
 using ZhipuClient;
 
 Browser browser = new Browser();
-var t1=browser.view("https://www.baidu.com");
+var t1=browser.view("https://57u.tech");
 Task.WaitAll(new Task[] { t1 });
 Console.WriteLine(t1.Result);
 
