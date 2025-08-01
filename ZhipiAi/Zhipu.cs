@@ -52,7 +52,7 @@ public class ZhipuAi
         RegisterTool(watch);
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
-        browserDef.Function.Description = "查看网页HTML内容";
+        browserDef.Function.Description = "查看网页主要HTML内容";
         browserDef.Function.Parameters.Properties.Add("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
         browserDef.Function.FunctionCall = async(parameters) =>
         {
@@ -60,9 +60,9 @@ public class ZhipuAi
             var para=JsonSerializer.Deserialize<Dictionary<string,string>>(p);
             var url=para["url"];
             var html= await browser.view(url);
-            if (html.Length > 3000)
+            if (html.Length > 4000)
             {
-                html = html.Substring(0, 2500)+"[省略过长内容]";
+                html = html.Substring(0, 3500)+"[省略过长内容]";
             }
             return $"该网页主要内容如下:{html}";
         };

@@ -22,10 +22,11 @@ public class Browser
     public Task<string> view(string url)
     {
         
-        var task= Task.Run(() =>
+        var task= Task.Run(async () =>
         {
             mutex.Wait();
             driver.Navigate().GoToUrl(ToStandardUri(url));
+            await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
             mutex.Release();
