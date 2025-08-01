@@ -16,7 +16,7 @@ public class ZhipuAi
 {
     string token;
     string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-    string model = "glm-4.5-flash";
+    string model = "glm-4.5";
     const string SYSTEM = "system";
     const string USER = "user";
     const string ASSISTANT = "assistant";
@@ -35,7 +35,7 @@ public class ZhipuAi
     public ZhipuAi(string token,string prompt)
     {
         this.token = token;
-        this.prompt = prompt;
+        this.prompt = prompt+$"\n今天是{DateTime.Now}";
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
@@ -232,7 +232,7 @@ public class ZhipuAi
             tools = Tools,
             thinking = new
             {
-                type= "disabled",
+                type= "enabled",
             },
         };
         var req = new HttpRequestMessage(HttpMethod.Post, apiUrl);
