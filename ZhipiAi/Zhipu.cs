@@ -67,6 +67,19 @@ public class ZhipuAi
             return $"该网页主要内容如下:{html}";
         };
         RegisterTool(browserDef);
+        var bingSearch = new ToolDef();
+        bingSearch.Function.Name = "bing_search";
+        bingSearch.Function.Description = "使用Bing进行网络搜索";
+        bingSearch.Function.Parameters.Properties.Add("query", new ParameterProperty() { Type = "string", Description = "keyword" });
+        bingSearch.Function.FunctionCall = async(parameters) =>
+        {
+            var p = parameters.GetString();
+            var para = JsonSerializer.Deserialize<Dictionary<string, string>>(p);
+            var query = para["query"];
+            var result = await browser.Search(query);
+            return $"搜索结果如下:{result}";
+        };
+        RegisterTool(bingSearch);
 
     }
     void RegisterTool(ToolDef tool)

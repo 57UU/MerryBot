@@ -14,6 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="getSearchResult.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="readWeb.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

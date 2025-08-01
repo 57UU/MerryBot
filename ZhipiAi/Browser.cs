@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipiAi;
 
@@ -11,13 +13,19 @@ public class Browser
 {
     IWebDriver driver;
     OpenQA.Selenium.Firefox.FirefoxOptions options = new();
-    string jsReader;
+    string jsReader,getSearchResult;
     SemaphoreSlim mutex = new(1);
     public Browser()
     {
         options.AddArgument("--headless");
         driver = new OpenQA.Selenium.Firefox.FirefoxDriver(options);
         jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
+        getSearchResult = File.ReadAllText("getSearchResult.js",Encoding.UTF8);
+    }
+    static string trim(string s)
+    {
+        s = s.Replace("\n", "").Replace("\r", "");
+        return Regex.Replace(s, @"\s{2,}", " ");
     }
     public Task<string> view(string url)
     {
@@ -30,9 +38,25 @@ public class Browser
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
             mutex.Release();
-            return result.Replace(" ","").Replace("\n","").Replace("\r","");
+            return trim(result);
         });
         
+        return task;
+    }
+    public Task<string> Search(string keyword)
+    {
+
+        var task = Task.Run(async () =>
+        {
+            mutex.Wait();
+            driver.Navigate().GoToUrl(ToStandardUri($"https://cn.bing.com/search?q={keyword}"));
+            await Task.Delay(100);
+            IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
+            var result = executor.ExecuteScript(getSearchResult).ToString();
+            mutex.Release();
+            return trim(result);
+        });
+
         return task;
     }
     public static Uri ToStandardUri(string raw)
