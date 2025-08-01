@@ -21,6 +21,18 @@ public class AiMessage : Plugin
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         zhipu = new ZhipuAi(token, prompt);
         zhipu.Logger = Logger;
+        //add voice tool
+        var voiceSender = new ToolDef();
+        voiceSender.Function.Name = "send_voice";
+        voiceSender.Function.Description = "发送语音";
+        voiceSender.Function.Parameters.Properties.Add("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
+        voiceSender.Function.FunctionCall = async (parameters) =>
+        {
+            string text = parameters["text"].GetString();
+            await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
+            return "发送成功";
+        };
+        zhipu.RegisterTool(voiceSender);
     }
     ZhipuAi zhipu;
     bool isContainsNew(string message)
@@ -87,7 +99,7 @@ public class AiMessage : Plugin
     }
     async Task handleMessage(long groupId,string message,long messageId,string sender)
     {
-        await foreach(var result in  zhipu.Ask(message, groupId, sender))
+        await foreach(var result in  zhipu.Ask(message, groupId, sender,groupId))
         {
             if (result != null)
             {

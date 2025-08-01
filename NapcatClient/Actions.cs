@@ -74,6 +74,19 @@ public class Actions
         messages.Add(Message.Text(text));
         return await SendGroupMessage(groupId, messages);
     }
+    public Task<Dictionary<string, dynamic>> SendGroupAiVoice(string groupId, string text,string character= "lucy-voice-suxinjiejie")
+    {
+        Act act = new(
+            action: "send_group_ai_record",
+            parameters: new Dictionary<string, dynamic>()
+            {
+                ["group_id"] = groupId,
+                ["character"] = character,
+                ["text"] = text
+            }
+        );
+        return _SendAction(act);
+    }
 
 
 }

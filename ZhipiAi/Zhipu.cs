@@ -47,24 +47,27 @@ public class ZhipuAi
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         options.Converters.Add(new MessageConverter());
         //tools
+        AddBuiltInTools();
+
+    }
+    private void AddBuiltInTools()
+    {
         var watch = new ToolDef();
         watch.Function.Name = "getTime";
         watch.Function.Description = "查看现在的时间";
-        watch.Function.FunctionCall = async(parameters) => "北京时间:" + DateTime.Now.ToString();
+        watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
         browserDef.Function.Description = "查看网页主要HTML内容";
         browserDef.Function.Parameters.Properties.Add("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
-        browserDef.Function.FunctionCall = async(parameters) =>
+        browserDef.Function.FunctionCall = async (parameters) =>
         {
-            var p = parameters.GetString();
-            var para=JsonSerializer.Deserialize<Dictionary<string,string>>(p);
-            var url=para["url"];
-            var html= await browser.view(url);
+            var url = parameters["url"];
+            var html = await browser.view(url.GetString());
             if (html.Length > 4000)
             {
-                html = html.Substring(0, 3500)+"[省略过长内容]";
+                html = html.Substring(0, 3500) + "[省略过长内容]";
             }
             return $"该网页主要内容如下:{html}";
         };
@@ -73,18 +76,15 @@ public class ZhipuAi
         bingSearch.Function.Name = "bing_search";
         bingSearch.Function.Description = "使用Bing进行网络搜索";
         bingSearch.Function.Parameters.Properties.Add("query", new ParameterProperty() { Type = "string", Description = "keyword" });
-        bingSearch.Function.FunctionCall = async(parameters) =>
+        bingSearch.Function.FunctionCall = async (parameters) =>
         {
-            var p = parameters.GetString();
-            var para = JsonSerializer.Deserialize<Dictionary<string, string>>(p);
-            var query = para["query"];
-            var result = await browser.Search(query);
+            var query = parameters["query"];
+            var result = await browser.Search(query.GetString());
             return $"搜索结果如下:{result}";
         };
         RegisterTool(bingSearch);
-
     }
-    void RegisterTool(ToolDef tool)
+    public void RegisterTool(ToolDef tool)
     {
         Tools.Add(tool);
         funtionMapper.Add(tool.Function.Name, tool.Function);
@@ -121,7 +121,7 @@ public class ZhipuAi
         
 
     }
-    public async IAsyncEnumerable<string> Ask(string content,long id,string sender)
+    public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
     {
         var mutex=ensureMutexExists(id);
         if (mutex.CurrentCount == 0)
@@ -171,7 +171,7 @@ public class ZhipuAi
                     //tool call
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
                     {
-                        currentHistory.Add(await HandleFunctionCall(f.Function,f.Id));
+                        currentHistory.Add(await HandleFunctionCall(f.Function,f.Id,specialTag));
                     }
                 }
                 else
@@ -201,7 +201,7 @@ public class ZhipuAi
 
 
     }
-    async Task<ToolMessage> HandleFunctionCall(Function func,string id)
+    async Task<ToolMessage> HandleFunctionCall(Function func,string id,long specialTag)
     {
         ToolMessage message = new();
         message.Role = TOOL;
@@ -212,7 +212,9 @@ public class ZhipuAi
         {
             try
             {
-                message.Content = await tool.FunctionCall.Invoke(func.Arguments);
+                var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments.GetString());
+                args.SpecialTag = specialTag;
+                message.Content = await tool.FunctionCall.Invoke(args);
                 Logger.Info("function result:"+message.Content);
             }
             catch(Exception e)
@@ -334,8 +336,16 @@ public class ToolDef
     public FunctionDef Function { get; set; } = new FunctionDef();
 }
 
-
-public delegate Task<string> FunctionCall(JsonElement parameter);
+public class FunctionCallArguments: Dictionary<string, JsonElement>
+{
+    public FunctionCallArguments()
+    {
+        
+    }
+    [JsonIgnore]
+    public long SpecialTag { get; set; } = 0;
+}
+public delegate Task<string> FunctionCall(FunctionCallArguments parameter);
 // 函数信息
 public class FunctionDef
 {
