@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
-    <ProjectReference Include="..\ZhipiAi\ZhipiAi.csproj" />
+    <ProjectReference Include="..\ZhipiAi\ZhipuAi.csproj" />
   </ItemGroup>
 
 </Project>
