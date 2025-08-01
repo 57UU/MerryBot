@@ -21,6 +21,10 @@ public class Message
     {
         this.MessageType = messageType;
     }
+    public Message()
+    {
+
+    }
     public Message(string messageType, Dictionary<string, dynamic> data)
     {
         this.MessageType = messageType;
@@ -93,4 +97,34 @@ public class Message
         public const string Text = "text";
         public const string At = "at";
     } 
+}
+
+
+public class Sender
+{
+    public long user_id { get; set; }
+    public string nickname { get; set; }
+    public string card { get; set; }
+    public string role { get; set; }
+}
+
+public class ReceivedGroupMessage
+{
+    public long self_id { get; set; }
+    public long user_id { get; set; }
+    public long time { get; set; }
+    public long message_id { get; set; }
+    public long message_seq { get; set; }
+    public long real_id { get; set; }
+    public string real_seq { get; set; }
+    public string message_type { get; set; }
+    public Sender sender { get; set; } = new();
+    public string raw_message { get; set; }
+    public int font { get; set; }
+    public string sub_type { get; set; }
+    public List<Message> message { get; set; } = new();
+    public string message_format { get; set; }
+    public string post_type { get; set; }
+    public long group_id { get; set; }
+    public dynamic raw { get; set; }
 }

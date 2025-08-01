@@ -115,15 +115,15 @@ public abstract class Plugin
     /// <param name="chain">接收到的消息链</param>
     /// <param name="groupId">对应的QQ群号</param>
     /// <param name="data">总数据</param>
-    public virtual void OnGroupMessageMentioned(long groupId, MessageChain chain, Detail data)
+    public virtual void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
 
     }
-    public virtual void OnGroupMessageNotMentioned(long groupId, MessageChain chain, Detail data)
+    public virtual void OnGroupMessageNotMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
 
     }
-    public virtual void OnGroupMessage(long groupId, MessageChain chain, Detail data)
+    public virtual void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
 
     }

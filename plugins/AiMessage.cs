@@ -34,10 +34,10 @@ public class AiMessage : Plugin
         }
         return false;
     }
-    public override void OnGroupMessage(long groupId, MessageChain chain, Dictionary<string, dynamic> data)
+    public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         long selfId = BotUtils.GetSelfId(data);
-        string nickname = data["sender"]["nickname"];
+        string nickname = data.sender.nickname;
         bool isTargeted = false;
         foreach (var item in chain)
         {
@@ -80,7 +80,7 @@ public class AiMessage : Plugin
                 Logger.Info("[New] " + text);
                 zhipu.Reset(groupId);
             }
-            var messageId = data["message_id"];
+            var messageId = data.message_id;
             handleMessage(groupId, text, messageId,nickname);
         }
     }

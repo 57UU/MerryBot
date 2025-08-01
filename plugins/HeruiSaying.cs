@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NapcatClient;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -18,7 +19,7 @@ public class HeruiSaying :Plugin
     {
         AutoUpdate();
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, Dictionary<string, dynamic> data)
+    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (!IsStartsWith(chain, "/hr"))
         {

@@ -1,5 +1,6 @@
 ﻿using BotPlugin;
 using ConsoleTables;
+using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +21,7 @@ public class Help : Plugin
         pluginTags = Interop.PluginInfoGetter();
 
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, Dictionary<string, dynamic> data)
+    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (!IsStartsWith(chain, "/help"))
         {

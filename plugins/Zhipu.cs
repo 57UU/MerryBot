@@ -157,14 +157,16 @@ public class ZhipuAi
                 response = "Error: " + e.Message;
                 done = true;
             }
-            mutex.Release();
-            if (!response.Trim().IsNullOrEmpty())
+
+            response = response.Trim();
+            if (!response.IsNullOrEmpty())
             {
                 yield return response;
             }
         }
+        mutex.Release();
 
-        
+
     }
     ToolMessage HandleFunctionCall(Function func,string id)
     {

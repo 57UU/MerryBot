@@ -1,4 +1,5 @@
 ﻿using BotPlugin;
+using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,7 +26,7 @@ Marry Bot
     {
         Logger.Info("about plugin start");
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, Dictionary<string, dynamic> data)
+    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/about"))
         {

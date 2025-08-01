@@ -9,9 +9,9 @@ public static class BotUtils
     {
         return JsonConvert.SerializeObject(obj);
     }
-    public static long GetSelfId(Dictionary<string, dynamic> data)
+    public static long GetSelfId(ReceivedGroupMessage data)
     {
-        return data["self_id"];
+        return data.self_id;
     }
     public static string MessageChainToString(MessageChain chain)
     {

@@ -57,8 +57,10 @@ public class BotClient
             }
             if (messageType == "group")
             {
-                var groupId = message["group_id"];
-                OnGroupMessageReceived?.Invoke(groupId, messageChain, message);
+                ReceivedGroupMessage receivedGroupMessage = 
+                    JsonConvert.DeserializeObject<ReceivedGroupMessage>(e.Data)!;
+                var groupId = receivedGroupMessage.group_id;
+                OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
             }
         }
     }

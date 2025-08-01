@@ -24,7 +24,7 @@ internal class Logic
         this.qqGroupIDs = qqGroupIDs;
         LoadPlugins();
     }
-    public void OnGroupMessageReceived(long groupId,List<Message> chain,Dictionary<string,dynamic> data)
+    public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
     {
         if (!qqGroupIDs.Contains(groupId))
         {
@@ -60,7 +60,7 @@ internal class Logic
         }
         OnGroupMessage(groupId, span, data);
     }
-    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<Message> chain, Dictionary<string, dynamic> data)
+    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
     {
         foreach(var i in plugins)
         {
@@ -74,7 +74,7 @@ internal class Logic
             
         }
     }
-    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<Message> chain, Dictionary<string, dynamic> data)
+    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
     {
         foreach (var i in plugins)
         {
@@ -88,7 +88,7 @@ internal class Logic
             }
         }
     }
-    private void OnGroupMessage(long groupId, ReadOnlySpan<Message> chain, Dictionary<string, dynamic> data)
+    private void OnGroupMessage(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
     {
         foreach (var i in plugins)
         {
