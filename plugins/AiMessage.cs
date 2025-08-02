@@ -117,7 +117,7 @@ public class AiMessage : Plugin
         {
             if (result != null)
             {
-                await Actions.ReplyGroupMessage(groupId, messageId, result);
+                await Actions.ChooseBestReplyMethod(groupId, messageId, result);
             }
         }
     }

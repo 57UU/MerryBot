@@ -65,7 +65,7 @@ public class ViewDialog : Plugin
                         sb.AppendLine(item.Role + ": " + ConstraintLength(item.Content));
                     }
                 }
-                Actions.SendGroupMessage(groupId, sb.ToString().Trim());
+                Actions.ChooseBestReplyMethod(groupId, data.message_id, sb.ToString().Trim());
             }
 
         }

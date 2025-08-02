@@ -135,7 +135,7 @@ public class ReceivedGroupMessage
 
 public class GroupForwardChain
 {
-    [System.Text.Json.Serialization.JsonIgnore]
+    [JsonIgnore]
     public string Nickname { get; set; }
     [JsonIgnore]
     public string UserId { get; set; }
@@ -177,6 +177,7 @@ public class GroupForwardChain
         messageItem.Data.NickName = Nickname;
         messageItem.Data.UserId = UserId;
         messageItem.Data.Content = Message.Text(text);
+        News.Add(new Dictionary<string, object>() { {"text",$"{Nickname}:{text}" } });
     }
 }
 

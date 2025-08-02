@@ -82,6 +82,21 @@ public class Actions
         return await SendGroupMessage(groupId, messages);
     }
     const int PART_LENGTH = 500;
+    public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text)
+    {
+        return ChooseBestReplyMethod(groupId, messageId, text, bot.Nickname);
+    }
+    public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
+    {
+        if (text.Length > PART_LENGTH)
+        {
+            return SendLongMessage(groupId.ToString(), text, nickname);
+        }
+        else
+        {
+            return ReplyGroupMessage(groupId,messageId, text);
+        }
+    }
     public Task<Dictionary<string, JsonElement>> SendLongMessage(string groupId, string text,string nickname)
     {
         var fowardChain = GroupForwardChain.BuildDefault(bot.SelfId.ToString(),nickname,groupId);

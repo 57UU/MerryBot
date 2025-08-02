@@ -9,6 +9,14 @@ namespace CommonLib;
 
 public static class JsonUtils
 {
+    public static dynamic GetActualValue(object o)
+    {
+        if (o == null)
+        {
+            return null;
+        }
+        throw new NotImplementedException();
+    }
     public static dynamic GetActualValue(JsonElement jsonElement)
     {
         return jsonElement.ValueKind switch
