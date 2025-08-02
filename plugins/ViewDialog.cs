@@ -20,11 +20,12 @@ public class ViewDialog : Plugin
     {
         aiMessage=Interop.FindPlugin<AiMessage>()!;
     }
+    const int lengthConstraint = 25;
     static string ConstraintLength(string s)
     {
-        if (s.Length > 20)
+        if (s.Length > lengthConstraint)
         {
-            return s.Substring(0, 20) + "...";
+            return s.Substring(0, lengthConstraint) + "...";
         }
         return s;
     }
@@ -49,11 +50,11 @@ public class ViewDialog : Plugin
                     else if (item.Role == ZhipuAi.ASSISTANT) { 
                         var item2 = item as AssistantMessage;
                         sb.Append("assistant: " + ConstraintLength(item.Content.Trim()));
-                        if(item2.ToolCalls.Count>0)
+                        if(item2?.ToolCalls!=null && item2.ToolCalls.Count>0)
                         {
                             foreach(var i in item2.ToolCalls)
                             {
-                                sb.AppendLine($"[TOOL:{i.Function.Name} {i.Function.Arguments}]");
+                                sb.Append($"[TOOL:{i.Function.Name} {ConstraintLength(i.Function.Arguments)}]");
                             }
                         }
                         sb.AppendLine();
@@ -64,7 +65,7 @@ public class ViewDialog : Plugin
                         sb.AppendLine(item.Role + ": " + ConstraintLength(item.Content));
                     }
                 }
-                Actions.SendGroupMessage(groupId, sb.ToString());
+                Actions.SendGroupMessage(groupId, sb.ToString().Trim());
             }
 
         }

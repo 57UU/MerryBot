@@ -226,7 +226,7 @@ public class ZhipuAi
         {
             try
             {
-                var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments.GetString());
+                var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments);
                 args.SpecialTag = specialTag;
                 message.Content = await tool.FunctionCall.Invoke(args);
                 Logger.Info("function result:"+message.Content);
@@ -512,7 +512,7 @@ public class Function
     public string Name { get; set; }
 
     [JsonPropertyName("arguments")]
-    public JsonElement Arguments { get; set; } = new();
+    public string Arguments { get; set; } = string.Empty;
 }
 
 public class Mcp
