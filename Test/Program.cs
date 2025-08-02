@@ -1,7 +1,6 @@
 ﻿using MarryBot;
 using System;
 using System.Text.Json;
-using ZhipiAi;
 using ZhipuClient;
 
 

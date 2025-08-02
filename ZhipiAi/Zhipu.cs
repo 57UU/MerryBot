@@ -1,15 +1,15 @@
-﻿using System;
+﻿using CommonLib;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.Tasks;
-using ZhipiAi;
-using CommonLib;
 
 namespace ZhipuClient;
 
@@ -65,9 +65,9 @@ public class ZhipuAi
         {
             var url = parameters["url"];
             var html = await browser.view(url.GetString());
-            if (html.Length > 4000)
+            if (html.Length > 5000)
             {
-                html = html.Substring(0, 3500) + "[省略过长内容]";
+                html = html.Substring(0, 5000) + "[省略过长内容]";
             }
             return $"该网页主要内容如下:{html}";
         };
@@ -92,6 +92,15 @@ public class ZhipuAi
     Dictionary<long, List<ZhipuMessage>> history = new();
     Dictionary<long, SemaphoreSlim> mutex = new();
     object mutexMutex=new();
+    public ReadOnlySpan<ZhipuMessage> GetDialodHistory(long uid)
+    {
+        history.TryGetValue(uid,out var dialog);
+        if(dialog == null)
+        {
+            return Span<ZhipuMessage>.Empty;
+        }
+        return CollectionsMarshal.AsSpan(dialog);
+    }
     SemaphoreSlim ensureMutexExists(long groupId)
     {
         if (!mutex.ContainsKey(groupId))
@@ -119,7 +128,7 @@ public class ZhipuAi
         }
         mutex.Release();
         
-
+        
     }
     public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
     {

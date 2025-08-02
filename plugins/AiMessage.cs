@@ -24,17 +24,17 @@ public class AiMessage : Plugin
         //add voice tool
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
-        voiceSender.Function.Description = "发送语音";
+        voiceSender.Function.Description = "发送语音（多用用，这样能展示你的个性）";
         voiceSender.Function.Parameters.Properties.Add("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
             string text = parameters["text"].GetString();
             await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
-            return "发送成功";
+            return "发送成功。用户能看到你发的语言，你不必再去回复‘已发送’类似的话。";
         };
         zhipu.RegisterTool(voiceSender);
     }
-    ZhipuAi zhipu;
+    internal ZhipuAi zhipu;
     bool isContainsNew(string message)
     {
         var l=message.Split(" ");
