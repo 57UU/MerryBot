@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -269,7 +270,27 @@ public class ZhipuAi
         // 发送POST请求
         HttpResponseMessage response = await client.SendAsync(req);
         // 确保请求成功
-        response.EnsureSuccessStatusCode();
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            Logger.Error($"ZhipuAi API Error");
+            try
+            {
+                string rep = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    var err = JsonSerializer.Deserialize<ApiResponse>(rep)!;
+                    StringBuilder sb = new("内容问题：");
+                    foreach(var i in err.ContentFilters)
+                    {
+                        sb.Append($"[{i.Role}:{i.Level}]");
+                    }
+                    throw new Exception(sb.ToString());
+                }catch(Exception e){}
+                throw new Exception(rep);
+            }
+            catch(Exception e){ }
+            throw new HttpRequestException($"API请求失败: {response.StatusCode}");
+        }
         // 读取并输出响应内容
         string responseBody = await response.Content.ReadAsStringAsync();
         //Console.WriteLine("API响应:");
