@@ -70,7 +70,7 @@ public class ZhipuAi
             {
                 html = html.Substring(0, 5000) + "[省略过长内容]";
             }
-            return $"该网页主要内容如下:{html}";
+            return html;
         };
         RegisterTool(browserDef);
         var bingSearch = new ToolDef();
@@ -81,7 +81,7 @@ public class ZhipuAi
         {
             var query = parameters["query"];
             var result = await browser.Search(query.GetString());
-            return $"搜索结果如下:{result}";
+            return result;
         };
         RegisterTool(bingSearch);
     }
@@ -149,7 +149,7 @@ public class ZhipuAi
         var userQuery = new ZhipuMessage()
         {
             Role = USER,
-            Content = $"[发送者:{sender}]{content}"
+            Content = $"[用户:{sender}]{content}"
         };
         currentHistory.Add(userQuery);
         while (!done)
