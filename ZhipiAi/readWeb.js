@@ -14,7 +14,10 @@ function extractAllHrefs() {
     const href = aTag.getAttribute('href');
     if (href) {
       // 确保href不为空
-      hrefs.push(href);
+      hrefs.push({
+        href,
+        text: aTag.textContent.trim()
+      });
     }
   });
 
@@ -36,7 +39,16 @@ function getCleanHTML() {
   cleanAttributes(clonedDoc);
 
   // 返回净化后的HTML
-  return clonedDoc.outerHTML;
+  return cleanHtmlTags(clonedDoc.outerHTML);
+}
+
+function cleanHtmlTags(html) {
+  // 移除所有标签
+  // 移除除a标签外的所有HTML标签
+  html= html.replace(/<(?!a\b)[^>]+>/g, '|');
+  // 将连续的竖线或空格替换为单个竖线
+  html= html.replace(/\|+/g, '|');
+  return html;
 }
 
 /**
