@@ -29,11 +29,15 @@ public class Browser
     }
     public Task<string> view(string url)
     {
+        return view(ToStandardUri(url));
+    }
+    public Task<string> view(Uri url)
+    {
         
         var task= Task.Run(async () =>
         {
             mutex.Wait();
-            driver.Navigate().GoToUrl(ToStandardUri(url));
+            driver.Navigate().GoToUrl(url);
             await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
@@ -49,13 +53,13 @@ public class Browser
             return $"调用失败 {t.Exception}";
         });
     }
-    public Task<string> Search(string keyword)
+    public async Task<string> Search(string keyword)
     {
-
+        var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}");
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver.Navigate().GoToUrl(ToStandardUri($"https://cn.bing.com/search?q={keyword}"));
+            driver.Navigate().GoToUrl(url);
             await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result = executor.ExecuteScript(getSearchResult).ToString();
@@ -63,13 +67,14 @@ public class Browser
             return trim(result);
         });
 
-        return task.ContinueWith((t) => {
+        return await await task.ContinueWith(async(t) => {
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
                 return t.Result;
             }
-            return $"调用失败 {t.Exception}";
+            //if the script failed, try to view the page
+            return await view(url);
         });
     }
     public static Uri ToStandardUri(string raw)

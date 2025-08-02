@@ -5,18 +5,6 @@ using System.Text.Json;
 using ZhipuClient;
 
 
-RateLimiter rateLimiter = new(3,1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-rateLimiter.Increase(1);
-Console.WriteLine(rateLimiter.CheckIsLimited(1));
-await Task.Delay(2500);
-Console.WriteLine(rateLimiter.CheckIsLimited(1));
-
 
 
 Config.Initialize().Wait();
