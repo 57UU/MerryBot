@@ -1,4 +1,11 @@
 ﻿using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.DevTools;
+using OpenQA.Selenium.Support.Extensions;
+using SeleniumStealth.NET.Clients;
+using SeleniumStealth.NET.Clients.Enums;
+using SeleniumStealth.NET.Clients.Extensions;
+using SeleniumStealth.NET.Clients.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,7 +25,14 @@ public class Browser
     public Browser()
     {
         options.AddArgument("--headless");
-        driver = new OpenQA.Selenium.Chrome.ChromeDriver(options);
+        options.AddArgument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0");
+        //options.AddArgument("--disable-gpu");
+        options.AddArgument("--window-size=1920,1080");
+        options.AddArgument("--disable-blink-features=AutomationControlled");
+        options.ApplyStealth();
+
+        driver = Stealth.Instantiate(options);
+
         jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
         getSearchResult = File.ReadAllText("getSearchResult.js",Encoding.UTF8);
     }

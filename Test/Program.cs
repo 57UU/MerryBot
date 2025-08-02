@@ -5,7 +5,9 @@ using System.Text.Json;
 using ZhipuClient;
 
 
-
+Browser browser = new Browser();
+var result = await browser.view("https://zhuanlan.zhihu.com/p/10935838295");
+Console.WriteLine(result);
 
 Config.Initialize().Wait();
 var config=Config.instance;
