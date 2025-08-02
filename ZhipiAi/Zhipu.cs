@@ -18,16 +18,16 @@ public class ZhipuAi
     string token;
     string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
     string model = "glm-4.5";
-    const string SYSTEM = "system";
-    const string USER = "user";
-    const string ASSISTANT = "assistant";
-    const string TOOL = "tool";
+    public const string SYSTEM = "system";
+    public const string USER = "user";
+    public const string ASSISTANT = "assistant";
+    public const string TOOL = "tool";
     //finish reason
-    const string STOP= "stop";
-    const string TOOL_CALL= "tool_calls";
-    const string LENGTH= "length";
-    const string SENSITIVE= "sensitive";
-    const string NETWORK_ERROR= "network_error";
+    public const string STOP= "stop";
+    public const string TOOL_CALL= "tool_calls";
+    public const string LENGTH= "length";
+    public const string SENSITIVE= "sensitive";
+    public const string NETWORK_ERROR= "network_error";
     HttpClient client = new HttpClient();
     List<ToolDef> Tools { get; set; } = new();
     Dictionary<string,FunctionDef> funtionMapper=new();

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using ZhipuClient;
 
 namespace BotPlugin;
 
@@ -19,6 +20,14 @@ public class ViewDialog : Plugin
     {
         aiMessage=Interop.FindPlugin<AiMessage>()!;
     }
+    static string ConstraintLength(string s)
+    {
+        if (s.Length > 20)
+        {
+            return s.Substring(0, 20) + "...";
+        }
+        return s;
+    }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/dialog"))
@@ -33,13 +42,26 @@ public class ViewDialog : Plugin
                 StringBuilder sb = new();
                 foreach (var item in history)
                 {
-                    if(item.Role == "system")
+                    if (item.Role == ZhipuAi.SYSTEM)
                     {
                         sb.AppendLine("system: <HIDDEN>");
                     }
+                    else if (item.Role == ZhipuAi.ASSISTANT) { 
+                        var item2 = item as AssistantMessage;
+                        sb.Append("assistant: " + ConstraintLength(item.Content.Trim()));
+                        if(item2.ToolCalls.Count>0)
+                        {
+                            foreach(var i in item2.ToolCalls)
+                            {
+                                sb.AppendLine($"[TOOL:{i.Function.Name} {i.Function.Arguments}]");
+                            }
+                        }
+                        sb.AppendLine();
+                        
+                    }
                     else
                     {
-                        sb.AppendLine(item.Role + ": " + item.Content);
+                        sb.AppendLine(item.Role + ": " + ConstraintLength(item.Content));
                     }
                 }
                 Actions.SendGroupMessage(groupId, sb.ToString());
