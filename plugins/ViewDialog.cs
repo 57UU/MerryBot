@@ -20,7 +20,7 @@ public class ViewDialog : Plugin
     {
         aiMessage=Interop.FindPlugin<AiMessage>()!;
     }
-    const int lengthConstraint = 25;
+    const int lengthConstraint = 30;
     static string ConstraintLength(string s)
     {
         if (s.Length > lengthConstraint)
