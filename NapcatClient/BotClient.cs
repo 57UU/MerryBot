@@ -1,7 +1,7 @@
 ﻿using NapcatClient.Action;
-using Newtonsoft.Json;
 using WebSocketSharp;
 using CommonLib;
+using System.Text.Json;
 
 namespace NapcatClient;
 
@@ -21,7 +21,18 @@ public class BotClient
         WebSocket.OnError += WebSocket_OnError;
         WebSocket.OnClose += WebSocket_OnClose;
         WebSocket.Connect();
-        this.Actions = new Actions(WebSocket,Logger);
+        this.Actions = new Actions(WebSocket,Logger,this);
+        Initialize().Wait();
+    }
+    public long SelfId { get; private set; }
+    public string Nickname { get; private set; }
+    public async Task Initialize()
+    {
+        await Task.Delay(200);
+        //get account info
+        var result = await Actions.GetAccountInfo();
+        SelfId = result.userId;
+        Nickname = result.nickname;
     }
     public BotClient(string address, string token) : this(address, token, new ConsoleLogger())
     {
@@ -41,17 +52,17 @@ public class BotClient
     private void WebSocket_OnMessage(object? sender, MessageEventArgs e)
     {
         Logger.Trace($"websocket on message: {e.Data}");
-        var message = JsonConvert.DeserializeObject<Dictionary<string, dynamic>>(e.Data)!;
-        dynamic echo;
-        if (message.TryGetValue("echo", out echo) && echo is string)
+        var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(e.Data)!;
+        JsonElement echo;
+        if (message.TryGetValue("echo", out echo))
         {
             //return message
-            Actions.AddResponse(echo, message);
+            Actions.AddResponse(echo.GetString(), message);
         }
         List<Message>? messageChain = null;
         if (message.ContainsKey("message_type"))
         {
-            var messageType = message["message_type"];
+            var messageType = ((JsonElement)message["message_type"]).GetString();
             if (message.ContainsKey("message"))
             {
                 messageChain = Message.ParseMessageChain(message["message"]);
@@ -59,8 +70,9 @@ public class BotClient
             if (messageType == "group")
             {
                 ReceivedGroupMessage receivedGroupMessage = 
-                    JsonConvert.DeserializeObject<ReceivedGroupMessage>(e.Data)!;
+                    JsonSerializer.Deserialize<ReceivedGroupMessage>(e.Data)!;
                 var groupId = receivedGroupMessage.group_id;
+                receivedGroupMessage.message = messageChain;
                 OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
             }
         }

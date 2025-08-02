@@ -1,8 +1,9 @@
 ﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
 global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using CommonLib;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace NapcatClient;
 
 
@@ -13,9 +14,9 @@ namespace NapcatClient;
 /// </summary>
 public class Message
 {
-    [JsonProperty(PropertyName = "type")]
+    [JsonPropertyName("type")]
     public string MessageType {set; get; }
-    [JsonProperty(PropertyName = "data")]
+    [JsonPropertyName("data")]
     public Detail Data {internal set; get; } = new();
     public Message(string messageType)
     {
@@ -54,15 +55,18 @@ public class Message
         }
         return stringBuilder.ToString();
     }
-    public static List<Message> ParseMessageChain(dynamic messages)
+    public static List<Message> ParseMessageChain(JsonElement messages)
     {
         var chain = new List<Message>();
-        foreach (JObject i in messages)
+        foreach (JsonElement i in messages.EnumerateArray())
         {
-            string type = i["type"]!.Value<string>()!;
+            string type = i.GetProperty("type")!.GetString()!;
             var msg = new Message(type);
-            var data = i["data"]!.ToObject<Dictionary<string, dynamic>>()!;
-            msg.Data = data;
+            var data = i.GetProperty("data")!.Deserialize<Dictionary<string, dynamic>>()!;
+            foreach(var j in data)
+            {
+                msg.Data[j.Key]=JsonUtils.GetActualValue(j.Value);
+            }
             chain.Add(msg);
         }
         return chain;
@@ -127,4 +131,72 @@ public class ReceivedGroupMessage
     public string post_type { get; set; }
     public long group_id { get; set; }
     public dynamic raw { get; set; }
+}
+
+public class GroupForwardChain
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Nickname { get; set; }
+    [JsonIgnore]
+    public string UserId { get; set; }
+
+
+    [JsonPropertyName("group_id")]
+    public string GroupId { get; set; }
+
+    [JsonPropertyName("messages")]
+    public List<MessageItem> Messages { get; set; } = new();
+
+    [JsonPropertyName("news")]
+    public List<Dictionary<string, object>> News { get; set; } = new();
+
+    [JsonPropertyName("prompt")]
+    public string Prompt { get; set; }
+
+    [JsonPropertyName("summary")]
+    public string Summary { get; set; }
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; }
+    public static GroupForwardChain BuildDefault(string selfId,string nickname,string groupId)
+    {
+        return new GroupForwardChain
+        {
+            UserId = selfId,
+            Nickname = nickname,
+            GroupId = groupId,
+            Prompt = "我喜欢你很久了，能不能做我男朋友",
+            Summary = "思考结果",
+            Source = "聊天记录"
+        };
+    }
+    public void AddText(string text)
+    {
+        MessageItem messageItem = new();
+        Messages.Add(messageItem);
+        messageItem.Data.NickName = Nickname;
+        messageItem.Data.UserId = UserId;
+        messageItem.Data.Content = Message.Text(text);
+    }
+}
+
+public class MessageItem
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "node";
+
+    [JsonPropertyName("data")]
+    public MessageDataItem Data { get; set; } = new();
+}
+
+public class MessageDataItem
+{
+    [JsonPropertyName("user_id")]
+    public string UserId { get; set; }
+
+    [JsonPropertyName("nickname")]
+    public string NickName { get; set; }
+
+    [JsonPropertyName("content")]
+    public Message Content { get; set; }
 }

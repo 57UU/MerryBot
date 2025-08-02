@@ -1,13 +1,26 @@
-﻿using Newtonsoft.Json;
-using System.Text;
+﻿using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Unicode;
 
 namespace NapcatClient;
 
 public static class BotUtils
 {
-    public static string serilize<T>(T obj)
+    static JsonSerializerOptions options;
+    static BotUtils()
     {
-        return JsonConvert.SerializeObject(obj);
+        options = new JsonSerializerOptions()
+        {
+            IncludeFields = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        };
+    }
+    public static string Serilize<T>(T obj)
+    {
+        return JsonSerializer.Serialize<T>(obj, options);
     }
     public static long GetSelfId(ReceivedGroupMessage data)
     {

@@ -21,7 +21,7 @@ botClient.Logger = new NLogAdapter();
 
 
 Logic logic = new Logic(botClient,config.qq_groups);
-
 botClient.OnGroupMessageReceived += logic.OnGroupMessageReceived;
+
 
 await Utils.WaitForever();

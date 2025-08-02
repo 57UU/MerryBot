@@ -25,6 +25,7 @@ internal class Logic
         this.qqGroupIDs = qqGroupIDs;
         LoadPlugins();
     }
+
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
     {
         if (!qqGroupIDs.Contains(groupId))
