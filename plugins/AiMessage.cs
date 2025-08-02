@@ -37,7 +37,7 @@ public class AiMessage : Plugin
                 rateLimiter.Increase(parameters.SpecialTag);
                 if (rateLimiter.CheckIsLimited(parameters.SpecialTag))
                 {
-                    throw new Exception("请求速率过高，请不要再发语音了");
+                    throw new Exception("请求速率过高，请不要再发了");
                 }
                 string text = parameters["text"].GetString();
                 await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
@@ -45,7 +45,7 @@ public class AiMessage : Plugin
             {
                 return $"发送失败:{e.Message}";
             }
-            return "发送成功。用户能看到你发的语言，你不必再去回复‘已发送’类似的话。";
+            return "发送成功。用户能看到你发的语音，你不必再去回复‘已发送’类似的话。";
         };
         zhipu.RegisterTool(voiceSender);
     }
