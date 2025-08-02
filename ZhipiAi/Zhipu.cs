@@ -178,9 +178,15 @@ public class ZhipuAi
                     }
                     currentHistory.Add(assistantMessage);
                     //tool call
+                    List<Task<ToolMessage>> tasks = new();
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
                     {
-                        currentHistory.Add(await HandleFunctionCall(f.Function,f.Id,specialTag));
+                        tasks.Add(HandleFunctionCall(f.Function,f.Id,specialTag));
+                    }
+                    await Task.WhenAll(tasks);
+                    foreach(var i in tasks)
+                    {
+                        currentHistory.Add(i.Result);
                     }
                 }
                 else
