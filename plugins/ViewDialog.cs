@@ -43,6 +43,7 @@ public class ViewDialog : Plugin
                 StringBuilder sb = new();
                 foreach (var item in history)
                 {
+                    sb.Append("• ");
                     if (item.Role == ZhipuAi.SYSTEM)
                     {
                         sb.AppendLine("system: <HIDDEN>");
