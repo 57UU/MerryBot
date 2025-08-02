@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Timers;
 using ZhipuClient;
 
 namespace BotPlugin;
@@ -14,8 +15,10 @@ namespace BotPlugin;
 [PluginTag("AI机器人", "键入 #新对话 来开启新对话")]
 public class AiMessage : Plugin
 {
+    RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
+        
         Logger.Info("ai plugin start");
         var token = interop.GetVariable("ai-token", "");
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
@@ -28,8 +31,20 @@ public class AiMessage : Plugin
         voiceSender.Function.Parameters.Properties.Add("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
-            string text = parameters["text"].GetString();
-            await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
+            
+            try
+            {
+                rateLimiter.Increase(parameters.SpecialTag);
+                if (rateLimiter.CheckIsLimited(parameters.SpecialTag))
+                {
+                    throw new Exception("请求速率过高，请不要再发语音了");
+                }
+                string text = parameters["text"].GetString();
+                await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
+            }catch(Exception e)
+            {
+                return $"发送失败:{e.Message}";
+            }
             return "发送成功。用户能看到你发的语言，你不必再去回复‘已发送’类似的话。";
         };
         zhipu.RegisterTool(voiceSender);

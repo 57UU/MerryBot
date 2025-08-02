@@ -127,9 +127,7 @@ public class ZhipuAi
             history[id].Clear();
             history[id].Add(SystemPrompt);
         }
-        mutex.Release();
-        
-        
+        mutex.Release(); 
     }
     public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
     {
