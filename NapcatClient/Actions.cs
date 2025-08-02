@@ -82,9 +82,10 @@ public class Actions
         return await SendGroupMessage(groupId, messages);
     }
     const int PART_LENGTH = 500;
+    public string DefaultNickname { get; set; } = "曼瑞";
     public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text)
     {
-        return ChooseBestReplyMethod(groupId, messageId, text, bot.Nickname);
+        return ChooseBestReplyMethod(groupId, messageId, text, DefaultNickname);
     }
     public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
     {
