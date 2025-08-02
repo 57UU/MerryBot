@@ -35,7 +35,7 @@ public class ViewDialog : Plugin
                 {
                     if(item.Role == "system")
                     {
-                        sb.AppendLine("System: <HIDDEN>");
+                        sb.AppendLine("system: <HIDDEN>");
                     }
                     else
                     {
