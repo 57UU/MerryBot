@@ -29,6 +29,7 @@ function extractAllHrefs() {
  * @returns {string} - 净化后的HTML
  */
 function getCleanHTML() {
+  removeUnnecessaryElement();
   // 克隆一份文档，避免修改原页面
   const clonedDoc = document.documentElement.cloneNode(true);
 
@@ -41,13 +42,27 @@ function getCleanHTML() {
   // 返回净化后的HTML
   return cleanHtmlTags(clonedDoc.outerHTML);
 }
+function removeUnnecessaryElement(){
+  let url= window.location.href;
+  if(url.startsWith("https://github.com")){
+    tryRemove("body > div.logged-out.env-production.page-responsive.page-profile > div.position-relative.header-wrapper.js-header-wrapper")
+    tryRemove("#user-profile-frame > div > div.mt-4.position-relative > div > div.col-12.col-lg-10 > div.js-yearly-contributions > div:nth-child(1)")
+    tryRemove("body > div.logged-out.env-production.page-responsive.header-overlay.header-overlay-fixed.js-header-overlay-fixed > div.position-relative.header-wrapper.js-header-wrapper > header")
+  }
+}
+function tryRemove(selector){
+  let element=document.querySelector(selector);
+  if(element){
+    element.remove();
+  }
+}
 
 function cleanHtmlTags(html) {
   // 移除所有标签
   // 移除除a标签外的所有HTML标签
   html= html.replace(/<(?!a\b)[^>]+>/g, '|');
   // 将连续的竖线或空格替换为单个竖线
-  html= html.replace(/\|+/g, '|');
+  html= html.replace(/[\|\s][\|\s\n]*[\|\s]/g, '|');
   return html;
 }
 
