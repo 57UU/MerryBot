@@ -48,6 +48,7 @@ function removeUnnecessaryElement(){
     tryRemove("body > div.logged-out.env-production.page-responsive.page-profile > div.position-relative.header-wrapper.js-header-wrapper")
     tryRemove("#user-profile-frame > div > div.mt-4.position-relative > div > div.col-12.col-lg-10 > div.js-yearly-contributions > div:nth-child(1)")
     tryRemove("body > div.logged-out.env-production.page-responsive.header-overlay.header-overlay-fixed.js-header-overlay-fixed > div.position-relative.header-wrapper.js-header-wrapper > header")
+    tryRemove("body > div.logged-out.env-production.page-responsive > div.position-relative.header-wrapper.js-header-wrapper > header")
   }
 }
 function tryRemove(selector){
