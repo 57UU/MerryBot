@@ -57,6 +57,12 @@ public class Actions
             return await WaitForResponse(echo);
         }
     }
+    /// <summary>
+    /// 在QQ群中发送消息
+    /// </summary>
+    /// <param name="groupId">qq群号</param>
+    /// <param name="messageChain">消息链</param>
+    /// <returns></returns>
     public async Task<Dictionary<string, JsonElement>> SendGroupMessage(long groupId, IEnumerable<Message> messageChain)
     {
         Dictionary<string, dynamic> parameters = new();
@@ -68,12 +74,25 @@ public class Actions
             );
         return await _SendAction(act);
     }
+    /// <summary>
+    /// 在QQ群中发送文本消息
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="text">文本</param>
+    /// <returns></returns>
     public async Task<Dictionary<string, JsonElement>> SendGroupMessage(long groupId, string text)
     {
         List<Message> messages = new List<Message>();
         messages.Add(Message.Text(text));
         return await SendGroupMessage(groupId, messages);
     }
+    /// <summary>
+    /// 在QQ群中回复一条消息
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="messageId">要回复的消息的ID</param>
+    /// <param name="text">文本</param>
+    /// <returns></returns>
     public async Task<Dictionary<string, JsonElement>> ReplyGroupMessage(long groupId,long messageId, string text)
     {
         List<Message> messages = new List<Message>();
@@ -81,15 +100,30 @@ public class Actions
         messages.Add(Message.Text(text));
         return await SendGroupMessage(groupId, messages);
     }
-    const int PART_LENGTH = 500;
+    public int PartLength { set; get; } = 500;
     public string DefaultNickname { get; set; } = "曼瑞";
+    /// <summary>
+    /// 在QQ群中选择最合适的回复方式（长：装发消息；短：直接回复）
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="messageId">要回复的消息的ID</param>
+    /// <param name="text">文本</param>
+    /// <returns></returns>
     public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text)
     {
         return ChooseBestReplyMethod(groupId, messageId, text, DefaultNickname);
     }
+    /// <summary>
+    /// 在QQ群中选择最合适的回复方式（长：装发消息；短：直接回复）
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="messageId">要回复的消息的ID</param>
+    /// <param name="text">文本</param>
+    /// <param name="nickname">昵称</param>
+    /// <returns></returns>
     public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
     {
-        if (text.Length > PART_LENGTH)
+        if (text.Length > PartLength)
         {
             return SendLongMessage(groupId.ToString(), text, nickname);
         }
@@ -98,19 +132,26 @@ public class Actions
             return ReplyGroupMessage(groupId,messageId, text);
         }
     }
+    /// <summary>
+    /// 发送长消息，通过合并转发的方式，以 PartLength 作为一段的长度
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="text">文本</param>
+    /// <param name="nickname">昵称</param>
+    /// <returns></returns>
     public Task<Dictionary<string, JsonElement>> SendLongMessage(string groupId, string text,string nickname)
     {
         var fowardChain = GroupForwardChain.BuildDefault(bot.SelfId.ToString(),nickname,groupId);
         var text_char = text.ToCharArray();
 
-        for (int i = 0; i <= text_char.Length / PART_LENGTH; i++)
+        for (int i = 0; i <= text_char.Length / PartLength; i++)
         {
-            int start = i * PART_LENGTH;
-            int end = (i + 1) * PART_LENGTH;
+            int start = i * PartLength;
+            int end = (i + 1) * PartLength;
 
             if (end < text_char.Length)
             {
-                fowardChain.AddText(new string(text_char,start, PART_LENGTH));
+                fowardChain.AddText(new string(text_char,start, PartLength));
             }
             else
             {
@@ -121,6 +162,13 @@ public class Actions
         return _SendAction(act);
 
     }
+    /// <summary>
+    /// 发送群AI语音
+    /// </summary>
+    /// <param name="groupId">QQ群号</param>
+    /// <param name="text">语音的文本</param>
+    /// <param name="character">语音角色</param>
+    /// <returns></returns>
     public Task<Dictionary<string, JsonElement>> SendGroupAiVoice(string groupId, string text,string character= "lucy-voice-suxinjiejie")
     {
         ParameteredAct act = new(
@@ -134,6 +182,10 @@ public class Actions
         );
         return _SendAction(act);
     }
+    /// <summary>
+    /// 获取当前登录账号信息。此信息被BotClient自动获取(SelfId,Nickname属性)，不用重复提取。
+    /// </summary>
+    /// <returns>(user_id,nickname)</returns>
     public async Task<(long userId,string nickname)> GetAccountInfo()
     {
         Act act = new(

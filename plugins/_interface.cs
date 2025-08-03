@@ -61,7 +61,10 @@ public record PluginInterop(
 }
 public abstract class Plugin
 {
-    protected Actions Actions;
+    /// <summary>
+    /// 动作类，用于发送消息等
+    /// </summary>
+    protected Actions Actions { get; set; }
     /// <summary>
     /// 当为假时，OnMessageReceived函数永远不会被调用
     /// </summary>
