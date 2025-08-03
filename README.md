@@ -103,6 +103,7 @@ Marry Bot
 |T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性 [示例](https://github.com/57UU/MarryBot/blob/master/plugins/ViewDialog.cs)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
+|T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
 
 ### 插件存储-PluginStorage
 
