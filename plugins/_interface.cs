@@ -11,12 +11,22 @@ namespace BotPlugin;
 
 public delegate Plugin PluginBuilder(PluginInterop config);
 
+/// <summary>
+/// 插件的完整信息
+/// </summary>
+/// <param name="Instance"></param>
+/// <param name="PluginTag"></param>
+/// <param name="Interop"></param>
 public record PluginInfo(
     Plugin Instance,
     PluginTag PluginTag,
     PluginInterop Interop
     );
-
+/// <summary>
+/// 插件存储
+/// </summary>
+/// <param name="Saver"></param>
+/// <param name="Getter"></param>
 public record PluginStorage(StringSaver Saver,StringGetter Getter);
 public delegate Task StringSaver(string data);
 public delegate Task<string> StringGetter();
@@ -43,6 +53,13 @@ public record PluginInterop(
     {
         return this.PluginInfoGetter().First(i => i.Instance is T).Instance as T;
     }
+    /// <summary>
+    /// 尝试在配置文件的变量中查找
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="key"></param>
+    /// <param name="defaultValue"></param>
+    /// <returns></returns>
     internal T GetVariable<T>(string key,T defaultValue)
     {
         Variables.TryGetValue(key, out var value);
@@ -53,12 +70,21 @@ public record PluginInterop(
         var realValue=(JsonElement)value ;
         return realValue.Deserialize<T>();
     }
+    /// <summary>
+    /// 在配置文件的变量中查找
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="key"></param>
+    /// <returns></returns>
     internal T? GetVariable<T>(string key)
     {
         Variables.TryGetValue(key, out var value);
         return value;
     }
 }
+/// <summary>
+/// 插件的基类，所有插件必须继承此类，实现了基本的方法
+/// </summary>
 public abstract class Plugin
 {
     /// <summary>
@@ -186,7 +212,9 @@ public class PluginTag : Attribute
         IsIgnore = isIgnore;
     }
 }
-
+/// <summary>
+/// 消息链工具类
+/// </summary>
 public static class MessageUtils
 {
     /// <summary>

@@ -51,6 +51,9 @@ public class ZhipuAi
         AddBuiltInTools();
 
     }
+    /// <summary>
+    /// register built-in tools
+    /// </summary>
     private void AddBuiltInTools()
     {
         var watch = new ToolDef();
@@ -85,6 +88,10 @@ public class ZhipuAi
         };
         RegisterTool(bingSearch);
     }
+    /// <summary>
+    /// register tool so that it can be called by assistant
+    /// </summary>
+    /// <param name="tool"></param>
     public void RegisterTool(ToolDef tool)
     {
         Tools.Add(tool);
@@ -117,7 +124,10 @@ public class ZhipuAi
         return mutex[groupId];
     }
     ZhipuMessage SystemPrompt;
-    
+    /// <summary>
+    /// reset dialog for a group
+    /// </summary>
+    /// <param name="id"></param>
     public void Reset(long id)
     {
         var mutex=ensureMutexExists(id);
@@ -129,6 +139,14 @@ public class ZhipuAi
         }
         mutex.Release(); 
     }
+    /// <summary>
+    /// 处理请求
+    /// </summary>
+    /// <param name="content">询问内容</param>
+    /// <param name="id">区分不同对话的id</param>
+    /// <param name="sender">发送者</param>
+    /// <param name="specialTag">一个tag，该tag会出现在function call的参数中</param>
+    /// <returns>异步字符串迭代器，模型返回结果</returns>
     public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
     {
         var mutex=ensureMutexExists(id);

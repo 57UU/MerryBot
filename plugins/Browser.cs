@@ -16,9 +16,6 @@ using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipuClient;
 
-/// <summary>
-/// access web pages with headless chrome
-/// </summary>
 public class Browser
 {
     IWebDriver driver;
@@ -44,20 +41,10 @@ public class Browser
         s = s.Replace("\n", "").Replace("\r", "");
         return Regex.Replace(s, @"\s{2,}", " ");
     }
-    /// <summary>
-    /// view web page
-    /// </summary>
-    /// <param name="url"></param>
-    /// <returns></returns>
     public Task<string> view(string url)
     {
         return view(ToStandardUri(url));
     }
-    /// <summary>
-    /// view web page
-    /// </summary>
-    /// <param name="url"></param>
-    /// <returns></returns>
     public Task<string> view(Uri url)
     {
         
@@ -80,11 +67,6 @@ public class Browser
             return $"调用失败 {t.Exception}";
         });
     }
-    /// <summary>
-    /// bing search
-    /// </summary>
-    /// <param name="keyword"></param>
-    /// <returns>search reasult</returns>
     public async Task<string> Search(string keyword)
     {
         var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}");
