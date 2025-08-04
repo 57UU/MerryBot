@@ -31,7 +31,7 @@ public class AiMessage : Plugin
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
         voiceSender.Function.Description = "发送语音（多用用，这样能展示你的个性）";
-        voiceSender.Function.Parameters.Properties.Add("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
+        voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
             

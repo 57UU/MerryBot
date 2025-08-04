@@ -85,9 +85,10 @@ public class Browser
     /// </summary>
     /// <param name="keyword"></param>
     /// <returns>search reasult</returns>
-    public async Task<string> Search(string keyword)
+    public async Task<string> Search(string keyword,bool internationalVersion)
     {
-        var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}");
+        var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}" +
+            (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
         {
             mutex.Wait();
