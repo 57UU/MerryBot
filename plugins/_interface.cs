@@ -68,7 +68,7 @@ public record PluginInterop(
             return defaultValue;
         }
         var realValue=(JsonElement)value ;
-        return realValue.Deserialize<T>();
+        return realValue.Deserialize<T>()!;
     }
     /// <summary>
     /// 在配置文件的变量中查找
@@ -76,10 +76,15 @@ public record PluginInterop(
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
     /// <returns></returns>
-    internal T? GetVariable<T>(string key)
+    internal T? GetVariable<T>(string key) where T : class
     {
         Variables.TryGetValue(key, out var value);
-        return value;
+        if (value is null)
+        {
+            return null;
+        }
+        var realValue = (JsonElement)value;
+        return realValue.Deserialize<T>();
     }
 }
 /// <summary>

@@ -1,5 +1,6 @@
 ﻿using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
@@ -45,6 +46,11 @@ public class Config
         };
         var json = await Utils.read(SETTING);
         var i = JsonSerializer.Deserialize<Config>(json, options);
+        //foreach (var k in i.Variables.Keys)
+        //{
+        //    var v =(JsonElement) i.Variables[k];
+        //    i.Variables[k] = JsonNode.Parse(v.GetRawText());
+        //}
         instance = i;
 
     }
@@ -53,6 +59,4 @@ public class Config
     public List<long> qq_groups = [];
     [JsonPropertyName("variables")]
     public Dictionary<string, dynamic> Variables = new();
-
-
 }
