@@ -19,7 +19,11 @@ public class AiMessage : Plugin
     {
         
         Logger.Info("ai plugin start");
-        var token = interop.GetVariable("ai-token", "");
+        var token = interop.GetVariable<string>("ai-token");
+        if (token == null)
+        {
+            throw new Exception("请在配置文件variable中设置ai-token");
+        }
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         zhipu = new ZhipuAi(token, prompt);
         zhipu.Logger = Logger;
