@@ -48,7 +48,7 @@ public class AiMessage : Plugin
             {
                 return $"发送失败:{e.Message}";
             }
-            return "发送成功。用户能看到你发的语音，你不必再去回复‘已发送’类似的话。";
+            return "发送成功。用户能看到你发的语音，你不必回复‘已发送’,也不必重复发送的信息";
         };
         zhipu.RegisterTool(voiceSender);
     }
