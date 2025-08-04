@@ -115,7 +115,7 @@ public class AiMessage : Plugin
             {
                 string qq = item.Data["qq"].ToString();
                 var detail =await Actions.GetGroupMemberData(groupId.ToString(),qq);
-                sb.Append($"[昵称:'{detail.Nickname}' 群昵称:'{detail.Card}']");
+                sb.Append($"[昵称:'{detail.Nickname}']");
             }
         }
         var text = sb.ToString();
