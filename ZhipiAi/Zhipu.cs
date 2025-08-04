@@ -32,6 +32,7 @@ public class ZhipuAi
     HttpClient client = new HttpClient();
     List<ToolDef> Tools { get; set; } = new();
     Dictionary<string,FunctionDef> funtionMapper=new();
+    public bool UseDynamicPrompt { get; set; } = true;
     string prompt;
     Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = new ConsoleLogger();
@@ -134,8 +135,7 @@ public class ZhipuAi
         mutex.Wait();
         if (history.ContainsKey(id))
         {
-            history[id].Clear();
-            history[id].Add(SystemPrompt);
+            history.Remove(id);
         }
         mutex.Release(); 
     }
@@ -161,7 +161,7 @@ public class ZhipuAi
         if (!history.ContainsKey(id))
         {
             history.Add(id, new List<ZhipuMessage>());
-            history[id].Add(SystemPrompt.GenerateWithTime());
+            history[id].Add(UseDynamicPrompt? SystemPrompt.GenerateDynamic():SystemPrompt);
         }
         var currentHistory = history[id];
         var userQuery = new ZhipuMessage()
@@ -346,12 +346,14 @@ public class ZhipuMessage
 
     [JsonPropertyName("content")]
     public string Content { get; set; }
-    public ZhipuMessage GenerateWithTime()
+    public ZhipuMessage GenerateDynamic()
     {
         return new ZhipuMessage()
         {
             Role = Role,
-            Content = Content + $"\n现在是{DateTime.Now}",
+            Content = Content +
+                $"\n现在是{DateTime.Now.ToString("yyyy-MM-dd")}\n" +
+                $"当你想表达情感时，请善用语音发送功能",
         };
     }
 }
