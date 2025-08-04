@@ -161,7 +161,7 @@ public class ZhipuAi
         if (!history.ContainsKey(id))
         {
             history.Add(id, new List<ZhipuMessage>());
-            history[id].Add(UseDynamicPrompt? SystemPrompt.GenerateDynamic():SystemPrompt);
+            history[id].Add(UseDynamicPrompt? SystemPrompt.GenerateDynamicPrompt():SystemPrompt);
         }
         var currentHistory = history[id];
         var userQuery = new ZhipuMessage()
@@ -346,13 +346,13 @@ public class ZhipuMessage
 
     [JsonPropertyName("content")]
     public string Content { get; set; }
-    public ZhipuMessage GenerateDynamic()
+    public ZhipuMessage GenerateDynamicPrompt()
     {
         return new ZhipuMessage()
         {
             Role = Role,
             Content = Content +
-                $"\n现在是{DateTime.Now.ToString("yyyy-MM-dd")}\n" +
+                $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd")}\n" +
                 $"当你想表达情感时，请善用语音发送功能",
         };
     }
