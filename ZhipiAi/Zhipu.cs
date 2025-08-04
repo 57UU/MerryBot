@@ -64,8 +64,8 @@ public class ZhipuAi
         RegisterTool(watch);
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
-        browserDef.Function.Description = "查看网页主要HTML内容（自动过滤样式、标签等不重要信息）";
-        browserDef.Function.Parameters.Properties.Add("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
+        browserDef.Function.Description = "查看网页主要内容";
+        browserDef.Function.Parameters.AddRequired("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
         browserDef.Function.FunctionCall = async (parameters) =>
         {
             var url = parameters["url"];
@@ -80,11 +80,17 @@ public class ZhipuAi
         var bingSearch = new ToolDef();
         bingSearch.Function.Name = "bing_search";
         bingSearch.Function.Description = "使用Bing进行网络搜索";
-        bingSearch.Function.Parameters.Properties.Add("query", new ParameterProperty() { Type = "string", Description = "keyword" });
+        bingSearch.Function.Parameters.AddRequired("query", new ParameterProperty() { Type = "string", Description = "keyword" });
+        bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版搜索" });
         bingSearch.Function.FunctionCall = async (parameters) =>
         {
             var query = parameters["query"];
-            var result = await browser.Search(query.GetString());
+            var internationalVersion = false;
+            if(parameters.TryGetValue("internationalVersion",out var v))
+            {
+                internationalVersion = v.GetBoolean();
+            }
+            var result = await browser.Search(query.GetString(),internationalVersion);
             return result;
         };
         RegisterTool(bingSearch);
@@ -353,7 +359,8 @@ public class ZhipuMessage
             Role = Role,
             Content = Content +
                 $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd")}\n" +
-                $"当你想表达情感时，请善用语音发送功能",
+                $"当你想表达情感时，请善用语音发送功能\n" +
+                $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）",
         };
     }
 }
@@ -426,6 +433,19 @@ public class ParameterSchema
 
     [JsonPropertyName("required")]
     public List<string> Required { get; set; } = new List<string>(); // 必选参数列表
+    public void AddRequired(string name,ParameterProperty parameterProperty)
+    {
+        Properties.Add(name, parameterProperty);
+        Required.Add(name);
+    }
+    public void  AddNonRequired(string name, ParameterProperty parameterProperty)
+    {
+        Properties.Add(name, parameterProperty);
+    }
+    public void MarkAllAsRequired()
+    {
+        Required.AddRange(Properties.Keys);
+    }
 }
 
 // 具体参数属性
