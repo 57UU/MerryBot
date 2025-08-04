@@ -23,8 +23,34 @@ public class Browser
 {
     IWebDriver driver;
     OpenQA.Selenium.Chrome.ChromeOptions options = new();
-    string jsReader,getSearchResult;
+    string jsReader,getSearchResult, preprocessWbHot;
     SemaphoreSlim mutex = new(1);
+    private static Task<string> LoadScript(string fileName)
+    {
+        if (!fileName.EndsWith(".js"))
+        {
+            fileName += ".js";
+        }
+        return File.ReadAllTextAsync("./javascript/"+fileName, Encoding.UTF8);
+    }
+    private async Task LoadScripts()
+    {
+        string[] scriptFiles = [
+            "readWeb", 
+            "getSearchResult",
+            "preprocessWbHot"
+            ];
+        List<Task<string>> tasks= new();
+        foreach (var file in scriptFiles)
+        {
+            tasks.Add(LoadScript(file));
+        }
+        await Task.WhenAll(tasks);
+        jsReader = tasks[0].Result;
+        getSearchResult = tasks[1].Result;
+        preprocessWbHot = tasks[2].Result;
+
+    }
     public Browser()
     {
         options.AddArgument("--headless");
@@ -35,9 +61,8 @@ public class Browser
         options.ApplyStealth();
 
         driver = Stealth.Instantiate(options);
-
-        jsReader = File.ReadAllText("readWeb.js",Encoding.UTF8);
-        getSearchResult = File.ReadAllText("getSearchResult.js",Encoding.UTF8);
+        LoadScripts().Wait();
+        
     }
     static string trim(string s)
     {
@@ -108,6 +133,50 @@ public class Browser
             }
             //if the script failed, try to view the page
             return await view(url);
+        });
+    }
+    public Task<string> GetWeiboHot()
+    {
+        var url = "https://m.weibo.cn/p/106003type=25&filter_type=realtimehot";
+        var query = "return document.querySelector(\"#app > div:nth-child(1) > div:nth-child(2) > div:nth-child(3) > div > div\")";
+        var delayTimeout = 1500;
+        var checkInterval =400;
+        var task = Task.Run(async () =>
+        {
+            mutex.Wait();
+            driver.Navigate().GoToUrl(url);
+            await Task.Delay(100);
+            IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
+            int delay = 0;
+            while (true)
+            {
+                if (executor.ExecuteScript(query) == null)
+                {
+                    //wait
+                    await Task.Delay(checkInterval);
+                    delay += checkInterval;
+                    if (delay > delayTimeout)
+                    {
+                        throw new TimeoutException("timeout");
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+            executor.ExecuteScript(preprocessWbHot);
+            var result = executor.ExecuteScript(jsReader).ToString();
+            return "|事件|热度|\n"+trim(result);
+        });
+
+        return task.ContinueWith((t) => {
+            mutex.Release();
+            if (t.Status == TaskStatus.RanToCompletion)
+            {
+                return t.Result;
+            }
+            return $"调用失败 {t.Exception}";
         });
     }
     public static Uri ToStandardUri(string raw)

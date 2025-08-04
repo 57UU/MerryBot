@@ -62,6 +62,11 @@ public class ZhipuAi
         watch.Function.Description = "查看现在的时间";
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
+        var weiboHot= new ToolDef();
+        weiboHot.Function.Name = "view_weibo_hot";
+        weiboHot.Function.Description = "查看微博热搜";
+        weiboHot.Function.FunctionCall = async (parameters) => await browser.GetWeiboHot();
+        RegisterTool(weiboHot);
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
         browserDef.Function.Description = "查看网页主要内容";
