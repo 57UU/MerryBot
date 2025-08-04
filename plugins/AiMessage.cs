@@ -5,9 +5,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
 using ZhipuClient;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BotPlugin;
 
@@ -30,7 +32,7 @@ public class AiMessage : Plugin
         //add voice tool
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
-        voiceSender.Function.Description = "发送语音（多用用，这样能展示你的个性）";
+        voiceSender.Function.Description = "发送语音/呼喊/唱歌";
         voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
@@ -70,6 +72,7 @@ public class AiMessage : Plugin
         long selfId = BotUtils.GetSelfId(data);
         string nickname = data.sender.nickname;
         bool isTargeted = false;
+        List<NapcatClient.Message> messages = new();
         foreach (var item in chain)
         {
             if (item.MessageType == "at")
@@ -79,6 +82,14 @@ public class AiMessage : Plugin
                 {
                     isTargeted = true;
                 }
+                else
+                {
+                    messages.Add(item);
+                }
+            }
+            else
+            {
+                messages.Add(item);
             }
 
         }
@@ -86,33 +97,42 @@ public class AiMessage : Plugin
         {
             return;
         }
-        //find first text
-        bool find=false;
-        string text="";
-        foreach(var item in chain)
+        PreprocessMessage(messages,groupId,nickname,data.message_id);
+    }
+    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
+    {
+        //concat text
+        bool find = false;
+        StringBuilder sb = new();
+        foreach (var item in chain)
         {
             if (item.MessageType == "text")
-            { 
-                text = item.Data["text"];
-                find=true;
+            {
+                sb.Append(item.Data["text"].Trim());
+                find = true;
+            }
+            if (item.MessageType == "at")
+            {
+                string qq = item.Data["qq"].ToString();
+                var detail =await Actions.GetGroupMemberData(groupId.ToString(),qq);
+                sb.Append($"[昵称:'{detail.Nickname}' 群昵称:'{detail.Card}']");
             }
         }
-        text = text.Trim();
+        var text = sb.ToString();
         if (text.StartsWith("/"))
         {
             return;
         }
         if (find)
         {
-            
+
             if (isContainsNew(text))
             {
-                text=text.Replace("#新对话","");
+                text = text.Replace("#新对话", "");
                 Logger.Info("[New] " + text);
                 zhipu.Reset(groupId);
             }
-            var messageId = data.message_id;
-            handleMessage(groupId, text, messageId,nickname);
+            handleMessage(groupId, text, messageId, nickname);
         }
     }
     async Task handleMessage(long groupId,string message,long messageId,string sender)

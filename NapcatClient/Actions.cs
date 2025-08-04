@@ -18,11 +18,11 @@ public class Actions
     }
     private static SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
     private ulong echoCount = 0;
-    public Task<Dictionary<string, JsonElement>> _SendAction(ParameteredAct act)
+    public Task<ResponseRootObject> _SendAction(ParameteredAct act)
     {
         return _SendAction(act.ToAct());
     }
-    public async Task<Dictionary<string, JsonElement>> _SendAction(Act act)
+    public async Task<ResponseRootObject> _SendAction(Act act)
     {
         var echo = $"{echoCount++}";
         act.Echo = echo;
@@ -34,14 +34,14 @@ public class Actions
         });
         return await WaitForResponse(echo);
     }
-    internal void AddResponse(string echo, Dictionary<string, JsonElement> response)
+    internal void AddResponse(string echo, ResponseRootObject response)
     {
         Logger.Info($"return: {echo}");
         responses.Add(echo, response);
         responseSemaphore.Release();
     }
-    Dictionary<string, Dictionary<string, JsonElement>> responses = new();
-    public async Task<Dictionary<string, JsonElement>> WaitForResponse(string echo)
+    Dictionary<string, ResponseRootObject> responses = new();
+    public async Task<ResponseRootObject> WaitForResponse(string echo)
     {
         await responseSemaphore.WaitAsync();
         if (responses.ContainsKey(echo))
@@ -63,7 +63,7 @@ public class Actions
     /// <param name="groupId">qq群号</param>
     /// <param name="messageChain">消息链</param>
     /// <returns></returns>
-    public async Task<Dictionary<string, JsonElement>> SendGroupMessage(long groupId, IEnumerable<Message> messageChain)
+    public async Task<ResponseRootObject> SendGroupMessage(long groupId, IEnumerable<Message> messageChain)
     {
         Dictionary<string, dynamic> parameters = new();
         parameters["group_id"] = groupId;
@@ -80,7 +80,7 @@ public class Actions
     /// <param name="groupId">QQ群号</param>
     /// <param name="text">文本</param>
     /// <returns></returns>
-    public async Task<Dictionary<string, JsonElement>> SendGroupMessage(long groupId, string text)
+    public async Task<ResponseRootObject> SendGroupMessage(long groupId, string text)
     {
         List<Message> messages = new List<Message>();
         messages.Add(Message.Text(text));
@@ -93,7 +93,7 @@ public class Actions
     /// <param name="messageId">要回复的消息的ID</param>
     /// <param name="text">文本</param>
     /// <returns></returns>
-    public async Task<Dictionary<string, JsonElement>> ReplyGroupMessage(long groupId,long messageId, string text)
+    public async Task<ResponseRootObject> ReplyGroupMessage(long groupId,long messageId, string text)
     {
         List<Message> messages = new List<Message>();
         messages.Add(Message.Reply(messageId));
@@ -109,7 +109,7 @@ public class Actions
     /// <param name="messageId">要回复的消息的ID</param>
     /// <param name="text">文本</param>
     /// <returns></returns>
-    public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text)
+    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, long messageId, string text)
     {
         return ChooseBestReplyMethod(groupId, messageId, text, DefaultNickname);
     }
@@ -121,7 +121,7 @@ public class Actions
     /// <param name="text">文本</param>
     /// <param name="nickname">昵称</param>
     /// <returns></returns>
-    public Task<Dictionary<string, JsonElement>> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
+    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
     {
         if (text.Length > PartLength)
         {
@@ -139,7 +139,7 @@ public class Actions
     /// <param name="text">文本</param>
     /// <param name="nickname">昵称</param>
     /// <returns></returns>
-    public Task<Dictionary<string, JsonElement>> SendLongMessage(string groupId, string text,string nickname)
+    public Task<ResponseRootObject> SendLongMessage(string groupId, string text,string nickname)
     {
         var fowardChain = GroupForwardChain.BuildDefault(bot.SelfId.ToString(),nickname,groupId);
         var text_char = text.ToCharArray();
@@ -169,7 +169,7 @@ public class Actions
     /// <param name="text">语音的文本</param>
     /// <param name="character">语音角色</param>
     /// <returns></returns>
-    public Task<Dictionary<string, JsonElement>> SendGroupAiVoice(string groupId, string text,string character= "lucy-voice-suxinjiejie")
+    public Task<ResponseRootObject> SendGroupAiVoice(string groupId, string text,string character= "lucy-voice-suxinjiejie")
     {
         ParameteredAct act = new(
             action: "send_group_ai_record",
@@ -193,10 +193,30 @@ public class Actions
             parameters: new object()
         );
         var result=await _SendAction(act);
-        var data = result["data"];
+        var data = result.Data;
         long userId=data.GetProperty("user_id").GetInt64();
         string nickname=data.GetProperty("nickname").GetString();
         return (userId,nickname);
+    }
+    public async Task<GroupMemberListData> GetGroupMemberListData(string groupId)
+    {
+        Act act = new(
+            action: "get_group_member_list",
+            parameters: new { group_id = groupId, no_cache=false }
+            );
+        var result=await _SendAction(act);
+        var data = result.Data;
+        return data.Deserialize<GroupMemberListData>();
+    }
+    public async Task<GroupMemberInfo> GetGroupMemberData(string groupId,string qq)
+    {
+        Act act = new(
+            action: "get_group_member_info",
+            parameters: new { group_id = groupId, user_id=qq, no_cache = false }
+            );
+        var result = await _SendAction(act);
+        var data = result.Data;
+        return data.Deserialize<GroupMemberInfo>();
     }
 
 

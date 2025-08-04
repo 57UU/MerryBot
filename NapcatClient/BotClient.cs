@@ -57,7 +57,7 @@ public class BotClient
         if (message.TryGetValue("echo", out echo))
         {
             //return message
-            Actions.AddResponse(echo.GetString(), message);
+            Actions.AddResponse(echo.GetString(), JsonSerializer.Deserialize<ResponseRootObject>(e.Data));
         }
         List<Message>? messageChain = null;
         if (message.ContainsKey("message_type"))
