@@ -25,9 +25,9 @@ public class ViewDialog : Plugin
     {
         if (s.Length > lengthConstraint)
         {
-            return s.Substring(0, lengthConstraint) + "...";
+            s= s.Substring(0, lengthConstraint) + "...";
         }
-        return s;
+        return s.Replace("\n","");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
