@@ -67,7 +67,7 @@ public class HeruiSaying :Plugin
             string responseBody = await response.Content.ReadAsStringAsync();
             return responseBody;
         }
-        catch (HttpRequestException e)
+        catch (Exception e)
         {
             // 处理请求异常
             Logger.Warn($"update failed due to {e.Message}");
