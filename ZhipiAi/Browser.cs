@@ -9,6 +9,7 @@ using SeleniumStealth.NET.Clients.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -60,7 +61,15 @@ public class Browser
         options.AddArgument("--disable-blink-features=AutomationControlled");
         options.ApplyStealth();
 
-        driver = Stealth.Instantiate(options);
+        bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+        StealthInstanceSettings stealthInstanceSettings = new();
+        if (isLinuxArm64)
+        {
+            Console.WriteLine("Arch: Linux Arm64");
+            stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
+        }
+
+        driver = Stealth.Instantiate(options, stealthInstanceSettings);
         LoadScripts().Wait();
         
     }
