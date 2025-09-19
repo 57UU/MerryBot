@@ -42,11 +42,36 @@ public class BotClient
     private void WebSocket_OnClose(object? sender, CloseEventArgs e)
     {
         Logger.Error($"websocket closed: {e.Reason}");
+        Reconnect();
     }
 
     private void WebSocket_OnError(object? sender, WebSocketSharp.ErrorEventArgs e)
     {
         Logger.Warn($"websocket error: {e.Message}");
+        WebSocket.Close();
+    }
+    private async Task Reconnect()
+    {
+        const int maxRetry = 3;
+        const int retryDelay = 5000; // 5秒
+
+        for (int i = 0; i < maxRetry; i++)
+        {
+            try
+            {
+                Logger.Info($"尝试第 {i + 1} 次重连...");
+                await Task.Delay(retryDelay);
+                WebSocket.Connect();
+                Logger.Info("重连成功");
+                return;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"第 {i + 1} 次重连失败: {ex.Message}");
+            }
+        }
+
+        Logger.Error($"已达到最大重连次数({maxRetry})，放弃重连");
     }
 
     private void WebSocket_OnMessage(object? sender, MessageEventArgs e)

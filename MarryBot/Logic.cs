@@ -24,6 +24,7 @@ internal class Logic
         this.botClient = botClient;
         this.qqGroupIDs = qqGroupIDs;
         LoadPlugins();
+        botClient.OnGroupMessageReceived += OnGroupMessageReceived;
     }
 
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
