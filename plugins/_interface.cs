@@ -51,7 +51,7 @@ public record PluginInterop(
     /// <returns>如果找得到，返回该插件的实例，否则返回null</returns>
     internal T? FindPlugin<T>() where T : Plugin
     {
-        return this.PluginInfoGetter().First(i => i.Instance is T).Instance as T;
+        return this.PluginInfoGetter().FirstOrDefault(i => i.Instance is T)?.Instance as T;
     }
     /// <summary>
     /// 尝试在配置文件的变量中查找
