@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "plugins", "plugins\plugins.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{91A7D929-2DB5-47BB-B04A-1CD6C00103EE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZhipuAi", "ZhipiAi\ZhipuAi.csproj", "{FB3018D0-EB28-40A1-BC2C-C74DA8207212}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZhipuAi", "ZhipuAi\ZhipuAi.csproj", "{FB3018D0-EB28-40A1-BC2C-C74DA8207212}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommonLib", "CommonLib\CommonLib.csproj", "{FC3964D3-9982-4881-AEEF-A7450D99584A}"
 EndProject

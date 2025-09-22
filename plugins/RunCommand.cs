@@ -17,7 +17,7 @@ public class RunCommand : Plugin
     bool useUnprivileged = true;
     public RunCommand(PluginInterop interop) : base(interop)
     {
-        Logger.Info("about plugin start");
+        
         var tmp = interop.GetLongVariable("authorized-user");
         if (tmp == null)
         {
@@ -28,6 +28,7 @@ public class RunCommand : Plugin
         {
             authorized = tmp.Value;
         }
+        Logger.Info("shell plugin started");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
@@ -112,13 +113,17 @@ public class Terminal : IDisposable
     /// <returns>命令输出</returns>
     public async Task<string> RunCommandAsync(string command, int timeoutMs = 1000)
     {
+        if (mutex.CurrentCount < 1)
+        {
+            return "请等待上一个命令执行";
+        }
         await mutex.WaitAsync();
         string marker = $"{_endMarker}_{Guid.NewGuid()}";
 
         // 用 Linux 的 timeout 包装
         float sec = timeoutMs / 1000.0f;
 
-        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| [ $? -eq 124 ] && echo \"timeout:{sec}s\"; echo; echo {marker}";
+        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| [ $? -eq 124 ] && echo \"timeout:{sec}s\"; echo -e '\\n'; echo -e '{marker}\\n'";
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 
@@ -165,8 +170,6 @@ public class Terminal : IDisposable
 
     public void Dispose()
     {
-        _writer.Dispose();
-        _reader.Dispose();
         if (!_process.HasExited)
         {
             _process.Kill();
