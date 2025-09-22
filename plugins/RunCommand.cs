@@ -1,4 +1,5 @@
-﻿using NapcatClient;
+﻿using CommonLib;
+using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,7 +18,7 @@ public class RunCommand : Plugin
     bool useUnprivileged = true;
     public RunCommand(PluginInterop interop) : base(interop)
     {
-        
+        terminal = new(logger:Logger);
         var tmp = interop.GetLongVariable("authorized-user");
         if (tmp == null)
         {
@@ -62,7 +63,7 @@ public class RunCommand : Plugin
             handleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
-    Terminal terminal = new();
+    Terminal terminal ;
     async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
     {
         string result;
@@ -83,9 +84,11 @@ public class Terminal : IDisposable
     private readonly StreamReader _errorReader;
     private readonly string _endMarker = "__END__";
     private readonly SemaphoreSlim mutex = new(1);
+    ISimpleLogger logger;
 
-    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
+    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash",ISimpleLogger logger)
     {
+        this.logger = logger;
         _process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -103,6 +106,7 @@ public class Terminal : IDisposable
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
+        logger.Info("bash created");
     }
 
     /// <summary>
@@ -135,6 +139,7 @@ public class Terminal : IDisposable
             while (!cts.IsCancellationRequested)
             {
                 string? line = await _reader.ReadLineAsync(cts.Token);
+                logger.Info($"line received: {line}");
                 if (line == null) break;
 
                 if (line == marker)
