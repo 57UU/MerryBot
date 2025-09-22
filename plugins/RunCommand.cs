@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using WebSocketSharp;
 
 namespace BotPlugin;
 
@@ -68,7 +69,7 @@ public class RunCommand : Plugin
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);
     }
-    public static async Task<string> RunCommandAsync(string command, bool isAuthorized, int timeout = 500)
+    public async Task<string> RunCommandAsync(string command, bool isAuthorized, int timeout = 500)
     {
         // 根据操作系统选择合适的命令解释器
         string shell;
@@ -135,13 +136,14 @@ public class RunCommand : Plugin
                 // 合并输出和错误信息
                 return string.IsNullOrEmpty(error) ? output : $"Error: {error}\n{output}";
             }
-            else
-            {
+            else { 
+                var errMsg = $"命令执行超时（超过{timeout}ms）并已被终止";
+                Logger.Warn("errMsg");
                 if (!process.HasExited)
                 {
                     process.Kill(); // 强制终止进程
                 }
-                return $"命令执行超时（超过{timeout}ms）并已被终止";
+                return errMsg;
             }
         }
         catch (OperationCanceledException)
