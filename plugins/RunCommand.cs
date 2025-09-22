@@ -72,10 +72,11 @@ public class RunCommand : Plugin
     public async Task<string> RunCommandAsync(string command, bool isAuthorized, int timeout = 500)
     {
         // 根据操作系统选择合适的命令解释器
-        string shell;
+        string shell,arguments;
         if (OperatingSystem.IsLinux())
         {
             shell = "/bin/bash";
+            arguments = "-i";
         }
         else
         {
@@ -86,6 +87,7 @@ public class RunCommand : Plugin
         var startInfo = new ProcessStartInfo
         {
             FileName = shell,
+            Arguments = arguments,
             RedirectStandardInput= true,
             RedirectStandardOutput = true,   // 重定向标准输出
             RedirectStandardError = true,    // 重定向错误输出
@@ -106,15 +108,15 @@ public class RunCommand : Plugin
             var input= process.StandardInput;
             if (!isAuthorized)
             {
-                input.WriteLine("sudo su marrybot");
-                input.WriteLine("alias sudo='echo \"Command not found.\" >&2; false'");
+                await input.WriteLineAsync("sudo su marrybot");
+                await input.WriteLineAsync("""alias sudo='echo "Command not found." >&2; false'""");
             }
-            input.WriteLine("cd ~");
-            input.WriteLine(command);
-            input.WriteLine("exit");
+            await input.WriteLineAsync("cd ~");
+            await input.WriteLineAsync(command);
+            await input.WriteLineAsync("exit");
             if (!isAuthorized)
             {
-                input.WriteLine("exit");
+                await input.WriteLineAsync("exit");
             }
             input.Close();
 
