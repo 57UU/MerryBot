@@ -71,8 +71,9 @@ public class RunCommand : Plugin
         {
             result = await RunCommandUnprivilegedAsync(command,timeout:1000);
         }
+        result = PluginUtils.ConstraintLength(result, 3000);
 
-            await Actions.ChooseBestReplyMethod(groupId, messageId, result);
+        await Actions.ChooseBestReplyMethod(groupId, messageId, result);
     }
     // 异步执行命令，超过timeout ms自动终止
     public static async Task<string> RunCommandAsync(string command,int timeout=500)

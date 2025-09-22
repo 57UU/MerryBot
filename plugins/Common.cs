@@ -84,3 +84,16 @@ class OnceTimerTask : TimerTask
         callback.Invoke();
     }
 }
+
+
+static class PluginUtils
+{
+    public static string ConstraintLength(string s,int lengthConstraint,string prompt="...")
+    {
+        if (s.Length > lengthConstraint)
+        {
+            s = s.Substring(0, lengthConstraint) + prompt;
+        }
+        return s.Replace("\n", "");
+    }
+}
