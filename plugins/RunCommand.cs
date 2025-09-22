@@ -107,10 +107,15 @@ public class RunCommand : Plugin
             if (!isAuthorized)
             {
                 input.WriteLine("sudo su marrybot");
+                input.WriteLine("alias sudo='echo \"Command not found.\" >&2; false'");
             }
             input.WriteLine("cd ~");
             input.WriteLine(command);
             input.WriteLine("exit");
+            if (!isAuthorized)
+            {
+                input.WriteLine("exit");
+            }
             input.Close();
 
             // 异步读取输出和错误流
