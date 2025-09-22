@@ -128,7 +128,8 @@ public class Terminal : IDisposable
         // 用 Linux 的 timeout 包装
         float sec = timeoutMs / 1000.0f;
 
-        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| [ $? -eq 124 ] && echo \"timeout:{sec}s\"; echo -e '\\n'; echo -e '{marker}\\n'";
+        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| {{[ $? -eq 124 ] && echo \"timeout:{sec}s\";}}; echo -e '\\n'; echo -e '{marker}\\n'";
+        logger.Info($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 
