@@ -64,7 +64,7 @@ public class RunCommand : Plugin
     async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
     {
         string result;
-        result = await RunCommandAsync(command,isAuthorized,timeout:1000);
+        result = await RunCommandAsync(command,false,timeout:1000);
         result = PluginUtils.ConstraintLength(result, 3000);
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);
