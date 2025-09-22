@@ -145,8 +145,11 @@ public class Terminal : IDisposable
                 if (line == null) break;
 
                 if (line.Trim() == marker)
+                {
                     logger.Info("end reached");
                     break;
+                }
+   
 
                 sb.AppendLine(line);
             }
