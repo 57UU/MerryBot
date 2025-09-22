@@ -143,7 +143,8 @@ public class Terminal : IDisposable
                 logger.Info($"line received: {line}");
                 if (line == null) break;
 
-                if (line == marker)
+                if (line.Trim() == marker)
+                    logger.Info("end reached");
                     break;
 
                 sb.AppendLine(line);
