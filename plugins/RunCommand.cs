@@ -76,7 +76,7 @@ public class RunCommand : Plugin
         if (OperatingSystem.IsLinux())
         {
             shell = "/bin/bash";
-            arguments = "-i";
+            arguments = "";
         }
         else
         {
@@ -109,7 +109,8 @@ public class RunCommand : Plugin
             if (!isAuthorized)
             {
                 await input.WriteLineAsync("sudo su marrybot");
-                await input.WriteLineAsync("""alias sudo='echo "Command not found." >&2; false'""");
+                //await input.WriteLineAsync("""alias sudo='echo "Command not found." >&2; false'""");
+                command = command.Replace("sudo","");
             }
             await input.WriteLineAsync("cd ~");
             await input.WriteLineAsync(command);
