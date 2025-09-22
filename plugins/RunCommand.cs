@@ -61,110 +61,116 @@ public class RunCommand : Plugin
             handleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
+    Terminal terminal = new();
     async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
     {
         string result;
-        result = await RunCommandAsync(command,false,timeout:1000);
+        result = await terminal.RunCommandAsync(command,timeoutMs:1000);
         result = PluginUtils.ConstraintLength(result, 3000);
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);
     }
-    public async Task<string> RunCommandAsync(string command, bool isAuthorized, int timeout = 500)
+
+}
+
+
+public class Terminal : IDisposable
+{
+    private readonly Process _process;
+    private readonly StreamWriter _writer;
+    private readonly StreamReader _reader;
+    private readonly StreamReader _errorReader;
+    private readonly string _endMarker = "__END__";
+    private readonly SemaphoreSlim mutex = new(1);
+
+    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
     {
-        // 根据操作系统选择合适的命令解释器
-        string shell,arguments;
-        if (OperatingSystem.IsLinux())
+        _process = new Process
         {
-            shell = "/bin/bash";
-            arguments = "";
-        }
-        else
-        {
-            throw new PlatformNotSupportedException("不支持的操作系统");
-        }
-
-        // 创建进程启动信息
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = shell,
-            Arguments = arguments,
-            RedirectStandardInput= true,
-            RedirectStandardOutput = true,   // 重定向标准输出
-            RedirectStandardError = true,    // 重定向错误输出
-            UseShellExecute = false,         // 不使用操作系统shell启动
-            CreateNoWindow = true,           // 不创建新窗口
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = shell,
+                Arguments=arguments,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
         };
+        _process.Start();
+        _writer = _process.StandardInput;
+        _reader = _process.StandardOutput;
+        _errorReader = _process.StandardError;
+    }
 
-        // 创建取消令牌源，设置超时
-        using var cts = new CancellationTokenSource(timeout);
-        using var process = new Process { StartInfo = startInfo };
+    /// <summary>
+    /// 运行命令并返回结果
+    /// </summary>
+    /// <param name="command">要执行的命令</param>
+    /// <param name="timeoutMs">超时毫秒数</param>
+    /// <returns>命令输出</returns>
+    public async Task<string> RunCommandAsync(string command, int timeoutMs = 1000)
+    {
+        await mutex.WaitAsync();
+        string marker = $"{_endMarker}_{Guid.NewGuid()}";
+
+        // 用 Linux 的 timeout 包装
+        float sec = timeoutMs / 1000.0f;
+
+        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| [ $? -eq 124 ] && echo \"timeout:{sec}s\"; echo; echo {marker}";
+        await _writer.WriteLineAsync(fullCommand);
+        await _writer.FlushAsync();
+
+        var sb = new StringBuilder();
+        using var cts = new CancellationTokenSource(timeoutMs);
 
         try
         {
-            // 启动进程
-            process.Start();
-            var input= process.StandardInput;
-            if (!isAuthorized)
+            while (!cts.IsCancellationRequested)
             {
-                await input.WriteLineAsync("sudo su marrybot");
-                //await input.WriteLineAsync("""alias sudo='echo "Command not found." >&2; false'""");
-                command = command.Replace("sudo","");
+                string? line = await _reader.ReadLineAsync(cts.Token);
+                if (line == null) break;
+
+                if (line == marker)
+                    break;
+
+                sb.AppendLine(line);
             }
-            await input.WriteLineAsync("cd ~");
-            await input.WriteLineAsync(command);
-            await input.WriteLineAsync("exit");
-            if (!isAuthorized)
+            var error = await _errorReader.ReadToEndAsync();
+            var output = string.IsNullOrWhiteSpace(sb.ToString()) ? "[no output]" : sb.ToString().Trim();
+            if (string.IsNullOrWhiteSpace(error))
             {
-                await input.WriteLineAsync("exit");
+                return output;
             }
-            input.Close();
-
-            // 异步读取输出和错误流
-            var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
-            var errorTask = process.StandardError.ReadToEndAsync(cts.Token);
-
-            // 等待进程完成或超时
-            var processTask = process.WaitForExitAsync(cts.Token);
-            var completedTask = await Task.WhenAny(processTask, Task.Delay(Timeout.Infinite, cts.Token));
-
-            // 如果超时或被取消，终止进程
-            if (completedTask == processTask && processTask.IsCompletedSuccessfully)
+            else
             {
-                // 等待所有输出读取完成
-                string output = (await outputTask);
-                string error = (await errorTask);
-
-                if (string.IsNullOrWhiteSpace(output))
-                {
-                    output = "[No Output]";
-                }
-
-                // 合并输出和错误信息
-                return string.IsNullOrEmpty(error) ? output : $"Error: {error}\n{output}";
-            }
-            else { 
-                var errMsg = $"命令执行超时（超过{timeout}ms）并已被终止";
-                Logger.Warn("errMsg");
-                if (!process.HasExited)
-                {
-                    process.Kill(); // 强制终止进程
-                }
-                return errMsg;
+                return $"{error}\n{output}";
             }
         }
         catch (OperationCanceledException)
         {
-            if (!process.HasExited)
-            {
-                process.Kill();
-            }
-            return $"命令执行超时（超过{timeout}ms）并已被终止";
+            sb.AppendLine($"Command timed out after {timeoutMs} ms.");
+            return sb.ToString();
         }
-        catch (Exception ex)
+        catch (Exception e) {
+            return $"Error:{e.Message}";
+        }
+        finally
         {
-            return $"执行命令时发生错误: {ex.Message}";
+            mutex.Release();
+            cts.Dispose();
         }
+    }
+
+    public void Dispose()
+    {
+        _writer.Dispose();
+        _reader.Dispose();
+        if (!_process.HasExited)
+        {
+            _process.Kill();
+        }
+        _process.Dispose();
     }
 }
