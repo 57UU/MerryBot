@@ -196,7 +196,7 @@ public class RunCommand : Plugin
             // 启动进程
             process.Start();
             var input= process.StandardInput;
-            input.WriteLine("su marrybot");
+            input.WriteLine("sudo su marrybot");
             input.WriteLine(command);
             input.WriteLine("exit");
             input.Close();
