@@ -197,6 +197,7 @@ public class RunCommand : Plugin
             process.Start();
             var input= process.StandardInput;
             input.WriteLine("sudo su marrybot");
+            input.WriteLine("cd ~");
             input.WriteLine(command);
             input.WriteLine("exit");
             input.Close();
