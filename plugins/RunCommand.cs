@@ -117,8 +117,8 @@ public class RunCommand : Plugin
             if (completedTask == processTask && processTask.IsCompletedSuccessfully)
             {
                 // 等待所有输出读取完成
-                string output = await outputTask;
-                string error = await errorTask;
+                string output = (await outputTask)??"[No Output]";
+                string error = (await errorTask)??" ";
 
                 // 合并输出和错误信息
                 return string.IsNullOrEmpty(error) ? output : $"Error: {error}\n{output}";
