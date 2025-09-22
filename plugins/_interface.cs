@@ -70,6 +70,16 @@ public record PluginInterop(
         var realValue=(JsonElement)value ;
         return realValue.Deserialize<T>()!;
     }
+    internal Nullable<long> GetLongVariable(string key)
+    {
+        Variables.TryGetValue(key, out var value);
+        if (value is null)
+        {
+            return null;
+        }
+        var realValue = (JsonElement)value;
+        return realValue.Deserialize<long>()!;
+    }
     /// <summary>
     /// 在配置文件的变量中查找
     /// </summary>
