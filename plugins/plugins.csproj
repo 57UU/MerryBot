@@ -18,6 +18,7 @@
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
     <ProjectReference Include="..\ZhipiAi\ZhipuAi.csproj" />
+    <ProjectReference Include="..\ZhipuAi\ZhipuAi.csproj" />
   </ItemGroup>
 
 </Project>
