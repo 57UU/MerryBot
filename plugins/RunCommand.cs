@@ -153,8 +153,9 @@ public class Terminal : IDisposable
 
                 sb.AppendLine(line);
             }
-            var error = await _errorReader.ReadToEndAsync();
-            var output = string.IsNullOrWhiteSpace(sb.ToString()) ? "[no output]" : sb.ToString().Trim();
+            var error = "";//await _errorReader.ReadToEndAsync();
+            var _outTrim = sb.ToString();
+            var output = string.IsNullOrWhiteSpace(_outTrim) ? "[no output]" : _outTrim;
             if (string.IsNullOrWhiteSpace(error))
             {
                 return output;
