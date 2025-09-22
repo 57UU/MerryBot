@@ -18,7 +18,8 @@ public class RunCommand : Plugin
     bool useUnprivileged = true;
     public RunCommand(PluginInterop interop) : base(interop)
     {
-        terminal = new(logger:Logger);
+        terminal = new();
+        terminal.logger = Logger;
         var tmp = interop.GetLongVariable("authorized-user");
         if (tmp == null)
         {
@@ -84,9 +85,9 @@ public class Terminal : IDisposable
     private readonly StreamReader _errorReader;
     private readonly string _endMarker = "__END__";
     private readonly SemaphoreSlim mutex = new(1);
-    ISimpleLogger logger;
+    public ISimpleLogger logger=ConsoleLogger.Instance;
 
-    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash",ISimpleLogger logger)
+    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
     {
         this.logger = logger;
         _process = new Process

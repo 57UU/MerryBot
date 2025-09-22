@@ -35,7 +35,7 @@ public class ZhipuAi
     public bool UseDynamicPrompt { get; set; } = true;
     string prompt;
     Browser browser = new();
-    public ISimpleLogger Logger { set; private get; } = new ConsoleLogger();
+    public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
     public ZhipuAi(string token,string prompt)
     {
         this.token = token;

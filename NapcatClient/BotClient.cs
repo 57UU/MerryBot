@@ -34,7 +34,7 @@ public class BotClient
         SelfId = result.userId;
         Nickname = result.nickname;
     }
-    public BotClient(string address, string token) : this(address, token, new ConsoleLogger())
+    public BotClient(string address, string token) : this(address, token, ConsoleLogger.Instance)
     {
 
     }

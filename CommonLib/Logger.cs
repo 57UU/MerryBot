@@ -11,6 +11,8 @@ public interface ISimpleLogger
 }
 public class ConsoleLogger : ISimpleLogger
 {
+    private ConsoleLogger() { }
+    public static ConsoleLogger Instance { get; } = new ConsoleLogger();
     public void Debug(string message)
     {
         Console.WriteLine($"Debug:{message}");
