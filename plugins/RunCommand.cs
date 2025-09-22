@@ -57,7 +57,7 @@ public class RunCommand : Plugin
             {
                 text = text.Substring(1);
             }
-            handleCommand(text, groupId,data.message_id,false);
+            handleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
     async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
