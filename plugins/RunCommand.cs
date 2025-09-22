@@ -60,7 +60,7 @@ public class RunCommand : Plugin
     }
     async void handleCommand(string command,long groupId)
     {
-        var result = await RunCommandAsync(command);
+        var result = await RunCommandAsync(command,timeout:1000);
         Actions.SendGroupMessage(groupId, result);
     }
     // 异步执行命令，超过500ms自动终止
@@ -134,7 +134,7 @@ public class RunCommand : Plugin
                 {
                     process.Kill(); // 强制终止进程
                 }
-                return "命令执行超时（超过500ms）并已被终止";
+                return $"命令执行超时（超过{timeout}ms）并已被终止";
             }
         }
         catch (OperationCanceledException)
@@ -143,7 +143,7 @@ public class RunCommand : Plugin
             {
                 process.Kill();
             }
-            return "命令执行超时（超过500ms）并已被终止";
+            return $"命令执行超时（超过{timeout}ms）并已被终止";
         }
         catch (Exception ex)
         {
