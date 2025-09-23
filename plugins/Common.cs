@@ -94,6 +94,6 @@ static class PluginUtils
         {
             s = s.Substring(0, lengthConstraint) + prompt;
         }
-        return s.Replace("\n", "");
+        return s.Replace("\n", " ");
     }
 }
