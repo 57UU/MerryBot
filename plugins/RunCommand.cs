@@ -87,6 +87,7 @@ public class Terminal : IDisposable
     private readonly SemaphoreSlim mutex = new(1);
     public ISimpleLogger logger=ConsoleLogger.Instance;
 
+    bool isInitialized = false;
     public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
     {
         _process = new Process
@@ -106,8 +107,6 @@ public class Terminal : IDisposable
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
-        _writer.Write("cd ~");
-        _writer.Flush();
         logger.Info("bash created");
     }
     public async Task<bool> IsBuiltinAsync(string command)
@@ -137,6 +136,11 @@ public class Terminal : IDisposable
     /// <returns>命令输出</returns>
     public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 1000)
     {
+        if (!isInitialized)
+        {
+            _writer.Write("cd ~");
+            _writer.Flush();
+        }
         if (mutex.CurrentCount < 1)
         {
             return "请等待上一个命令执行";
