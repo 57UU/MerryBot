@@ -106,13 +106,15 @@ public class Terminal : IDisposable
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
-        _writer.WriteAsync("cd ~");
+        _writer.Write("cd ~");
+        _writer.Flush();
         logger.Info("bash created");
     }
     public async Task<bool> IsBuiltinAsync(string command)
     {
         var result = await RunCommandAsync($"type -t {EscapeForShell(command)}"
             ,false, timeoutMs: -1);
+        logger.Info($"test builtin result:{result}");
         return result == "builtin" || result == "keyword";
     }
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
