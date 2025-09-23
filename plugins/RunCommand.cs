@@ -89,7 +89,6 @@ public class Terminal : IDisposable
 
     public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
     {
-        this.logger = logger;
         _process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -112,11 +111,13 @@ public class Terminal : IDisposable
     }
     public async Task<bool> IsBuiltinAsync(string command)
     {
-        var result = await RunCommandAsync($"type -t {command}",false, timeoutMs: -1);
+        var result = await RunCommandAsync($"type -t {EscapeForShell(command)}"
+            ,false, timeoutMs: -1);
         return result == "builtin" || result == "keyword";
     }
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
     {
+        var firstSemi = command.IndexOf(';');
         var isBuiltin = await IsBuiltinAsync(command);
         var useTimeout = !isBuiltin;
         logger.Info($"type is builtin? {isBuiltin}");
@@ -207,5 +208,13 @@ public class Terminal : IDisposable
             _process.Kill();
         }
         _process.Dispose();
+    }
+    public static string EscapeForShell(string input)
+    {
+        if (input == null)
+            return "''"; // null 当成空字符串
+
+        // 单引号内的单引号需要特殊处理
+        return "'" + input.Replace("'", "'\\''") + "'";
     }
 }
