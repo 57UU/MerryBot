@@ -178,7 +178,7 @@ public class Terminal : IDisposable
                 sb.AppendLine(line);
             }
             var error = "";//await _errorReader.ReadToEndAsync();
-            var _outTrim = sb.ToString();
+            var _outTrim = sb.ToString().Trim();
             var output = string.IsNullOrWhiteSpace(_outTrim) ? "[no output]" : _outTrim;
             if (string.IsNullOrWhiteSpace(error))
             {
