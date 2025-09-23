@@ -138,8 +138,9 @@ public class Terminal : IDisposable
     {
         if (!isInitialized)
         {
-            _writer.Write("cd ~");
-            _writer.Flush();
+            await _writer.WriteLineAsync("cd ~");
+            await _writer.FlushAsync();
+            isInitialized = true;
         }
         if (mutex.CurrentCount < 1)
         {
