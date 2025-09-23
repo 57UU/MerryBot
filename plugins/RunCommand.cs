@@ -68,7 +68,7 @@ public class RunCommand : Plugin
     async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
     {
         string result;
-        result = await terminal.RunCommandAsync(command,timeoutMs:1000);
+        result = await terminal.RunCommandAutoTimeoutAsync(command,timeoutMs:1000);
         result = PluginUtils.ConstraintLength(result, 3000);
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);
@@ -107,7 +107,20 @@ public class Terminal : IDisposable
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
+        _writer.WriteAsync("cd ~");
         logger.Info("bash created");
+    }
+    public async Task<bool> IsBuiltinAsync(string command)
+    {
+        var result = await RunCommandAsync($"type -t {command}",false, timeoutMs: -1);
+        return result == "builtin" || result == "keyword";
+    }
+    public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
+    {
+        var isBuiltin = await IsBuiltinAsync(command);
+        var useTimeout = !isBuiltin;
+        logger.Info($"type is builtin? {isBuiltin}");
+        return await RunCommandAsync(command, useTimeout, timeoutMs);
     }
 
     /// <summary>
@@ -116,7 +129,7 @@ public class Terminal : IDisposable
     /// <param name="command">要执行的命令</param>
     /// <param name="timeoutMs">超时毫秒数</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command, int timeoutMs = 1000)
+    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 1000)
     {
         if (mutex.CurrentCount < 1)
         {
@@ -128,19 +141,27 @@ public class Terminal : IDisposable
         // 用 Linux 的 timeout 包装
         float sec = timeoutMs / 1000.0f;
 
-        string fullCommand = $"timeout -k 0.5s {sec}s {command}|| ([ $? -eq 124 ] && echo \"timeout:{sec}s\";); echo -e '\\n'; echo -e '{marker}\\n'";
+        string fullCommand;
+        if (useTimeout)
+        {
+            fullCommand = $"timeout -k 0.5s {sec}s {command}|| ([ $? -eq 124 ] && echo \"timeout:{sec}s\";); echo -e '\\n'; echo -e '{marker}\\n'";
+        }
+        else
+        {
+            fullCommand = $"{command}; echo -e '\\n'; echo -e '{marker}\\n'";
+        }
+
         logger.Info($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 
         var sb = new StringBuilder();
-        using var cts = new CancellationTokenSource(timeoutMs);
 
         try
         {
-            while (!cts.IsCancellationRequested)
+            while (true)
             {
-                string? line = await _reader.ReadLineAsync(cts.Token);
+                string? line = await _reader.ReadLineAsync();
                 logger.Info($"line received: {line}");
                 if (line == null) break;
 
@@ -158,7 +179,7 @@ public class Terminal : IDisposable
             var output = string.IsNullOrWhiteSpace(_outTrim) ? "[no output]" : _outTrim;
             if (string.IsNullOrWhiteSpace(error))
             {
-                return output;
+                return output.Replace("\t"," ");
             }
             else
             {
@@ -176,7 +197,6 @@ public class Terminal : IDisposable
         finally
         {
             mutex.Release();
-            cts.Dispose();
         }
     }
 
