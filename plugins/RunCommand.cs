@@ -112,14 +112,17 @@ public class Terminal : IDisposable
     }
     public async Task<bool> IsBuiltinAsync(string command)
     {
-        var result = await RunCommandAsync($"type -t {EscapeForShell(command)}"
+        var result = await RunCommandAsync($"type -t {command}"
             ,false, timeoutMs: -1);
         logger.Info($"test builtin result:{result}");
         return result == "builtin" || result == "keyword";
     }
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
     {
-        var firstSemi = command.IndexOf(';');
+        if (isContainMultipleCommands(command))
+        {
+            return "暂不支持同时运行多条指令";
+        }
         var isBuiltin = await IsBuiltinAsync(command);
         var useTimeout = !isBuiltin;
         logger.Info($"type is builtin? {isBuiltin}");
@@ -218,5 +221,17 @@ public class Terminal : IDisposable
 
         // 单引号内的单引号需要特殊处理
         return "'" + input.Replace("'", "'\\''") + "'";
+    }
+    public static bool isContainMultipleCommands(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
+
+        // 常见的命令分隔符
+        string pattern = @"(;|\|\||&&|\|)";
+
+        // 找到第一个分隔符
+        var match = Regex.Match(input, pattern);
+        return match.Success;
     }
 }
