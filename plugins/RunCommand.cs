@@ -1,5 +1,6 @@
 ﻿using CommonLib;
 using NapcatClient;
+using OpenQA.Selenium.DevTools.V137.Debugger;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -120,12 +121,20 @@ public class Terminal : IDisposable
     {
         if (isContainMultipleCommands(command))
         {
-            return "暂不支持同时运行多条指令";
+            return "仅支持使用;'连接多条指令";
         }
-        var isBuiltin = await IsBuiltinAsync(command);
-        var useTimeout = !isBuiltin;
-        logger.Info($"type is builtin? {isBuiltin}");
-        return await RunCommandAsync(command, useTimeout, timeoutMs);
+        StringBuilder sb = new();
+        var commands = SplitCommands(command);
+        foreach(var c in commands)
+        {
+
+            var isBuiltin = await IsBuiltinAsync(c);
+            var useTimeout = !isBuiltin;
+            logger.Info($"type is builtin? {isBuiltin}");
+            var result1= await RunCommandAsync(c, useTimeout, timeoutMs);
+            sb.AppendLine(result1);
+        }
+        return sb.ToString();
     }
 
     /// <summary>
@@ -233,10 +242,78 @@ public class Terminal : IDisposable
             return false;
 
         // 常见的命令分隔符
-        string pattern = @"(;|\|\||&&|\|)";
+        string pattern = @"(\|\||&&)";
 
         // 找到第一个分隔符
         var match = Regex.Match(input, pattern);
         return match.Success;
+    }
+    public static List<string> SplitCommands(string input)
+    {
+        List<string> commands = new List<string>();
+        StringBuilder currentCommand = new StringBuilder();
+        bool inSingleQuotes = false;
+        bool inDoubleQuotes = false;
+        bool escaped = false;
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            char c = input[i];
+
+            if (escaped)
+            {
+                // 处理转义字符
+                currentCommand.Append(c);
+                escaped = false;
+                continue;
+            }
+
+            switch (c)
+            {
+                case '\\':
+                    // 遇到转义符号，标记下一个字符为转义状态
+                    currentCommand.Append(c);
+                    escaped = true;
+                    break;
+                case '\'':
+                    if (!inDoubleQuotes)
+                    {
+                        inSingleQuotes = !inSingleQuotes;
+                    }
+                    currentCommand.Append(c);
+                    break;
+                case '\"':
+                    if (!inSingleQuotes)
+                    {
+                        inDoubleQuotes = !inDoubleQuotes;
+                    }
+                    currentCommand.Append(c);
+                    break;
+                case ';':
+                    // 只有在不在引号内时，分号才作为命令分隔符
+                    if (!inSingleQuotes && !inDoubleQuotes)
+                    {
+                        commands.Add(currentCommand.ToString().Trim());
+                        currentCommand.Clear();
+                    }
+                    else
+                    {
+                        currentCommand.Append(c);
+                    }
+                    break;
+                default:
+                    currentCommand.Append(c);
+                    break;
+            }
+        }
+
+        // 添加最后一个命令
+        string lastCommand = currentCommand.ToString().Trim();
+        if (!string.IsNullOrEmpty(lastCommand))
+        {
+            commands.Add(lastCommand);
+        }
+
+        return commands;
     }
 }
