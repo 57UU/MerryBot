@@ -132,9 +132,9 @@ public class Terminal : IDisposable
             var useTimeout = !isBuiltin;
             logger.Info($"type is builtin? {isBuiltin}");
             var result1= await RunCommandAsync(c, useTimeout, timeoutMs);
-            sb.AppendLine(result1);
+            sb.AppendLine(result1.Replace("\n"," "));
         }
-        return sb.ToString();
+        return sb.ToString().TrimEnd();
     }
 
     /// <summary>
