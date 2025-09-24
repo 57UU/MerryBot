@@ -29,6 +29,7 @@ MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 - 网页浏览
 - 查看时间
 - 发送语音
+- 查看微博热搜
 
 *: 网络访问相关funtion call 通过seleium操纵chrome（需要提前安装）实现。
 
@@ -40,6 +41,8 @@ MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 2. 应当继承于`Plugin`抽象类
 3. 至少存在一个构造函数，参数与抽象类构造函数相同`public Plugin(PluginConfig config)`
 4. 在类前面使用属性`PluginTag(string name,string descption,[bool isIgnore=false])`
+
+主程序会通过反射加载`plugins`项目下的所有插件类，因此需要满足上述条件。
 
 ## 示例
 ```csharp

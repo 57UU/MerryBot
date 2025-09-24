@@ -24,7 +24,9 @@ public class Browser
 {
     IWebDriver driver;
     OpenQA.Selenium.Chrome.ChromeOptions options = new();
-    string jsReader,getSearchResult, preprocessWbHot;
+    [Obsolete]
+    string getSearchResult;
+    string jsReader, preprocessWbHot,preprocessBingResult;
     SemaphoreSlim mutex = new(1);
     private static Task<string> LoadScript(string fileName)
     {
@@ -39,7 +41,8 @@ public class Browser
         string[] scriptFiles = [
             "readWeb", 
             "getSearchResult",
-            "preprocessWbHot"
+            "preprocessWbHot",
+            "preprocessBingResult"
             ];
         List<Task<string>> tasks= new();
         foreach (var file in scriptFiles)
@@ -50,7 +53,7 @@ public class Browser
         jsReader = tasks[0].Result;
         getSearchResult = tasks[1].Result;
         preprocessWbHot = tasks[2].Result;
-
+        preprocessBingResult = tasks[3].Result;
     }
     public Browser()
     {
