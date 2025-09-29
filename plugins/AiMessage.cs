@@ -127,7 +127,16 @@ public class AiMessage : Plugin
                 {
                     if(meta.TryGetProperty("news",out var news))
                     {
-                        sb.AppendLine(news.ToString());
+                        try
+                        {
+                            sb.AppendLine(
+                                $"描述:{news.GetProperty("desc").ToString()}\n" +
+                                $"URL:'{news.GetProperty("jumpUrl").ToString()}'"
+                                );
+                        }
+                        catch (Exception) {
+                            sb.AppendLine(news.ToString());
+                        }
                     }
                     else
                     {
