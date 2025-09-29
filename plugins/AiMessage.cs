@@ -149,13 +149,13 @@ public class AiMessage : Plugin
     async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
     {
         //concat text
-        bool find = false;
+
         var text = await extractMessage(chain,groupId,true);
         if (text.StartsWith("/"))
         {
             return;
         }
-        if (find)
+        if (!string.IsNullOrWhiteSpace(text))
         {
 
             if (isContainsNew(text))
