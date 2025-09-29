@@ -36,6 +36,13 @@ public static class BotUtils
         }
         return sb.ToString();
     }
+    public static void ParseDynamicJsonValue(IEnumerable<Message> messages)
+    {
+        foreach (var item in messages)
+        {
+            item.ParseJsonDynamic();
+        }
+    }
 }
 
 public static class Extensions

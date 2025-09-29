@@ -5,6 +5,10 @@ using System.Text.Json;
 using ZhipuClient;
 
 
+Browser browser = new();
+var re=await browser.Search("apple",false);
+Console.WriteLine(re);
+
 Config.Initialize().Wait();
 var config=Config.instance;
 string token = ((JsonElement)config.Variables["ai-token"]).GetString();

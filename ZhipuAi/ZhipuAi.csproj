@@ -6,9 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="javascript\preprecessBingResult.js" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Selenium.Support" Version="4.35.0" />
@@ -22,9 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="getSearchResult.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="javascipt\getSearchResult.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -37,13 +31,13 @@
     <None Update="javascript\getSearchResult.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="javascript\preprocessBingResult.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="javascript\preprocessWbHot.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="javascript\readWeb.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="readWeb.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

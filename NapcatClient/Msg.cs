@@ -18,7 +18,7 @@ public class Message
     [JsonPropertyName("type")]
     public string MessageType {set; get; }
     [JsonPropertyName("data")]
-    public Detail Data {internal set; get; } = new();
+    public Detail Data {set; get; } = new();
     public Message(string messageType)
     {
         this.MessageType = messageType;
@@ -71,6 +71,13 @@ public class Message
             chain.Add(msg);
         }
         return chain;
+    }
+    public void ParseJsonDynamic()
+    {
+        foreach (var j in Data)
+        {
+            Data[j.Key] = JsonUtils.GetActualValue(j.Value);
+        }
     }
     public static Message Text(string text)
     {
@@ -337,4 +344,61 @@ public class GroupMemberInfo
 
     [JsonPropertyName("title")]
     public string Title { get; set; }
+}
+
+public class GroupMessage
+{
+    [JsonPropertyName("self_id")]
+    public long SelfId { get; set; }
+
+    [JsonPropertyName("user_id")]
+    public long UserId { get; set; }
+
+    [JsonPropertyName("time")]
+    public long Time { get; set; }
+
+    [JsonPropertyName("message_id")]
+    public long MessageId { get; set; }
+
+    [JsonPropertyName("message_seq")]
+    public long MessageSeq { get; set; }
+
+    [JsonPropertyName("real_id")]
+    public long RealId { get; set; }
+
+    [JsonPropertyName("real_seq")]
+    public string RealSeq { get; set; }
+
+    [JsonPropertyName("message_type")]
+    public string MessageType { get; set; }
+
+    [JsonPropertyName("sender")]
+    public Sender SenderInfo { get; set; }
+
+    [JsonPropertyName("raw_message")]
+    public string RawMessage { get; set; }
+
+    [JsonPropertyName("font")]
+    public int Font { get; set; }
+
+    [JsonPropertyName("sub_type")]
+    public string SubType { get; set; }
+
+    [JsonPropertyName("message")]
+    public List<Message> Message { get; set; }
+
+    [JsonPropertyName("message_format")]
+    public string MessageFormat { get; set; }
+
+    [JsonPropertyName("post_type")]
+    public string PostType { get; set; }
+
+    [JsonPropertyName("message_sent_type")]
+    public string MessageSentType { get; set; }
+
+    [JsonPropertyName("group_id")]
+    public long GroupId { get; set; }
+
+    [JsonPropertyName("group_name")]
+    public string GroupName { get; set; }
 }

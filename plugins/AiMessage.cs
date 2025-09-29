@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
@@ -99,26 +100,57 @@ public class AiMessage : Plugin
         }
         PreprocessMessage(messages,groupId,nickname,data.message_id);
     }
-    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
+    async Task<string> extractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
     {
-        //concat text
-        bool find = false;
         StringBuilder sb = new();
+        string? referenceMessage=null;
         foreach (var item in chain)
         {
             if (item.MessageType == "text")
             {
                 sb.Append(item.Data["text"].Trim());
-                find = true;
-            }
-            if (item.MessageType == "at")
+            } else if (item.MessageType == "at")
             {
                 string qq = item.Data["qq"].ToString();
-                var detail =await Actions.GetGroupMemberData(groupId.ToString(),qq);
-                sb.Append($"[昵称:'{detail.Nickname}']");
+                var detail = await Actions.GetGroupMemberData(groupId.ToString(), qq);
+                sb.Append($" @{detail.Nickname} ");
+            }else if (item.MessageType == "reply" && recursive)
+            {
+                string referMessageId = item.Data["id"];
+                var referMessage=await Actions.GetMessageById(referMessageId);
+                var extractedMessage = await extractMessage(referMessage.Message, groupId, false);
+                referenceMessage=$"\n引用内容：\n{extractedMessage}";
+            }else if (item.MessageType == "json")
+            {
+                JsonElement json = JsonSerializer.Deserialize<JsonElement>(item.Data["data"]);
+                if(json.TryGetProperty("meta",out var meta))
+                {
+                    if(meta.TryGetProperty("news",out var news))
+                    {
+                        sb.AppendLine(news.ToString());
+                    }
+                    else
+                    {
+                        sb.AppendLine(meta.ToString());
+                    }
+                }
+                else
+                {
+                    sb.AppendLine(item.Data["data"]);
+                }
             }
         }
+        if (referenceMessage != null) { 
+            sb.AppendLine(referenceMessage);
+        }
         var text = sb.ToString();
+        return text;
+    }
+    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
+    {
+        //concat text
+        bool find = false;
+        var text = await extractMessage(chain,groupId,true);
         if (text.StartsWith("/"))
         {
             return;

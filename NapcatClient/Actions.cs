@@ -1,7 +1,8 @@
-﻿using WebSocketSharp;
-using CommonLib;
-using System.Text.Json.Serialization;
+﻿using CommonLib;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using WebSocketSharp;
 
 namespace NapcatClient.Action;
 
@@ -217,6 +218,18 @@ public class Actions
         var result = await _SendAction(act);
         var data = result.Data;
         return data.Deserialize<GroupMemberInfo>();
+    }
+    public async Task<GroupMessage> GetMessageById(string messageId)
+    {
+        Act act = new(
+            action: "get_msg",
+            parameters: new { message_id=messageId }
+            );
+        var result = await _SendAction(act);
+        var data = result.Data;
+        var deserilzed= data.Deserialize<GroupMessage>();
+        BotUtils.ParseDynamicJsonValue(deserilzed.Message);
+        return deserilzed;
     }
 
 

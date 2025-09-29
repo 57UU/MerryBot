@@ -1,5 +1,5 @@
 ﻿let c=document.querySelector("#b_results");
-document.body.innerHTML = c.innerHTML
+document.body.innerHTML = c.innerHTML;
 
 let m=document.getElementsByClassName("b_msg b_canvas");
 if(m.length>0){
