@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Timers;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipuClient;
@@ -22,7 +23,7 @@ namespace ZhipuClient;
 /// </summary>
 public class Browser
 {
-    IWebDriver driver;
+    IWebDriver driver=null;
     OpenQA.Selenium.Chrome.ChromeOptions options = new();
     [Obsolete]
     string getSearchResult;
@@ -55,8 +56,11 @@ public class Browser
         preprocessWbHot = tasks[2].Result;
         preprocessBingResult = tasks[3].Result;
     }
+    readonly StealthInstanceSettings stealthInstanceSettings = new();
+    readonly ResourceCountdown resourceCountdown ;
     public Browser()
     {
+        resourceCountdown = new(CloseBrowser);
         options.AddArgument("--headless");
         options.AddArgument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0");
         //options.AddArgument("--disable-gpu");
@@ -65,16 +69,44 @@ public class Browser
         options.ApplyStealth();
 
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
-        StealthInstanceSettings stealthInstanceSettings = new();
         if (isLinuxArm64)
         {
             Console.WriteLine("Arch: Linux Arm64");
             stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
         }
 
-        driver = Stealth.Instantiate(options, stealthInstanceSettings);
-        LoadScripts().Wait();
         
+        LoadScripts().Wait(); 
+    }
+    private Task LoadBrowser()
+    {
+        resourceCountdown.Start();
+        return Task.Run(() => driver = Stealth.Instantiate(options, stealthInstanceSettings));
+    }
+    private void CloseBrowser()
+    {
+        if (driver == null)
+        {
+            return; 
+        }
+        driver.Quit();
+        driver.Dispose();
+        driver = null;
+    }
+    private async Task UseBrowser()
+    {
+        if (driver == null)
+        {
+            await LoadBrowser();
+        }
+        resourceCountdown.UseResource();
+    }
+    private void GotoBlankPage()
+    {
+        if (driver != null)
+        {
+            driver.Navigate().GoToUrl("about:blank");
+        }
     }
     static string trim(string s)
     {
@@ -95,9 +127,9 @@ public class Browser
     /// </summary>
     /// <param name="url"></param>
     /// <returns></returns>
-    public Task<string> view(Uri url)
+    public async Task<string> view(Uri url)
     {
-        
+        await UseBrowser();
         var task= Task.Run(async () =>
         {
             mutex.Wait();
@@ -108,7 +140,8 @@ public class Browser
             return trim(result);
         });
 
-        return task.ContinueWith((t) => {
+        return await task.ContinueWith((t) => {
+            GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -124,6 +157,7 @@ public class Browser
     /// <returns>search reasult</returns>
     public async Task<string> Search(string keyword,bool internationalVersion)
     {
+        await UseBrowser();
         var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}" +
             (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
@@ -138,6 +172,7 @@ public class Browser
         });
 
         return await await task.ContinueWith(async(t) => {
+            GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -147,8 +182,9 @@ public class Browser
             return await view(url);
         });
     }
-    public Task<string> GetWeiboHot()
+    public async Task<string> GetWeiboHot()
     {
+        await UseBrowser();
         var url = "https://m.weibo.cn/p/106003type=25&filter_type=realtimehot";
         var query = "return document.querySelector(\"#app > div:nth-child(1) > div:nth-child(2) > div:nth-child(3) > div > div\")";
         var delayTimeout = 1500;
@@ -182,7 +218,8 @@ public class Browser
             return "|事件|热度|\n"+trim(result);
         });
 
-        return task.ContinueWith((t) => {
+        return await task.ContinueWith((t) => {
+            GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -207,5 +244,105 @@ public class Browser
 
         // 2. 否则补 https:// 再解析
         return new Uri("http://" + raw, UriKind.Absolute);
+    }
+}
+
+
+class ResourceCountdown:IDisposable
+{
+    // 倒计时时间：5分钟（毫秒）
+    private readonly int TimeoutMilliseconds;
+
+    // 计时器对象
+    private readonly System.Timers.Timer _timer;
+
+    // 释放资源的回调函数
+    private readonly Action _releaseCallback;
+
+    // 资源是否已释放的标志
+    public bool IsReleased { get; private set; }
+
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="resource">需要管理的资源</param>
+    /// <param name="releaseCallback">释放资源的回调函数</param>
+    public ResourceCountdown(Action releaseCallback, int timeoutMilliseconds = 5 * 60 * 1000)
+    {
+        TimeoutMilliseconds=timeoutMilliseconds;
+        _releaseCallback = releaseCallback ?? throw new ArgumentNullException(nameof(releaseCallback));
+        IsReleased = false;
+        // 初始化计时器
+        _timer = new(TimeoutMilliseconds);
+        _timer.Elapsed += OnTimerElapsed;
+        _timer.AutoReset = false; // 只触发一次，需要手动重置
+    }
+    /// <summary>
+    /// 开始跟踪资源
+    /// </summary>
+    public void Start()
+    {
+        // 启动计时器
+        _timer.Start();
+        IsReleased = false;
+    }
+
+    /// <summary>
+    /// 使用资源，重置倒计时
+    /// </summary>
+    public void UseResource()
+    {
+        if (IsReleased)
+        {
+            return;
+        }
+
+        // 重置计时器
+        ResetTimer();
+    }
+
+    /// <summary>
+    /// 重置倒计时
+    /// </summary>
+    public void ResetTimer()
+    {
+        if (IsReleased)
+        {
+            return;
+        }
+
+        // 停止并重新启动计时器，重置倒计时
+        _timer.Stop();
+        _timer.Start();
+    }
+
+    /// <summary>
+    /// 手动释放资源
+    /// </summary>
+    public void ReleaseResource()
+    {
+        if (IsReleased)
+        {
+            return;
+        }
+
+        // 调用释放资源的回调函数
+        _releaseCallback();
+
+        // 标记为已释放
+        IsReleased = true;
+    }
+
+    /// <summary>
+    /// 计时器到期时执行的方法
+    /// </summary>
+    private void OnTimerElapsed(object sender, ElapsedEventArgs e)
+    {
+        ReleaseResource();
+    }
+
+    public void Dispose()
+    {
+        ((IDisposable)_timer).Dispose();
     }
 }

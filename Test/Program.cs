@@ -6,7 +6,7 @@ using ZhipuClient;
 
 
 Browser browser = new();
-var re=await browser.Search("apple",false);
+var re = await browser.Search("apple", false);
 Console.WriteLine(re);
 
 Config.Initialize().Wait();
