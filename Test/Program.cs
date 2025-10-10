@@ -5,9 +5,9 @@ using System.Text.Json;
 using ZhipuClient;
 
 
-Browser browser = new();
-var re = await browser.Search("apple", false);
-Console.WriteLine(re);
+//Browser browser = new();
+//var re = await browser.Search("apple", false);
+//Console.WriteLine(re);
 
 Config.Initialize().Wait();
 var config=Config.instance;

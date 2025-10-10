@@ -18,7 +18,7 @@ public class ZhipuAi
 {
     string token;
     string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-    string model = "glm-4.5";
+    string model = "glm-4.6";
     public const string SYSTEM = "system";
     public const string USER = "user";
     public const string ASSISTANT = "assistant";
@@ -112,7 +112,7 @@ public class ZhipuAi
     Dictionary<long, List<ZhipuMessage>> history = new();
     Dictionary<long, SemaphoreSlim> mutex = new();
     object mutexMutex=new();
-    public ReadOnlySpan<ZhipuMessage> GetDialodHistory(long uid)
+    public ReadOnlySpan<ZhipuMessage> GetDialogHistory(long uid)
     {
         history.TryGetValue(uid,out var dialog);
         if(dialog == null)
@@ -234,10 +234,9 @@ public class ZhipuAi
                 done = true;
             }
 
-            response = response.Trim();
             if (!string.IsNullOrEmpty(response))
             {
-                yield return response;
+                yield return response.Trim();
             }
         }
         mutex.Release();
