@@ -362,7 +362,7 @@ public class ZhipuMessage
         {
             Role = Role,
             Content = Content +
-                $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd")}\n" +
+                $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}\n" +
                 $"当你想表达情感时，请善用语音发送功能\n" +
                 $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）",
         };
