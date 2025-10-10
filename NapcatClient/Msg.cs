@@ -91,10 +91,14 @@ public class Message
         message.Data["qq"] = target;
         return message;
     }
-    public static Message Image(string base64, string summary)
+    public static Message Image(string base64, string? summary=null)
     {
-        Message message = new Message("reply");
+        Message message = new Message("image");
         message.Data["file"] = $"base64://{base64}";
+        if (summary != null)
+        {
+            message.Data["summary"]= summary;
+        }
         return message;
     }
     public static Message Reply(long id)
