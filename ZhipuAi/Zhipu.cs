@@ -1,4 +1,4 @@
-﻿using CommonLib;
+using CommonLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace ZhipuClient;
 
-public class ZhipuAi
+public class ZhipuAi : IAiClient
 {
     string token;
     string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";

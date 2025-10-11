@@ -33,7 +33,7 @@ public class ViewDialog : Plugin
     {
         if (IsStartsWith(chain, "/dialog"))
         {
-            var history=aiMessage.zhipu.GetDialogHistory(groupId);
+            var history=aiMessage.aiClient.GetDialogHistory(groupId);
             if (history.Length == 0)
             {
                 Actions.SendGroupMessage(groupId, "<EMPTY>");

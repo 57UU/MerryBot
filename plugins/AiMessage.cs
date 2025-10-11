@@ -28,8 +28,8 @@ public class AiMessage : Plugin
             throw new Exception("请在配置文件variable中设置ai-token");
         }
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        zhipu = new ZhipuAi(token, prompt);
-        zhipu.Logger = Logger;
+        aiClient = new ZhipuAi(token, prompt);
+        aiClient.Logger = Logger;
         //add voice tool
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
@@ -53,9 +53,9 @@ public class AiMessage : Plugin
             }
             return "发送成功。用户能看到你发的语音，你不必回复‘已发送’,也不必重复发送的信息";
         };
-        zhipu.RegisterTool(voiceSender);
+        aiClient.RegisterTool(voiceSender);
     }
-    internal ZhipuAi zhipu;
+    internal IAiClient aiClient;
     bool isContainsNew(string message)
     {
         var l=message.Split(" ");
@@ -191,14 +191,14 @@ public class AiMessage : Plugin
             {
                 text = text.Replace("#新对话", "");
                 Logger.Info("[New] " + text);
-                zhipu.Reset(groupId);
+                aiClient.Reset(groupId);
             }
             handleMessage(groupId, text, messageId, nickname);
         }
     }
     async Task handleMessage(long groupId,string message,long messageId,string sender)
     {
-        await foreach(var result in  zhipu.Ask(message, groupId, sender,groupId))
+        await foreach(var result in  aiClient.Ask(message, groupId, sender,groupId))
         {
             if (result != null)
             {
