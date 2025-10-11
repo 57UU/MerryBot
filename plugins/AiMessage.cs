@@ -147,6 +147,26 @@ public class AiMessage : Plugin
                 {
                     sb.AppendLine(item.Data["data"]);
                 }
+            }else if(item.MessageType== "forward")
+            {
+                //转发消息
+                string msgId= item.Data["id"];
+                var referMessage=await Actions.GetForwardMessageById(msgId);
+                StringBuilder forwardString = new();
+                forwardString.AppendLine("---转发消息---");
+                foreach(var msg in referMessage.Messages)
+                {
+                    var extractedMessage = await extractMessage(msg.Message, groupId, false);
+                    forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
+                }
+                forwardString.AppendLine("------");
+                sb.AppendLine(
+                    PluginUtils.ConstraintLength(forwardString.ToString(),600)
+                    );
+            
+            }else if(item.MessageType == "image")
+            {
+                sb.AppendLine("<image>");
             }
         }
         if (referenceMessage != null) { 

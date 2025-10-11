@@ -406,3 +406,9 @@ public class GroupMessage
     [JsonPropertyName("group_name")]
     public string GroupName { get; set; }
 }
+
+public class ForwardMessage
+{
+    [JsonPropertyName("messages")]
+    public List<GroupMessage> Messages { get; set; } = new();
+}

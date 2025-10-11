@@ -104,7 +104,7 @@ public class Actions
     public int PartLength { set; get; } = 500;
     public string DefaultNickname { get; set; } = "曼瑞";
     /// <summary>
-    /// 在QQ群中选择最合适的回复方式（长：装发消息；短：直接回复）
+    /// 在QQ群中选择最合适的回复方式（长：转发消息；短：直接回复）
     /// </summary>
     /// <param name="groupId">QQ群号</param>
     /// <param name="messageId">要回复的消息的ID</param>
@@ -115,7 +115,7 @@ public class Actions
         return ChooseBestReplyMethod(groupId, messageId, text, DefaultNickname);
     }
     /// <summary>
-    /// 在QQ群中选择最合适的回复方式（长：装发消息；短：直接回复）
+    /// 在QQ群中选择最合适的回复方式（长：转发消息；短：直接回复）
     /// </summary>
     /// <param name="groupId">QQ群号</param>
     /// <param name="messageId">要回复的消息的ID</param>
@@ -209,6 +209,12 @@ public class Actions
         var data = result.Data;
         return data.Deserialize<GroupMemberListData>();
     }
+    /// <summary>
+    /// 获取群成员信息
+    /// </summary>
+    /// <param name="groupId"></param>
+    /// <param name="qq"></param>
+    /// <returns></returns>
     public async Task<GroupMemberInfo> GetGroupMemberData(string groupId,string qq)
     {
         Act act = new(
@@ -219,6 +225,11 @@ public class Actions
         var data = result.Data;
         return data.Deserialize<GroupMemberInfo>();
     }
+    /// <summary>
+    /// 通过消息ID获取消息
+    /// </summary>
+    /// <param name="messageId"></param>
+    /// <returns></returns>
     public async Task<GroupMessage> GetMessageById(string messageId)
     {
         Act act = new(
@@ -230,6 +241,22 @@ public class Actions
         var deserilzed= data.Deserialize<GroupMessage>();
         BotUtils.ParseDynamicJsonValue(deserilzed.Message);
         return deserilzed;
+    }
+    public async Task<ForwardMessage> GetForwardMessageById(string messageId)
+    {
+        Act act = new(
+            action: "get_forward_msg",
+            parameters: new { message_id=messageId }
+            );
+        var result = await _SendAction(act);
+        var data = result.Data;
+        var deserilzed= data.Deserialize<ForwardMessage>();
+        foreach(var msg in deserilzed.Messages)
+        {
+            BotUtils.ParseDynamicJsonValue(msg.Message);
+        }
+        return deserilzed;
+        
     }
 
 
