@@ -28,7 +28,7 @@ public class AiMessage : Plugin
             throw new Exception("请在配置文件variable中设置ai-token");
         }
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        aiClient = new ZhipuAi(token, prompt);
+        aiClient = new ZhipuAi(token, prompt,ModelPreset.Glm_4_6);
         aiClient.Logger = Logger;
         //add voice tool
         var voiceSender = new ToolDef();

@@ -248,7 +248,7 @@ public class Browser
 }
 
 
-class ResourceCountdown:IDisposable
+public class ResourceCountdown:IDisposable
 {
     // 倒计时时间：5分钟（毫秒）
     private readonly int TimeoutMilliseconds;

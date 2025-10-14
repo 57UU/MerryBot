@@ -46,3 +46,10 @@ public interface IAiClient
     /// </summary>
     ISimpleLogger Logger { set; }
 }
+
+public record ModelPreset(string model,bool thinking)
+{
+    public static ModelPreset Glm_4_5_Free =new ModelPreset("GLM-4.5-Flash", true);
+    public static ModelPreset Glm_4_Free=new ModelPreset("GLM-4-Flash-250414", true);
+    public static ModelPreset Glm_4_6 = new ModelPreset("GLM-4.6", false);
+}

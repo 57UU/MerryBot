@@ -19,7 +19,8 @@ public class ZhipuAi : IAiClient
 {
     string token;
     string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-    string model = "glm-4.6";
+    public string model;
+    public bool EnableModelThinking;
     public const string SYSTEM = "system";
     public const string USER = "user";
     public const string ASSISTANT = "assistant";
@@ -37,10 +38,12 @@ public class ZhipuAi : IAiClient
     string prompt;
     Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
-    public ZhipuAi(string token,string prompt)
+    public ZhipuAi(string token,string prompt, ModelPreset modelPreset)
     {
         this.token = token;
         this.prompt = prompt;
+        model = modelPreset.model;
+        EnableModelThinking = modelPreset.thinking;
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
@@ -153,6 +156,7 @@ public class ZhipuAi : IAiClient
         }
         mutex.Release(); 
     }
+    public TimeSpan AutoNewSpan = TimeSpan.FromHours(12);
     /// <summary>
     /// 处理请求
     /// </summary>
@@ -171,7 +175,19 @@ public class ZhipuAi : IAiClient
         }
         bool done = false;
         mutex.Wait();
-        
+        //if last message is too old, start a new conversation
+        if (history.ContainsKey(id))
+        {
+            var lastMessage = history[id].LastOrDefault();
+            if (lastMessage != null)
+            {
+                if(DateTime.Now-lastMessage.time> AutoNewSpan)
+                {
+                    history.Remove(id);
+                }
+            }
+        }
+
         if (!history.ContainsKey(id))
         {
             history.Add(id, new List<ZhipuMessage>());
@@ -286,7 +302,7 @@ public class ZhipuAi : IAiClient
             tools = Tools,
             thinking = new
             {
-                type= "enabled",
+                type= EnableModelThinking?"enabled":"disabled",
             },
         };
         var req = new HttpRequestMessage(HttpMethod.Post, apiUrl);
@@ -370,6 +386,8 @@ public class ZhipuMessage
                 $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）",
         };
     }
+    [JsonIgnore]
+    public DateTime time=DateTime.Now;
 }
 public class AssistantMessage : ZhipuMessage
 {

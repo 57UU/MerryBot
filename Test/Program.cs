@@ -13,7 +13,7 @@ Config.Initialize().Wait();
 var config=Config.instance;
 string token = ((JsonElement)config.Variables["ai-token"]).GetString();
 string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString();
-ZhipuAi zhipu = new ZhipuAi(token, prompt);
+ZhipuAi zhipu = new ZhipuAi(token, prompt,ModelPreset.Glm_4_6);
 while (true)
 {
     Console.Write("User: ");
