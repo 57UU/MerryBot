@@ -13,7 +13,8 @@ MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
     1919810
   ],
   "variables": {
-    "ai-token": "xxxxxxxxxx", //质谱api token
+    "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
+    "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
     "ai-prompt": "你是一个助人为乐的AI助手" //ai 提示词
   }
 }
@@ -22,7 +23,7 @@ MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 # 主要内置插件
 
 ## AI机器人
-使用质谱的API进行开发，
+使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。
 
 内置了如下function call:
 - bing搜索
