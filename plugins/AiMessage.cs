@@ -52,7 +52,7 @@ public class AiMessage : Plugin
             {
                 return $"发送失败:{e.Message}";
             }
-            return "发送成功。用户能看到你发的语音，你不必回复‘已发送’,也不必重复发送的信息";
+            return "发送成功。你不必回复‘已发送’,也不必重复发送的信息";
         };
         aiClient.RegisterTool(voiceSender);
     }

@@ -14,6 +14,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
+using System.Web;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipuClient;
@@ -158,7 +159,7 @@ public class Browser
     public async Task<string> Search(string keyword,bool internationalVersion)
     {
         await UseBrowser();
-        var url = ToStandardUri($"https://cn.bing.com/search?q={keyword}" +
+        var url = ToStandardUri($"https://cn.bing.com/search?q={HttpUtility.UrlEncode(keyword)}" +
             (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
         {
