@@ -20,15 +20,16 @@ public class AiMessage : Plugin
     RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
-        
-        Logger.Info("ai plugin start");
-        var token = interop.GetVariable<string>("ai-token");
+        var model = ModelPreset.Glm_4_6;
+        Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
+        var token_key= model.ApiTokenDictKey;
+        var token = interop.GetVariable<string>(token_key);
         if (token == null)
         {
-            throw new Exception("请在配置文件variable中设置ai-token");
+            throw new Exception($"请在配置文件variable中设置{token_key}");
         }
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        aiClient = new ZhipuAi(token, prompt,ModelPreset.Glm_4_6);
+        aiClient = new ZhipuAi(token, prompt, model);
         aiClient.Logger = Logger;
         //add voice tool
         var voiceSender = new ToolDef();

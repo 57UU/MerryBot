@@ -18,7 +18,7 @@ namespace ZhipuClient;
 public class ZhipuAi : IAiClient
 {
     string token;
-    string apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+    string apiUrl;
     public string model;
     public bool EnableModelThinking;
     public const string SYSTEM = "system";
@@ -44,6 +44,7 @@ public class ZhipuAi : IAiClient
         this.prompt = prompt;
         model = modelPreset.model;
         EnableModelThinking = modelPreset.thinking;
+        apiUrl = modelPreset.url;
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,

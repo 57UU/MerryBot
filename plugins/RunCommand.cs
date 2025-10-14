@@ -1,6 +1,5 @@
 ﻿using CommonLib;
 using NapcatClient;
-using OpenQA.Selenium.DevTools.V137.Debugger;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

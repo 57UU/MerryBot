@@ -47,9 +47,25 @@ public interface IAiClient
     ISimpleLogger Logger { set; }
 }
 
-public record ModelPreset(string model,bool thinking)
+public class ModelPreset
 {
+    public string model;
+    public bool thinking;
+    public string url;
+    public string provider;
+    public ModelPreset(string model, bool thinking,string url= "https://open.bigmodel.cn/api/paas/v4/chat/completions",string provider="zhipu")
+    {
+        this.model = model;
+        this.thinking = true;
+        this.url = url;
+        this.provider = provider;
+    }
+    public string ApiTokenDictKey => $"ai-token-{provider}";
+    
+
+
     public static ModelPreset Glm_4_5_Free =new ModelPreset("GLM-4.5-Flash", true);
     public static ModelPreset Glm_4_Free=new ModelPreset("GLM-4-Flash-250414", true);
     public static ModelPreset Glm_4_6 = new ModelPreset("GLM-4.6", false);
+    public static ModelPreset DeepSeekChat= new ModelPreset("deepseek-chat", false, "https://api.deepseek.com/chat/completions","deepseek");
 }
