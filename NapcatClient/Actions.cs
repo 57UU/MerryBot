@@ -242,7 +242,7 @@ public class Actions
         BotUtils.ParseDynamicJsonValue(deserilzed.Message);
         return deserilzed;
     }
-    public async Task<ForwardMessage> GetForwardMessageById(string messageId)
+    public async Task<ForwardMessage?> GetForwardMessageById(string messageId)
     {
         Act act = new(
             action: "get_forward_msg",
@@ -251,6 +251,10 @@ public class Actions
         var result = await _SendAction(act);
         var data = result.Data;
         var deserilzed= data.Deserialize<ForwardMessage>();
+        if (deserilzed == null)
+        {
+            return null;
+        }
         foreach(var msg in deserilzed.Messages)
         {
             BotUtils.ParseDynamicJsonValue(msg.Message);

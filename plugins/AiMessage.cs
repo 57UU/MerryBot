@@ -174,17 +174,25 @@ public class AiMessage : Plugin
                 //转发消息
                 string msgId= item.Data["id"];
                 var referMessage=await Actions.GetForwardMessageById(msgId);
-                StringBuilder forwardString = new();
-                forwardString.AppendLine("---转发消息---");
-                foreach(var msg in referMessage.Messages)
+                if (referMessage != null)
                 {
-                    var extractedMessage = await extractMessage(msg.Message, groupId, false);
-                    forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
+                    StringBuilder forwardString = new();
+                    forwardString.AppendLine("---转发消息---");
+                    foreach (var msg in referMessage.Messages)
+                    {
+                        var extractedMessage = await extractMessage(msg.Message, groupId, false);
+                        forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
+                    }
+                    forwardString.AppendLine("------");
+                    sb.AppendLine(
+                        PluginUtils.ConstraintLength(forwardString.ToString(), 600)
+                        );
                 }
-                forwardString.AppendLine("------");
-                sb.AppendLine(
-                    PluginUtils.ConstraintLength(forwardString.ToString(),600)
-                    );
+                else
+                {
+                    sb.AppendLine("转发消息");
+                }
+
             
             }else if(item.MessageType == "image")
             {
