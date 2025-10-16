@@ -189,8 +189,8 @@ public class Terminal : IDisposable
             var readErrorTask = _readOutput(_errorReader, marker)!;
             await Task.WhenAll(readStandardOutTask, readErrorTask);
 
-            var _errTrim= readStandardOutTask.Result!.Trim();
-            var _standardOutTrim = readErrorTask.Result!.Trim();
+            var _standardOutTrim = readStandardOutTask.Result!.Trim();
+            var _errTrim = readErrorTask.Result!.Trim();
             string output;
             if (string.IsNullOrWhiteSpace(_errTrim))
             {
