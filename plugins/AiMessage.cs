@@ -69,6 +69,7 @@ public class AiMessage : Plugin
             shell.Function.FunctionCall = async (parameters) => {
                 return await shellPlugin.terminal.RunCommandAutoTimeoutAsync(parameters["command"].GetString());
             };
+            aiClient.RegisterTool(shell);
         }
         else
         {
