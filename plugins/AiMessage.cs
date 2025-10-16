@@ -20,7 +20,7 @@ public class AiMessage : Plugin
     RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
-        var model = ModelPreset.Glm_4_6;
+        var model = ModelPreset.DeepSeekChat;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key);

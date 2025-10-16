@@ -95,6 +95,11 @@ internal class Logic
     {
         foreach (var i in plugins)
         {
+            if (!i.Instance.IsEnable)
+            {
+                //if the plugin is not enable, skip it
+                continue;
+            }
             try
             {
                 i.Instance.OnGroupMessage(groupId, chain, data);

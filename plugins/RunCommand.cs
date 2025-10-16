@@ -1,9 +1,11 @@
 ﻿using CommonLib;
 using NapcatClient;
+using OpenQA.Selenium;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -18,6 +20,11 @@ public class RunCommand : Plugin
     bool useUnprivileged = true;
     public RunCommand(PluginInterop interop) : base(interop)
     {
+        //not linux 
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            throw new PlatformNotSupportedException("shell plugin can only support linux");
+        }
         terminal = new();
         terminal.logger = Logger;
         var tmp = interop.GetLongVariable("authorized-user");
