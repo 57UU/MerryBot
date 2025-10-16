@@ -24,7 +24,7 @@ public class RunCommand : Plugin
         if (tmp == null)
         {
             Logger.Error("authorized is null, please specify 'authorized-user' parameter in setting.json/variables");
-            IsEnable = false;
+            //IsEnable = false;
         }
         else
         {
@@ -64,8 +64,8 @@ public class RunCommand : Plugin
             handleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
-    Terminal terminal ;
-    async void handleCommand(string command,long groupId,long messageId,bool isAuthorized)
+    internal Terminal terminal ;
+    async void handleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
     {
         string result;
         result = await terminal.RunCommandAutoTimeoutAsync(command,timeoutMs:1000);
