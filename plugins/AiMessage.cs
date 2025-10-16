@@ -64,7 +64,7 @@ public class AiMessage : Plugin
             //add linux shell
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.Function.Description = "执行linux bash shell命令";
+            shell.Function.Description = "执行linux bash shell命令.仅支持使用';'连接多条指令";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) => {
                 return await shellPlugin.terminal.RunCommandAutoTimeoutAsync(parameters["command"].GetString());

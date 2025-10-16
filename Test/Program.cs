@@ -5,9 +5,19 @@ using System.Text.Json;
 using ZhipuClient;
 
 
-//Browser browser = new();
-//var re = await browser.Search("apple", false);
-//Console.WriteLine(re);
+//test shell
+Terminal terminal=new();
+while (true)
+{
+    Console.Write("User: ");
+    string input = Console.ReadLine();
+    if (input == "exit")
+    {
+        break;
+    }
+    var result=await terminal.RunCommandAutoTimeoutAsync(input);
+    
+}
 
 Config.Initialize().Wait();
 var config=Config.instance;

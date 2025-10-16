@@ -170,52 +170,43 @@ public class Terminal : IDisposable
         string fullCommand;
         if (useTimeout)
         {
-            fullCommand = $"timeout -k 0.5s {sec}s {command}|| ([ $? -eq 124 ] && echo \"timeout:{sec}s\";); echo -e '\\n'; echo -e '{marker}\\n'";
+            fullCommand = $"timeout -k 0.5s {sec}s {command}|| ([ $? -eq 124 ] && echo \"timeout:{sec}s\";); ";
         }
         else
         {
-            fullCommand = $"{command}; echo -e '\\n'; echo -e '{marker}\\n'";
+            fullCommand = $"{command};";
         }
+        fullCommand = $"{fullCommand}echo -e '\\n{marker}\\n';echo -e '\\n{marker}\\n' >&2";
 
         logger.Info($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 
-        var sb = new StringBuilder();
 
         try
         {
-            while (true)
-            {
-                string? line = await _reader.ReadLineAsync();
-                logger.Info($"line received: {line}");
-                if (line == null) break;
+            var readStandardOutTask = _readOutput(_reader, marker)!;
+            var readErrorTask = _readOutput(_errorReader, marker)!;
+            await Task.WhenAll(readStandardOutTask, readErrorTask);
 
-                if (line.Trim() == marker)
-                {
-                    logger.Info("end reached");
-                    break;
-                }
-   
-
-                sb.AppendLine(line);
-            }
-            var error = "";//await _errorReader.ReadToEndAsync();
-            var _outTrim = sb.ToString().Trim();
-            var output = string.IsNullOrWhiteSpace(_outTrim) ? "[no output]" : _outTrim;
-            if (string.IsNullOrWhiteSpace(error))
+            var _errTrim= readStandardOutTask.Result!.Trim();
+            var _standardOutTrim = readErrorTask.Result!.Trim();
+            string output;
+            if (string.IsNullOrWhiteSpace(_errTrim))
             {
-                return output.Replace("\t"," ");
+                //no error
+                output = _standardOutTrim;
             }
             else
             {
-                return $"{error}\n{output}";
+                output = $"{_standardOutTrim}\nerror:{_errTrim}";
             }
-        }
-        catch (OperationCanceledException)
-        {
-            sb.AppendLine($"Command timed out after {timeoutMs} ms.");
-            return sb.ToString();
+            output = output.Trim().Replace("\t", " ");
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return "[无输出]";
+            }
+            return output;
         }
         catch (Exception e) {
             return $"Error:{e.Message}";
@@ -224,6 +215,26 @@ public class Terminal : IDisposable
         {
             mutex.Release();
         }
+    }
+    private static async Task<string> _readOutput(StreamReader reader,string endMarker)
+    {
+        var sb = new StringBuilder();
+        while (true)
+        {
+            string? line = await reader.ReadLineAsync();
+            //logger.Info($"line received: {line}");
+            if (line == null) break;
+
+            if (line.Trim() == endMarker)
+            {
+                //logger.Info("end reached");
+                break;
+            }
+
+
+            sb.AppendLine(line);
+        }
+        return sb.ToString();
     }
 
     public void Dispose()
