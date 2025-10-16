@@ -120,7 +120,7 @@ public class Terminal : IDisposable
     {
         var result = await RunCommandAsync($"type -t {command}"
             ,false, timeoutMs: -1);
-        logger.Info($"test builtin result:{result}");
+        logger.Trace($"test builtin result:{result}");
         return result == "builtin" || result == "keyword";
     }
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
@@ -178,7 +178,7 @@ public class Terminal : IDisposable
         }
         fullCommand = $"{fullCommand}echo -e '\\n{marker}\\n';echo -e '\\n{marker}\\n' >&2";
 
-        logger.Info($"CMD: {fullCommand}");
+        logger.Trace($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 

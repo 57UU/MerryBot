@@ -16,7 +16,7 @@ while (true)
         break;
     }
     var result=await terminal.RunCommandAutoTimeoutAsync(input);
-    
+    Console.WriteLine($"out:{result}");
 }
 
 Config.Initialize().Wait();
