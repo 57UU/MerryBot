@@ -200,8 +200,16 @@ public class AiMessage : Plugin
     async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
     {
         //concat text
-
-        var text = await extractMessage(chain,groupId,true);
+        string text;
+        try
+        {
+            text = await extractMessage(chain, groupId, true);
+        }
+        catch (Exception ex) {
+            Logger.Error($"extrct failed:{ex.Message}\n{ex.StackTrace}");
+            return;
+        }
+        
         if (text.StartsWith("/"))
         {
             return;
