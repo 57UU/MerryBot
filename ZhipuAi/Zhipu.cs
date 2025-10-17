@@ -317,8 +317,13 @@ public class ZhipuAi : IAiClient
         
         return message;
     }
-    async Task<List<ToolDef>> GetUsableToolsByTag(long tag)
+    Dictionary<long, List<ToolDef>> _usableToolsCache = new();
+    internal async Task<List<ToolDef>> GetUsableToolsByTag(long tag)
     {
+        if(_usableToolsCache.TryGetValue(tag, out var cache))
+        {
+            return cache;
+        }
         List<ToolDef> usableFunctionCall = new();
         var tasks = Tools.Select(tool => tool.isUseable(tag));
         await Task.WhenAll(tasks);
@@ -329,6 +334,7 @@ public class ZhipuAi : IAiClient
                 usableFunctionCall.Add(tool);
             }
         }
+        _usableToolsCache.Add(tag, usableFunctionCall);
         return usableFunctionCall;
 
     }
