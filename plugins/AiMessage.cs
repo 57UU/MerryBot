@@ -34,7 +34,7 @@ public class AiMessage : Plugin
         //add voice tool
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
-        voiceSender.Function.Description = "发送语音/呼喊/唱歌";
+        voiceSender.Function.Description = "发送语音/唱歌";
         voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
@@ -55,6 +55,58 @@ public class AiMessage : Plugin
             return "发送成功。你不必回复‘已发送’,也不必重复发送的信息";
         };
         aiClient.RegisterTool(voiceSender);
+        // turn to another bot
+        AddBotForHelp();
+
+    }
+    private void AddBotForHelp()
+    {
+        try
+        {
+            var anotherBot = Interop.GetJsonElement("bot-help");
+            if (anotherBot == null)
+            {
+                throw new Exception("please specific bot-help in variables");
+            }
+            long qq = anotherBot.Value.GetInt64();
+            var solver = new ToolDef();
+            solver.Function.Name = "turn_to";
+            solver.Function.Description = "让智慧AI处理某问题";
+            solver.Function.Parameters.AddRequired("question", new ParameterProperty() { Type = "string", Description = "要处理的问题" });
+            solver.Function.FunctionCall = async (parameters) =>
+            {
+                //verify bot in group
+                var groupList = await Actions.GetGroupMemberData(parameters.SpecialTag.ToString(),qq.ToString());
+                if (groupList == null)
+                {
+                    return "该工具无法使用，请不要再使用本工具";
+                }
+                var chain = Actions.EmptyMessageChain;
+                chain.Add(NapcatClient.Message.At(qq.ToString()));
+                chain.Add(NapcatClient.Message.Text($" {parameters["question"].ToString()}"));
+                Actions.SendGroupMessage(parameters.SpecialTag, chain);
+                return "求助成功，你不用解决这个问题了";
+            };
+            solver.isUseable = async (tag) =>
+            {
+                var groupList = await Actions.GetGroupMemberData(tag.ToString(), qq.ToString());
+                if (groupList == null)
+                {
+                    return false;
+                }
+                return true;
+            };
+            aiClient.RegisterTool(solver);
+            //拦截bot对自己发送的消息
+            Interop.Interceptors.Add((data) => {
+                return data.sender.user_id==qq;
+            });
+
+        }
+        catch (Exception e)
+        {
+            Logger.Warn($"load bot help failed:{e.Message}");
+        }
     }
     public override void OnLoaded()
     {

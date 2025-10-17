@@ -206,7 +206,7 @@ public class ZhipuAi : IAiClient
             string response;
             try
             {
-                var aiResponse = await request(currentHistory);
+                var aiResponse = await request(currentHistory,specialTag);
                 var msg= aiResponse.Choices[0].Message;
                 response = msg.Content;
                 if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
@@ -293,14 +293,24 @@ public class ZhipuAi : IAiClient
         
         return message;
     }
-    public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages)
+    public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages, long specialTag)
     {
+        List<ToolDef> usableFunctionCall=new();
+        var tasks = Tools.Select(tool => tool.isUseable(specialTag));
+        await Task.WhenAll(tasks);
+        foreach(var (tool,result) in Tools.Zip(tasks))
+        {
+            if (result.Result)
+            {
+                usableFunctionCall.Add(tool);
+            }
+        }
         // 创建请求数据
         var requestData = new
         {
             model = model,
             messages = messages,
-            tools = Tools,
+            tools = usableFunctionCall,
             thinking = new
             {
                 type= EnableModelThinking?"enabled":"disabled",
@@ -383,8 +393,8 @@ public class ZhipuMessage
             Role = Role,
             Content = Content +
                 $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}\n" +
-                $"当你想表达情感时，请善用语音发送功能\n" +
-                $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）",
+                $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）" +
+                $"你比较懒，解决复杂问题可以使用智慧AI（如果有的话）",
         };
     }
     [JsonIgnore]
@@ -411,7 +421,7 @@ public class ToolCallSubMessage
 }
 
 
-
+public delegate Task<bool> IsUseable(long specialTag);
 
 // 单个工具
 public class ToolDef
@@ -421,6 +431,9 @@ public class ToolDef
 
     [JsonPropertyName("function")]
     public FunctionDef Function { get; set; } = new FunctionDef();
+    [JsonIgnore]
+    public IsUseable isUseable=async(tag)=>true;
+
 }
 
 public class FunctionCallArguments: Dictionary<string, JsonElement>

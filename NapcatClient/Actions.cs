@@ -76,6 +76,10 @@ public class Actions
         return await _SendAction(act);
     }
     /// <summary>
+    /// 获取空的消息链
+    /// </summary>
+    public List<Message> EmptyMessageChain => new List<Message>();
+    /// <summary>
     /// 在QQ群中发送文本消息
     /// </summary>
     /// <param name="groupId">QQ群号</param>
@@ -215,13 +219,17 @@ public class Actions
     /// <param name="groupId"></param>
     /// <param name="qq"></param>
     /// <returns></returns>
-    public async Task<GroupMemberInfo> GetGroupMemberData(string groupId,string qq)
+    public async Task<GroupMemberInfo?> GetGroupMemberData(string groupId,string qq)
     {
         Act act = new(
             action: "get_group_member_info",
             parameters: new { group_id = groupId, user_id=qq, no_cache = false }
             );
         var result = await _SendAction(act);
+        if (result.Status == "failed")
+        {
+            return null;
+        }
         var data = result.Data;
         return data.Deserialize<GroupMemberInfo>();
     }

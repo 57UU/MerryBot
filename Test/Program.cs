@@ -6,18 +6,18 @@ using ZhipuClient;
 
 
 //test shell
-Terminal terminal=new();
-while (true)
-{
-    Console.Write("User: ");
-    string input = Console.ReadLine();
-    if (input == "exit")
-    {
-        break;
-    }
-    var result=await terminal.RunCommandAutoTimeoutAsync(input);
-    Console.WriteLine($"out:{result}");
-}
+//Terminal terminal=new();
+//while (true)
+//{
+//    Console.Write("User: ");
+//    string input = Console.ReadLine();
+//    if (input == "exit")
+//    {
+//        break;
+//    }
+//    var result=await terminal.RunCommandAutoTimeoutAsync(input);
+//    Console.WriteLine($"out:{result}");
+//}
 
 Config.Initialize().Wait();
 var config=Config.instance;
