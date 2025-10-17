@@ -84,7 +84,7 @@ public class AiMessage : Plugin
                 var chain = Actions.EmptyMessageChain;
                 chain.Add(NapcatClient.Message.At(qq.ToString()));
                 chain.Add(NapcatClient.Message.Text($" {parameters["question"].ToString()}"));
-                Actions.SendGroupMessage(parameters.SpecialTag, chain);
+                await Actions.SendGroupMessage(parameters.SpecialTag, chain);
                 return "求助成功，你不用解决这个问题了";
             };
             solver.dynamicPrompt = "你比较疲惫，解决复杂问题可以直接转交给智慧AI（如果有的话）不用询问用户意见";
