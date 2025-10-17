@@ -394,7 +394,7 @@ public class ZhipuMessage
             Content = Content +
                 $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}\n" +
                 $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）" +
-                $"你比较懒，解决复杂问题可以使用智慧AI（如果有的话）",
+                $"你比较懒，解决复杂问题可以直接转交给智慧AI（如果有的话）",
         };
     }
     [JsonIgnore]
