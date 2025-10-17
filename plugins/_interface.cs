@@ -31,6 +31,12 @@ public record PluginStorage(StringSaver Saver,StringGetter Getter);
 public delegate Task StringSaver(string data);
 public delegate Task<string> StringGetter();
 public delegate IEnumerable<PluginInfo> PluginInfoGetter();
+/// <summary>
+/// 拦截指定消息
+/// </summary>
+/// <param name="data"></param>
+/// <returns>返回true拦截</returns>
+public delegate bool MessageInterceptor(ReceivedGroupMessage data);
 
 /// <summary>
 /// 用于实现互操作性
@@ -44,6 +50,10 @@ public record PluginInterop(
     Detail Variables
     )
 {
+    /// <summary>
+    /// 注册拦截器
+    /// </summary>
+    public List<MessageInterceptor> Interceptors { set; get; } = new();
     /// <summary>
     /// find the plugin of specific type
     /// </summary>

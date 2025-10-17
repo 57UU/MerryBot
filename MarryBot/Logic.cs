@@ -43,6 +43,23 @@ internal class Logic
         long selfId = BotUtils.GetSelfId(data);
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
 
+        long senderId= data.sender.user_id;
+        bool isIntercepted = false;
+        foreach(var plugInfo in plugins)
+        {
+            foreach(var interceptor in plugInfo.Interop.Interceptors)
+            {
+                if (interceptor(data))
+                {
+                    isIntercepted = true;
+                }
+            }
+        }
+        if (isIntercepted)
+        {
+            return;
+        }
+
         if (chain[0].MessageType == "at")
         {
             string target = chain[0].Data["qq"];
@@ -67,6 +84,11 @@ internal class Logic
     {
         foreach(var i in plugins)
         {
+            if (!i.Instance.IsEnable)
+            {
+                //if the plugin is not enable, skip it
+                continue;
+            }
             try
             {
                 i.Instance.OnGroupMessageMentioned(groupId, chain, data);
@@ -81,6 +103,11 @@ internal class Logic
     {
         foreach (var i in plugins)
         {
+            if (!i.Instance.IsEnable)
+            {
+                //if the plugin is not enable, skip it
+                continue;
+            }
             try
             {
                 i.Instance.OnGroupMessageNotMentioned(groupId, chain, data);
