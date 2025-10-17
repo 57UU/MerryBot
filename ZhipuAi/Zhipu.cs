@@ -105,6 +105,7 @@ public class ZhipuAi : IAiClient
             var result = await browser.Search(query.GetString(),internationalVersion);
             return result;
         };
+        bingSearch.dynamicPrompt = "网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）";
         RegisterTool(bingSearch);
     }
     /// <summary>
@@ -192,7 +193,30 @@ public class ZhipuAi : IAiClient
         if (!history.ContainsKey(id))
         {
             history.Add(id, new List<ZhipuMessage>());
-            history[id].Add(UseDynamicPrompt? SystemPrompt.GenerateDynamicPrompt():SystemPrompt);
+            ZhipuMessage prompt;
+            
+            if (UseDynamicPrompt)
+            {
+                StringBuilder sb = new(SystemPrompt.Content);
+                sb.AppendLine($"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}");
+                var usableTools = await GetUsableToolsByTag(specialTag);
+                foreach(var tool in usableTools)
+                {
+                    if (!string.IsNullOrWhiteSpace(tool.dynamicPrompt))
+                    {
+                        sb.AppendLine(tool.dynamicPrompt);
+                    }
+                }
+                prompt = new() { 
+                    Role=SystemPrompt.Role,
+                    Content=sb.ToString(),
+                };
+            }
+            else
+            {
+                prompt = SystemPrompt;
+            }
+            history[id].Add(prompt);
         }
         var currentHistory = history[id];
         var userQuery = new ZhipuMessage()
@@ -293,18 +317,24 @@ public class ZhipuAi : IAiClient
         
         return message;
     }
-    public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages, long specialTag)
+    async Task<List<ToolDef>> GetUsableToolsByTag(long tag)
     {
-        List<ToolDef> usableFunctionCall=new();
-        var tasks = Tools.Select(tool => tool.isUseable(specialTag));
+        List<ToolDef> usableFunctionCall = new();
+        var tasks = Tools.Select(tool => tool.isUseable(tag));
         await Task.WhenAll(tasks);
-        foreach(var (tool,result) in Tools.Zip(tasks))
+        foreach (var (tool, result) in Tools.Zip(tasks))
         {
             if (result.Result)
             {
                 usableFunctionCall.Add(tool);
             }
         }
+        return usableFunctionCall;
+
+    }
+    public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages, long specialTag)
+    {
+        var usableFunctionCall= await GetUsableToolsByTag(specialTag);
         // 创建请求数据
         var requestData = new
         {
@@ -386,17 +416,6 @@ public class ZhipuMessage
 
     [JsonPropertyName("content")]
     public string Content { get; set; }
-    public ZhipuMessage GenerateDynamicPrompt()
-    {
-        return new ZhipuMessage()
-        {
-            Role = Role,
-            Content = Content +
-                $"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}\n" +
-                $"网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）" +
-                $"你比较懒，解决复杂问题可以直接转交给智慧AI（如果有的话）",
-        };
-    }
     [JsonIgnore]
     public DateTime time=DateTime.Now;
 }
@@ -433,6 +452,8 @@ public class ToolDef
     public FunctionDef Function { get; set; } = new FunctionDef();
     [JsonIgnore]
     public IsUseable isUseable=async(tag)=>true;
+    [JsonIgnore]
+    public string? dynamicPrompt { get; set; }
 
 }
 
