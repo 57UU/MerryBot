@@ -1,6 +1,6 @@
-# MarryBot
+# MerryBot
 
-MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持插件化开发。
+MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持插件化开发。
 
 # 配置文件`setting.json`
 
@@ -56,11 +56,11 @@ public class About : Plugin
 """
 # -------About-------
 
-Marry Bot
+Merry Bot
 
 本程序的目的是实现QQ机器人的模块化开发，以插件的形式增加功能
 
-访问Github仓库 https://github.com/57UU/MarryBot 以获取更多信息
+访问Github仓库 https://github.com/57UU/MerryBot 以获取更多信息
 """;
 
     public About(PluginInterop interop) : base(interop)
@@ -106,7 +106,7 @@ Marry Bot
 
 |API/属性|Description|
 |:---:|:---|
-|T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性 [示例](https://github.com/57UU/MarryBot/blob/master/plugins/ViewDialog.cs)|
+|T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性 [示例](https://github.com/57UU/MerryBot/blob/master/plugins/ViewDialog.cs)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|

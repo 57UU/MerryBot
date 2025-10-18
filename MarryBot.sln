@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.13.35931.197
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11111.16 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarryBot", "MarryBot\MarryBot.csproj", "{735BC317-94EB-4F4C-BE84-8552C51F97EA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot", "MerryBot\MerryBot.csproj", "{735BC317-94EB-4F4C-BE84-8552C51F97EA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NapcatClient", "NapcatClient\NapcatClient.csproj", "{D98B03D5-094C-4283-B1D8-A1032D3CE63F}"
 EndProject
