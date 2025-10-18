@@ -78,8 +78,7 @@ public class BotClient
     {
         Logger.Trace($"websocket on message: {e.Data}");
         var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(e.Data)!;
-        JsonElement echo;
-        if (message.TryGetValue("echo", out echo))
+        if (message.TryGetValue("echo", out JsonElement echo))
         {
             //return message
             Actions.AddResponse(echo.GetString(), JsonSerializer.Deserialize<ResponseRootObject>(e.Data));
@@ -88,9 +87,9 @@ public class BotClient
         if (message.ContainsKey("message_type"))
         {
             var messageType = ((JsonElement)message["message_type"]).GetString();
-            if (message.ContainsKey("message"))
+            if (message.TryGetValue("message", out JsonElement value))
             {
-                messageChain = Message.ParseMessageChain(message["message"]);
+                messageChain = Message.ParseMessageChain(value);
             }
             if (messageType == "group")
             {

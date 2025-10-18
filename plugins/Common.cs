@@ -42,9 +42,9 @@ public class RateLimiter
     {
         lock (locker)
         {
-            if (rateLimit.ContainsKey(groupId))
+            if (rateLimit.TryGetValue(groupId, out int value))
             {
-                rateLimit[groupId]++;
+                rateLimit[groupId] = ++value;
             }
             else
             {
@@ -93,7 +93,7 @@ static class PluginUtils
     {
         if (s.Length > lengthConstraint)
         {
-            s = s.Substring(0, lengthConstraint) + prompt;
+            s = string.Concat(s.AsSpan(0, lengthConstraint), prompt);
         }
         return s;
     }

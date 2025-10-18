@@ -33,7 +33,7 @@ public class ZhipuAi : IAiClient
     public const string NETWORK_ERROR= "network_error";
     HttpClient client = new HttpClient();
     List<ToolDef> Tools { get; set; } = new();
-    Dictionary<string,FunctionDef> funtionMapper=new();
+    Dictionary<string,FunctionDef> functionMapper=new();
     public bool UseDynamicPrompt { get; set; } = true;
     string prompt;
     Browser browser = new();
@@ -65,7 +65,7 @@ public class ZhipuAi : IAiClient
     private void AddBuiltInTools()
     {
         var watch = new ToolDef();
-        watch.Function.Name = "getTime";
+        watch.Function.Name = "get_time";
         watch.Function.Description = "查看现在的时间";
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
@@ -81,16 +81,16 @@ public class ZhipuAi : IAiClient
         browserDef.Function.FunctionCall = async (parameters) =>
         {
             var url = parameters["url"];
-            var html = await browser.view(url.GetString());
+            var html = await browser.View(url.GetString());
             if (html.Length > 5000)
             {
-                html = html.Substring(0, 5000) + "[省略过长内容]";
+                html = string.Concat(html.AsSpan(0, 5000), "[省略过长内容]");
             }
             return html;
         };
         RegisterTool(browserDef);
         var bingSearch = new ToolDef();
-        bingSearch.Function.Name = "bing_search";
+        bingSearch.Function.Name = "search";
         bingSearch.Function.Description = "使用Bing进行网络搜索";
         bingSearch.Function.Parameters.AddRequired("query", new ParameterProperty() { Type = "string", Description = "keyword" });
         bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版搜索" });
@@ -105,7 +105,7 @@ public class ZhipuAi : IAiClient
             var result = await browser.Search(query.GetString(),internationalVersion);
             return result;
         };
-        bingSearch.dynamicPrompt = "网络搜索时，优先使用国内版，即false。当国内版查不到或者用户要求，再使用国际版）";
+        bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
         RegisterTool(bingSearch);
     }
     /// <summary>
@@ -115,7 +115,7 @@ public class ZhipuAi : IAiClient
     public void RegisterTool(ToolDef tool)
     {
         Tools.Add(tool);
-        funtionMapper.Add(tool.Function.Name, tool.Function);
+        functionMapper.Add(tool.Function.Name, tool.Function);
     }
     Dictionary<long, List<ZhipuMessage>> history = new();
     Dictionary<long, SemaphoreSlim> mutex = new();
@@ -129,7 +129,7 @@ public class ZhipuAi : IAiClient
         }
         return CollectionsMarshal.AsSpan(dialog);
     }
-    SemaphoreSlim ensureMutexExists(long groupId)
+    SemaphoreSlim EnsureMutexExists(long groupId)
     {
         if (!mutex.ContainsKey(groupId))
         {
@@ -150,12 +150,9 @@ public class ZhipuAi : IAiClient
     /// <param name="id"></param>
     public void Reset(long id)
     {
-        var mutex=ensureMutexExists(id);
+        var mutex=EnsureMutexExists(id);
         mutex.Wait();
-        if (history.ContainsKey(id))
-        {
-            history.Remove(id);
-        }
+        history.Remove(id);
         mutex.Release(); 
     }
     public TimeSpan AutoNewSpan = TimeSpan.FromHours(12);
@@ -169,7 +166,7 @@ public class ZhipuAi : IAiClient
     /// <returns>异步字符串迭代器，模型返回结果</returns>
     public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
     {
-        var mutex=ensureMutexExists(id);
+        var mutex=EnsureMutexExists(id);
         if (mutex.CurrentCount == 0)
         {
             yield return "上一个请求尚未完成";
@@ -178,9 +175,9 @@ public class ZhipuAi : IAiClient
         bool done = false;
         mutex.Wait();
         //if last message is too old, start a new conversation
-        if (history.ContainsKey(id))
+        if (history.TryGetValue(id, out List<ZhipuMessage>? value))
         {
-            var lastMessage = history[id].LastOrDefault();
+            var lastMessage = value.LastOrDefault();
             if (lastMessage != null)
             {
                 if(DateTime.Now-lastMessage.time> AutoNewSpan)
@@ -190,9 +187,10 @@ public class ZhipuAi : IAiClient
             }
         }
 
-        if (!history.ContainsKey(id))
+        if (!history.TryGetValue(id, out List<ZhipuMessage>? currentHistory))
         {
-            history.Add(id, new List<ZhipuMessage>());
+            currentHistory = new List<ZhipuMessage>();
+            history.Add(id, currentHistory);
             ZhipuMessage prompt;
             
             if (UseDynamicPrompt)
@@ -202,9 +200,9 @@ public class ZhipuAi : IAiClient
                 var usableTools = await GetUsableToolsByTag(specialTag);
                 foreach(var tool in usableTools)
                 {
-                    if (!string.IsNullOrWhiteSpace(tool.dynamicPrompt))
+                    if (!string.IsNullOrWhiteSpace(tool.DynamicPrompt))
                     {
-                        sb.AppendLine(tool.dynamicPrompt);
+                        sb.AppendLine(tool.DynamicPrompt);
                     }
                 }
                 prompt = new() { 
@@ -218,7 +216,7 @@ public class ZhipuAi : IAiClient
             }
             history[id].Add(prompt);
         }
-        var currentHistory = history[id];
+
         var userQuery = new ZhipuMessage()
         {
             Role = USER,
@@ -292,7 +290,7 @@ public class ZhipuAi : IAiClient
         ToolMessage message = new();
         message.Role = TOOL;
         message.Id = id;
-        funtionMapper.TryGetValue(func.Name,out var tool);
+        functionMapper.TryGetValue(func.Name,out var tool);
         Logger.Info($"FuncCall:{func.Name} {func.Arguments}");
         if (tool != null)
         {
@@ -459,7 +457,7 @@ public class ToolDef
     [JsonIgnore]
     public IsUseable isUseable=async(tag)=>true;
     [JsonIgnore]
-    public string? dynamicPrompt { get; set; }
+    public string? DynamicPrompt { get; set; }
 
 }
 

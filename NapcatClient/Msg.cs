@@ -72,6 +72,10 @@ public class Message
         }
         return chain;
     }
+    public override int GetHashCode()
+    {
+        return base.GetHashCode();
+    }
     public void ParseJsonDynamic()
     {
         foreach (var j in Data)

@@ -33,7 +33,7 @@ internal class Logic
         {
             return;
         }
-        if (chain.Count() == 0)
+        if (chain.Count == 0)
         {
             return;
         }
@@ -72,7 +72,7 @@ internal class Logic
         if (isTargeted)
         {
             // at消息
-            OnGroupMessageMentioned(groupId, span.Slice(1), data);
+            OnGroupMessageMentioned(groupId, span[1..], data);
         }
         else
         {

@@ -104,12 +104,9 @@ public class Browser
     }
     private void GotoBlankPage()
     {
-        if (driver != null)
-        {
-            driver.Navigate().GoToUrl("about:blank");
-        }
+        driver?.Navigate().GoToUrl("about:blank");
     }
-    static string trim(string s)
+    static string Trim(string s)
     {
         s = s.Replace("\n", "").Replace("\r", "");
         return Regex.Replace(s, @"\s{2,}", " ");
@@ -119,16 +116,16 @@ public class Browser
     /// </summary>
     /// <param name="url"></param>
     /// <returns></returns>
-    public Task<string> view(string url)
+    public Task<string> View(string url)
     {
-        return view(ToStandardUri(url));
+        return View(ToStandardUri(url));
     }
     /// <summary>
     /// view web page
     /// </summary>
     /// <param name="url"></param>
     /// <returns></returns>
-    public async Task<string> view(Uri url)
+    public async Task<string> View(Uri url)
     {
         await UseBrowser();
         var task= Task.Run(async () =>
@@ -138,7 +135,7 @@ public class Browser
             await Task.Delay(100);
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result= executor.ExecuteScript(jsReader).ToString();
-            return trim(result);
+            return Trim(result);
         });
 
         return await task.ContinueWith((t) => {
@@ -169,7 +166,7 @@ public class Browser
             IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             var result = executor.ExecuteScript(getSearchResult).ToString();
             
-            return trim(result);
+            return Trim(result);
         });
 
         return await await task.ContinueWith(async(t) => {
@@ -180,7 +177,7 @@ public class Browser
                 return t.Result;
             }
             //if the script failed, try to view the page
-            return await view(url);
+            return await View(url);
         });
     }
     public async Task<string> GetWeiboHot()
@@ -216,7 +213,7 @@ public class Browser
             }
             executor.ExecuteScript(preprocessWbHot);
             var result = executor.ExecuteScript(jsReader).ToString();
-            return "|事件|热度|\n"+trim(result);
+            return "|事件|热度|\n"+Trim(result);
         });
 
         return await task.ContinueWith((t) => {

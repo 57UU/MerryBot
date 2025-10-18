@@ -25,7 +25,7 @@ public class ViewDialog : Plugin
     {
         if (s.Length > lengthConstraint)
         {
-            s= s.Substring(0, lengthConstraint) + "...";
+            s= string.Concat(s.AsSpan(0, lengthConstraint), "...");
         }
         return s.Replace("\n","");
     }
