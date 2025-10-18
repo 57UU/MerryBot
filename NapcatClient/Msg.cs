@@ -56,7 +56,12 @@ public class Message
         }
         return stringBuilder.ToString();
     }
-    public static List<Message> ParseMessageChain(JsonElement messages)
+    /// <summary>
+    /// 将JsonElement解析为MessageChain
+    /// </summary>
+    /// <param name="messages"></param>
+    /// <returns></returns>
+    internal static List<Message> ParseMessageChain(JsonElement messages)
     {
         var chain = new List<Message>();
         foreach (JsonElement i in messages.EnumerateArray())

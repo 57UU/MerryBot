@@ -50,7 +50,7 @@ public class AutoIncrease : Plugin
                 if (!_lastMessage.used && _lastMessage.repeatTime >= REPEAT_TIME)
                 {
                     //this has not been sent
-                    var msg = Actions.EmptyMessageChain;
+                    var msg = NapcatClient.Action.Actions.EmptyMessageChain;
                     foreach (var entity in chain)
                     {
                         msg.Add(entity);

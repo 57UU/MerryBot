@@ -24,28 +24,24 @@ public class Config
         }
 
     }
+    static readonly JsonSerializerOptions settingOptions = new JsonSerializerOptions()
+    {
+        WriteIndented = true,
+        IncludeFields = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+    };
     public async static Task save()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions()
-        {
-            WriteIndented = true,
-            IncludeFields = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        };
-        var json = JsonSerializer.Serialize(instance, options: options);
+
+        var json = JsonSerializer.Serialize(instance, options: settingOptions);
         await Utils.write(SettingFile, json);
     }
     public async static Task load()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions()
-        {
-            WriteIndented = true,
-            IncludeFields = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        };
+
         var json = await Utils.read(SettingFile);
-        var i = JsonSerializer.Deserialize<Config>(json, options);
+        var i = JsonSerializer.Deserialize<Config>(json, settingOptions);
         //foreach (var k in i.Variables.Keys)
         //{
         //    var v =(JsonElement) i.Variables[k];

@@ -81,7 +81,7 @@ public class AiMessage : Plugin
                 {
                     return "该工具无法使用，请不要再使用本工具";
                 }
-                var chain = Actions.EmptyMessageChain;
+                var chain = NapcatClient.Action.Actions.EmptyMessageChain;
                 chain.Add(NapcatClient.Message.At(qq.ToString()));
                 chain.Add(NapcatClient.Message.Text($" {parameters["question"].ToString()}"));
                 await Actions.SendGroupMessage(parameters.SpecialTag, chain);

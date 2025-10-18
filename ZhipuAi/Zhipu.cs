@@ -35,8 +35,8 @@ public class ZhipuAi : IAiClient
     List<ToolDef> Tools { get; set; } = new();
     Dictionary<string,FunctionDef> functionMapper=new();
     public bool UseDynamicPrompt { get; set; } = true;
-    string prompt;
-    Browser browser = new();
+    readonly string prompt;
+    readonly Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
     public ZhipuAi(string token,string prompt, ModelPreset modelPreset)
     {
@@ -117,9 +117,9 @@ public class ZhipuAi : IAiClient
         Tools.Add(tool);
         functionMapper.Add(tool.Function.Name, tool.Function);
     }
-    Dictionary<long, List<ZhipuMessage>> history = new();
-    Dictionary<long, SemaphoreSlim> mutex = new();
-    object mutexMutex=new();
+    readonly Dictionary<long, List<ZhipuMessage>> history = new();
+    readonly Dictionary<long, SemaphoreSlim> mutex = new();
+    readonly Lock mutexMutex =new();
     public ReadOnlySpan<ZhipuMessage> GetDialogHistory(long uid)
     {
         history.TryGetValue(uid,out var dialog);

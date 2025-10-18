@@ -52,13 +52,13 @@ public class RunCommand : Plugin
         {
             var text = (chain[0].Data["text"] as string).Trim();
             //rm first /sh
-            var fisrt = text.IndexOf(" ");
+            var fisrt = text.IndexOf(' ');
             if (fisrt == -1)
             {
                 Actions.SendGroupMessage(groupId, "请输入命令");
                 return;
             }
-            text = text.Substring(fisrt);
+            text = text[fisrt..];
             if (text.Length == 0)
             {
                 Actions.SendGroupMessage(groupId, "请输入命令");
@@ -66,7 +66,7 @@ public class RunCommand : Plugin
             }
             if (text[0] == ' ')
             {
-                text = text.Substring(1);
+                text = text[1..];
             }
             handleCommand(text, groupId,data.message_id,isAuthorized);
         }

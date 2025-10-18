@@ -10,14 +10,14 @@ public class Actions
 {
     readonly WebSocket WebSocket;
     readonly ISimpleLogger Logger;
-    BotClient bot;
+    readonly BotClient bot;
     public Actions(WebSocket WebSocket, ISimpleLogger logger, BotClient bot)
     {
         this.WebSocket = WebSocket;
         Logger = logger;
         this.bot = bot;
     }
-    private static SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
+    private static readonly SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
     private ulong echoCount = 0;
     public Task<ResponseRootObject> _SendAction(ParameteredAct act)
     {
@@ -41,13 +41,12 @@ public class Actions
         responses.Add(echo, response);
         responseSemaphore.Release();
     }
-    Dictionary<string, ResponseRootObject> responses = new();
+    private readonly Dictionary<string, ResponseRootObject> responses = new();
     public async Task<ResponseRootObject> WaitForResponse(string echo)
     {
         await responseSemaphore.WaitAsync();
-        if (responses.ContainsKey(echo))
+        if (responses.TryGetValue(echo, out ResponseRootObject? res))
         {
-            var res = responses[echo];
             responses.Remove(echo);
             return res;
         }
@@ -78,7 +77,7 @@ public class Actions
     /// <summary>
     /// 获取空的消息链
     /// </summary>
-    public List<Message> EmptyMessageChain => new List<Message>();
+    public static List<Message> EmptyMessageChain => new List<Message>();
     /// <summary>
     /// 在QQ群中发送文本消息
     /// </summary>

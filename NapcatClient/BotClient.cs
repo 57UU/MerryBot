@@ -84,12 +84,12 @@ public class BotClient
             Actions.AddResponse(echo.GetString(), JsonSerializer.Deserialize<ResponseRootObject>(e.Data));
         }
         List<Message>? messageChain = null;
-        if (message.ContainsKey("message_type"))
+        if (message.TryGetValue("message_type", out JsonElement value))
         {
-            var messageType = ((JsonElement)message["message_type"]).GetString();
-            if (message.TryGetValue("message", out JsonElement value))
+            var messageType = ((JsonElement)value).GetString();
+            if (message.TryGetValue("message", out JsonElement messageValue))
             {
-                messageChain = Message.ParseMessageChain(value);
+                messageChain = Message.ParseMessageChain(messageValue);
             }
             if (messageType == "group")
             {
