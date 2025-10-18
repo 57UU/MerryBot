@@ -4,6 +4,12 @@ using MarryBot;
 using NapcatClient;
 using NLog;
 
+string? settingPath = Environment.GetEnvironmentVariable("MR_BOT_SETTING");
+if(settingPath != null)
+{
+    Config.SettingFile= settingPath;
+}
+
 Config.Initialize().Wait();
 //init logger
 var fileName = Utils.GenerateFileNameByCurrentTime();

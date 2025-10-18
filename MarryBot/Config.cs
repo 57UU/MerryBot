@@ -8,7 +8,7 @@ namespace MarryBot;
 
 public class Config
 {
-    public const string SETTING = "setting.json";
+    public static string SettingFile = "setting.json";
     public static Config instance { get; private set; }
     public async static Task Initialize()
     {
@@ -34,7 +34,7 @@ public class Config
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         };
         var json = JsonSerializer.Serialize(instance, options: options);
-        await Utils.write(SETTING, json);
+        await Utils.write(SettingFile, json);
     }
     public async static Task load()
     {
@@ -44,7 +44,7 @@ public class Config
             IncludeFields = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         };
-        var json = await Utils.read(SETTING);
+        var json = await Utils.read(SettingFile);
         var i = JsonSerializer.Deserialize<Config>(json, options);
         //foreach (var k in i.Variables.Keys)
         //{

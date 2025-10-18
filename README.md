@@ -4,6 +4,8 @@ MarryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 
 # 配置文件`setting.json`
 
+如果没有指定环境变量`MR_BOT_SETTING`，则默认使用工作目录下的`setting.json`文件。若指定，则使用指定的文件。
+
 ```json
 {
   "napcat_server": "ws://<address>:<port>", //napcat websocket地址
@@ -108,6 +110,7 @@ Marry Bot
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
+|List<MessageInterceptor> Interceptors|设置拦截器，拦截指定消息被后续插件处理|
 
 ### 插件存储-PluginStorage
 

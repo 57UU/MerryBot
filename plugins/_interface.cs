@@ -54,7 +54,7 @@ public record PluginInterop(
     /// <summary>
     /// 注册拦截器
     /// </summary>
-    public List<MessageInterceptor> Interceptors { set; get; } = new();
+    public List<MessageInterceptor> Interceptors { get; } = new();
     /// <summary>
     /// find the plugin of specific type
     /// </summary>
