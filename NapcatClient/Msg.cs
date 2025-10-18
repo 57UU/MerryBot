@@ -112,7 +112,28 @@ public class Message
         public const string Image = "image";
         public const string Text = "text";
         public const string At = "at";
-    } 
+    }
+    public override bool Equals(object? obj)
+    {
+        var other= obj as Message;
+        if (other == null) return false;
+        if (other.MessageType == MessageType)
+        {
+            var keys=Data.Keys;
+            var otherKey=other.Data.Keys;
+            if (keys.Count != otherKey.Count) return false;
+            foreach (var key in keys)
+            {
+                if (!otherKey.Contains(key)) return false;
+                if (!Data[key].Equals(other.Data[key])) return false;
+            }
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 }
 
 

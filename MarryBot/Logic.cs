@@ -176,7 +176,19 @@ internal class Logic
                         );
 
                 }
-                catch (Exception ex)
+                catch (PlatformNotSupportedException ex) 
+                {
+                    logger.Warn($"the plugin {attribute.Name} can not be loaded, {ex.Message}");
+                } 
+                catch(TargetInvocationException ex)
+                {
+                    var inner= ex.InnerException;
+                    if(inner is PlatformNotSupportedException)
+                    {
+                        logger.Warn($"the plugin {attribute.Name} can not be loaded: {inner.Message}");
+                    }
+                }
+                catch(Exception ex)
                 {
                     logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
                 }

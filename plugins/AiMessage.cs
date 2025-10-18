@@ -243,7 +243,7 @@ public class AiMessage : Plugin
                 }
                 else
                 {
-                    sb.AppendLine("转发消息");
+                    sb.AppendLine("<转发消息>");
                 }
 
             
@@ -267,7 +267,7 @@ public class AiMessage : Plugin
             text = await extractMessage(chain, groupId, true);
         }
         catch (Exception ex) {
-            Logger.Error($"extrct failed:{ex.Message}\n{ex.StackTrace}");
+            Logger.Error($"extract failed:{ex.Message}\n{ex.StackTrace}");
             return;
         }
         

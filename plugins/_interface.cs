@@ -1,9 +1,10 @@
 ﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
 global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
+using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
+using System.Runtime.InteropServices;
 using System.Text.Json;
-using CommonLib;
 
 namespace BotPlugin;
 
@@ -268,12 +269,24 @@ public static class MessageUtils
         }
         for (var i = 0; i < a1.Length; i++)
         {
-            if (a1[i].ToPreviewText() != b1[i].ToPreviewText())
+            var o1=a1[i];
+            var o2=b1[i];
+            if(o1==null || o2 == null)
             {
                 return false;
             }
-            return false;
+            if (!o1.Equals(o2))
+            {
+                return false;
+            }
         }
         return true;
+    }
+    public static bool IsEqual(List<Message>? a, List<Message>? b)
+    {
+        return IsEqual(
+            CollectionsMarshal.AsSpan(a),
+            CollectionsMarshal.AsSpan(b)
+            );
     }
 }

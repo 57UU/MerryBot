@@ -1,4 +1,5 @@
 ﻿using HWT;
+using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -95,5 +96,14 @@ static class PluginUtils
             s = s.Substring(0, lengthConstraint) + prompt;
         }
         return s;
+    }
+    public static List<Message> MessageSpan2List(MessageChain span)
+    {
+        List<Message> list = new();
+        foreach (var item in span)
+        {
+            list.Add(item);
+        }
+        return list;
     }
 }
