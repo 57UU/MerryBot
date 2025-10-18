@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace MarryBot;
+namespace MerryBot;
 
 public static class Utils
 {

@@ -1,6 +1,6 @@
 ﻿
 
-using MarryBot;
+using MerryBot;
 using NapcatClient;
 using NLog;
 

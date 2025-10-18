@@ -1,7 +1,7 @@
 ﻿using NapcatClient;
 using CommonLib;
 
-namespace MarryBot;
+namespace MerryBot;
 
 internal class NLogAdapter : ISimpleLogger
 {

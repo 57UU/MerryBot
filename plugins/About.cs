@@ -15,11 +15,11 @@ public class About : Plugin
 """
 # -------About-------
 
-Marry Bot
+Merry Bot
 
 本程序的目的是实现QQ机器人的模块化开发，以插件的形式增加功能
 
-访问Github仓库 https://github.com/57UU/MarryBot 以获取更多信息
+访问Github仓库 https://github.com/57UU/MerryBot 以获取更多信息
 """;
 
     public About(PluginInterop interop) : base(interop)

@@ -1,5 +1,5 @@
 ﻿using BotPlugin;
-using MarryBot;
+using MerryBot;
 using System;
 using System.Text.Json;
 using ZhipuClient;

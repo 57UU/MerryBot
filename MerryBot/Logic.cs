@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using CommonLib;
 
-namespace MarryBot;
+namespace MerryBot;
 
 internal class Logic
 {

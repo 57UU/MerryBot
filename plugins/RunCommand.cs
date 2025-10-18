@@ -95,7 +95,7 @@ public class Terminal : IDisposable
     public ISimpleLogger logger=ConsoleLogger.Instance;
 
     bool isInitialized = false;
-    public Terminal(string shell = "sudo", string arguments = "-u marrybot /bin/bash")
+    public Terminal(string shell = "sudo", string arguments = "-u MerryBot /bin/bash")
     {
         _process = new Process
         {

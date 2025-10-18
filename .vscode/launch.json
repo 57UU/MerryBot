@@ -14,9 +14,9 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/MarryBot/bin/Debug/net8.0/MarryBot.dll",
+            "program": "${workspaceFolder}/MerryBot/bin/Debug/net8.0/MerryBot.dll",
             "args": [],
-            "cwd": "${workspaceFolder}/MarryBot",
+            "cwd": "${workspaceFolder}/MerryBot",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",
             "stopAtEntry": false
