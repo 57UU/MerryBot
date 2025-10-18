@@ -187,6 +187,10 @@ internal class Logic
                     {
                         logger.Warn($"the plugin {attribute.Name} can not be loaded: {inner.Message}");
                     }
+                    else
+                    {
+                        logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
+                    }
                 }
                 catch(Exception ex)
                 {
