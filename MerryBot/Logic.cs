@@ -1,4 +1,5 @@
 ﻿using BotPlugin;
+using CommonLib;
 using NapcatClient;
 using System;
 using System.Collections.Generic;
@@ -8,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
-using CommonLib;
+using System.Xml.Linq;
 
 namespace MerryBot;
 
@@ -137,68 +138,81 @@ internal class Logic
             }
         }
     }
-    private void LoadPlugins()
+    private static List<(Type type, PluginTag attribute)> FindPlugins()
     {
+        List<(Type type, PluginTag attribute)> list = [];
         Assembly assembly = Assembly.GetAssembly(typeof(Plugin))!;
         foreach (Type type in assembly.GetTypes())
         {
             PluginTag attribute = type.GetCustomAttribute<PluginTag>()!;
             if (attribute != null && !attribute.IsIgnore)
             {
-                try
-                {
-                    Type[] constructorParameterTypes = [typeof(PluginInterop)];
-                    logger.Debug($"find plugin {attribute.Name}");
-                    ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes);
+                list.Add((type, attribute));
+            }
+        }
+        return list;
+    }
+    private void LoadPlugins()
+    {
+        var allPlugins= FindPlugins();
+        //sort by priority
+        allPlugins.Sort((a, b) => {
+            return a.attribute.Priority.CompareTo(b.attribute.Priority);
+        });
+        foreach (var (type,attribute) in allPlugins) {
+            try
+            {
+                Type[] constructorParameterTypes = [typeof(PluginInterop)];
+                logger.Debug($"find plugin {attribute.Name}");
+                ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes);
 
-                    var interop = new PluginInterop(
-                            new PluginLogger(attribute.Name),
-                            qqGroupIDs,
-                            () => plugins,
-                            new PluginStorage(
-                                (s) => PluginStorageDatabase.StorePluginData(attribute.Name, s),
-                                () => PluginStorageDatabase.GetPluginData(attribute.Name)
-                                ),
-                            botClient,
-                            Config.instance.Variables
-                            );
-                    // 创建构造函数参数数组
-                    object[] constructorParameters = [interop];
-
-                    // 使用构造函数创建对象
-                    Plugin pluginInstance = (Plugin)constructorInfo!.Invoke(constructorParameters);
-                    plugins.Add(
-                        new PluginInfo(
-                            pluginInstance,
-                            attribute,
-                            interop
-                            )
+                var interop = new PluginInterop(
+                        new PluginLogger(attribute.Name),
+                        qqGroupIDs,
+                        () => plugins,
+                        new PluginStorage(
+                            (s) => PluginStorageDatabase.StorePluginData(attribute.Name, s),
+                            () => PluginStorageDatabase.GetPluginData(attribute.Name)
+                            ),
+                        botClient,
+                        Config.instance.Variables
                         );
+                // 创建构造函数参数数组
+                object[] constructorParameters = [interop];
 
-                }
-                catch (PlatformNotSupportedException ex) 
+                // 使用构造函数创建对象
+                Plugin pluginInstance = (Plugin)constructorInfo!.Invoke(constructorParameters);
+                plugins.Add(
+                    new PluginInfo(
+                        pluginInstance,
+                        attribute,
+                        interop
+                        )
+                    );
+
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                logger.Warn($"the plugin {attribute.Name} can not be loaded, {ex.Message}");
+            }
+            catch (TargetInvocationException ex)
+            {
+                var inner = ex.InnerException;
+                if (inner is PluginNotUsableException)
                 {
-                    logger.Warn($"the plugin {attribute.Name} can not be loaded, {ex.Message}");
-                } 
-                catch(TargetInvocationException ex)
-                {
-                    var inner= ex.InnerException;
-                    if(inner is PlatformNotSupportedException)
-                    {
-                        logger.Warn($"the plugin {attribute.Name} can not be loaded: {inner.Message}");
-                    }
-                    else
-                    {
-                        logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
-                    }
+                    logger.Warn($"the plugin {attribute.Name} can not be loaded: {inner.Message}");
                 }
-                catch(Exception ex)
+                else
                 {
                     logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
                 }
-
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
             }
         }
+
         //加载插件的OnLoaded函数
         foreach (var i in plugins)
         {

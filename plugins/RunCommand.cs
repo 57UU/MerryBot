@@ -23,7 +23,7 @@ public class RunCommand : Plugin
         //not linux 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            throw new PlatformNotSupportedException("shell plugin can only support linux");
+            throw new PluginNotUsableException("shell plugin can only support linux");
         }
         terminal = new();
         terminal.logger = Logger;

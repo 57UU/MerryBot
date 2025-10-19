@@ -8,14 +8,15 @@ using System.Threading.Tasks;
 
 namespace BotPlugin;
 
-[PluginTag("自动+1", "如果有刷屏消息，将会自动+1")]
+[PluginTag("自动+1", "如果有刷屏消息，将会自动+1",priority:-1)]
 public class AutoIncrease : Plugin
 {
     const int REPEAT_TIME = 3;
     public AutoIncrease(PluginInterop interop) : base(interop)
     {
+        var selfId=interop.BotClient.SelfId;
         interop.Interceptors.Add((data) => {
-            return data.sender.user_id == interop.BotClient.SelfId;
+            return data.sender.user_id == selfId;
         });
     }
     //store each group

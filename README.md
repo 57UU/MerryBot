@@ -140,8 +140,14 @@ Merry Bot
 
 ### PluginTag类属性标签
 
-构造函数为`(string name, string description, bool isIgnore=false)`
+构造函数为`(string name, string description, bool isIgnore=false, int priority=0)`
 
-分别对应插件名称，插件描述，是否忽略
+分别对应插件名称，插件描述，是否忽略，插件优先级。
 
 当`isIgnore==true`时，插件不会被加载
+
+插件的优先级，决定加载顺序。值越小，优先级越高。
+
+###  Note
+
+如果插件不可用（如不支持当前平台），请在构造函数中抛出 `PluginNotUsableException` 异常

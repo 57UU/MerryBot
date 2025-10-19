@@ -38,23 +38,23 @@ public class Message
     }
     public string ToPreviewText()
     {
-        StringBuilder stringBuilder = new StringBuilder($"{MessageType}:");
+        string v;
         switch (MessageType)
         {
             case Str.Text:
-                stringBuilder.Append(Data["text"]);
+                v=Data["text"];
                 break;
             case Str.At:
-                stringBuilder.Append(Data["qq"]);
+                v = Data["qq"];
                 break;
             case Str.Image:
-                stringBuilder.Append(Data["file"]);
+                v = Data["file"];
                 break;
-            default: 
-                stringBuilder.Append(Data.GetString());
+            default:
+                v = Data.GetString();
                 break;
         }
-        return stringBuilder.ToString();
+        return $"{MessageType}:{v}";
     }
     /// <summary>
     /// 将JsonElement解析为MessageChain
@@ -81,7 +81,7 @@ public class Message
     {
         return base.GetHashCode();
     }
-    public void ParseJsonDynamic()
+    internal void ParseJsonDynamic()
     {
         foreach (var j in Data)
         {
