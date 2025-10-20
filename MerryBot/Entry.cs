@@ -26,7 +26,7 @@ var botClient = new BotClient(config.napcat_server, config.napcat_token);
 botClient.Logger = new NLogAdapter();
 
 
-Logic logic = new Logic(botClient,config.qq_groups);
+Logic logic = new Logic(botClient);
 
 
 

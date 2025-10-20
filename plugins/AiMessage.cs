@@ -20,7 +20,7 @@ public class AiMessage : Plugin
     RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
-        var model = ModelPreset.DeepSeekChat;
+        var model = ModelPreset.Glm_4_6;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key);
@@ -87,7 +87,7 @@ public class AiMessage : Plugin
                 await Actions.SendGroupMessage(parameters.SpecialTag, chain);
                 return "求助成功，你不用解决这个问题了";
             };
-            solver.DynamicPrompt = "你比较疲惫，解决复杂问题可以直接转交给智慧AI（如果有的话）不用询问用户意见";
+            solver.DynamicPrompt = "如果问题非常复杂，请智慧AI求助";
             solver.isUseable = async (tag) =>
             {
                 var groupList = await Actions.GetGroupMemberData(tag.ToString(), qq.ToString());

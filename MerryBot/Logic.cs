@@ -20,12 +20,16 @@ internal class Logic
     private List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     private List<long> qqGroupIDs;
-    public Logic(BotClient botClient, List<long> qqGroupIDs)
+    public Logic(BotClient botClient)
     {
         this.botClient = botClient;
-        this.qqGroupIDs = qqGroupIDs;
         LoadPlugins();
+        LoadQqGroups();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
+    }
+    private void LoadQqGroups()
+    {
+        qqGroupIDs = Config.instance.qq_groups;
     }
 
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)

@@ -20,10 +20,10 @@ public class RunCommand : Plugin
     bool useUnprivileged = true;
     public RunCommand(PluginInterop interop) : base(interop)
     {
-        //not linux 
+        //not Linux 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            throw new PluginNotUsableException("shell plugin can only support linux");
+            throw new PluginNotUsableException("shell plugin can only support Linux");
         }
         terminal = new();
         terminal.logger = Logger;
@@ -52,13 +52,13 @@ public class RunCommand : Plugin
         {
             var text = (chain[0].Data["text"] as string).Trim();
             //rm first /sh
-            var fisrt = text.IndexOf(' ');
-            if (fisrt == -1)
+            var first = text.IndexOf(' ');
+            if (first == -1)
             {
                 Actions.SendGroupMessage(groupId, "请输入命令");
                 return;
             }
-            text = text[fisrt..];
+            text = text[first..];
             if (text.Length == 0)
             {
                 Actions.SendGroupMessage(groupId, "请输入命令");
