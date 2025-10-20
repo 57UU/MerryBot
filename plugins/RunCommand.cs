@@ -68,11 +68,11 @@ public class RunCommand : Plugin
             {
                 text = text[1..];
             }
-            handleCommand(text, groupId,data.message_id,isAuthorized);
+            HandleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
     internal Terminal terminal ;
-    async void handleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
+    async void HandleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
     {
         string result;
         result = await terminal.RunCommandAutoTimeoutAsync(command,timeoutMs:1000);
@@ -125,7 +125,7 @@ public class Terminal : IDisposable
     }
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
     {
-        if (isContainMultipleCommands(command))
+        if (IsContainMultipleCommands(command))
         {
             return "仅支持使用;'连接多条指令";
         }
@@ -253,7 +253,7 @@ public class Terminal : IDisposable
         // 单引号内的单引号需要特殊处理
         return "'" + input.Replace("'", "'\\''") + "'";
     }
-    public static bool isContainMultipleCommands(string input)
+    public static bool IsContainMultipleCommands(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
             return false;

@@ -22,11 +22,10 @@ namespace ZhipuClient;
 /// <summary>
 /// access web pages with headless chrome
 /// </summary>
-public class Browser
+public partial class Browser
 {
-    IWebDriver driver=null;
+    ChromeDriver driver=null;
     OpenQA.Selenium.Chrome.ChromeOptions options = new();
-    [Obsolete]
     string getSearchResult;
     string jsReader, preprocessWbHot,preprocessBingResult;
     SemaphoreSlim mutex = new(1);
@@ -72,14 +71,14 @@ public class Browser
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
         if (isLinuxArm64)
         {
-            Console.WriteLine("Arch: Linux Arm64");
+            Console.WriteLine("Arch: Linux Arm64;you may need to install chromedriver manually");
             stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
         }
 
         
         LoadScripts().Wait(); 
     }
-    private Task LoadBrowser()
+    private Task<ChromeDriver> LoadBrowser()
     {
         resourceCountdown.Start();
         return Task.Run(() => driver = Stealth.Instantiate(options, stealthInstanceSettings));
@@ -109,7 +108,7 @@ public class Browser
     static string Trim(string s)
     {
         s = s.Replace("\n", "").Replace("\r", "");
-        return Regex.Replace(s, @"\s{2,}", " ");
+        return DuplicatedRegex().Replace(s, " ");
     }
     /// <summary>
     /// view web page
@@ -133,8 +132,7 @@ public class Browser
             mutex.Wait();
             driver.Navigate().GoToUrl(url);
             await Task.Delay(100);
-            IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
-            var result= executor.ExecuteScript(jsReader).ToString();
+            var result= driver.ExecuteScript(jsReader)!.ToString()!;
             return Trim(result);
         });
 
@@ -163,8 +161,7 @@ public class Browser
             mutex.Wait();
             driver.Navigate().GoToUrl(url);
             await Task.Delay(100);
-            IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
-            var result = executor.ExecuteScript(getSearchResult).ToString();
+            var result = driver.ExecuteScript(getSearchResult)!.ToString()!;
             
             return Trim(result);
         });
@@ -192,11 +189,10 @@ public class Browser
             mutex.Wait();
             driver.Navigate().GoToUrl(url);
             await Task.Delay(100);
-            IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
             int delay = 0;
             while (true)
             {
-                if (executor.ExecuteScript(query) == null)
+                if (driver.ExecuteScript(query) == null)
                 {
                     //wait
                     await Task.Delay(checkInterval);
@@ -211,8 +207,8 @@ public class Browser
                     break;
                 }
             }
-            executor.ExecuteScript(preprocessWbHot);
-            var result = executor.ExecuteScript(jsReader).ToString();
+            driver.ExecuteScript(preprocessWbHot);
+            var result = driver.ExecuteScript(jsReader).ToString();
             return "|事件|热度|\n"+Trim(result);
         });
 
@@ -243,6 +239,9 @@ public class Browser
         // 2. 否则补 https:// 再解析
         return new Uri("http://" + raw, UriKind.Absolute);
     }
+
+    [GeneratedRegex(@"\s{2,}")]
+    private static partial Regex DuplicatedRegex();
 }
 
 

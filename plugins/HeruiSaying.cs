@@ -14,7 +14,7 @@ public class HeruiSaying :Plugin
 {
     private const string url = "https://the-brotherhood-of-scu.github.io/herui_saying_text/";
     private List<string> sayings = new List<string>();
-    private ThreadLocal<Random> _randomWrapper = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
+    private readonly ThreadLocal<Random> _randomWrapper = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
     public HeruiSaying(PluginInterop interop):base(interop)
     {
         AutoUpdate();

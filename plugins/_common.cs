@@ -10,12 +10,12 @@ namespace BotPlugin;
 
 public class RateLimiter
 {
-    Dictionary<long, int> rateLimit = new();
+    private readonly Dictionary<long, int> rateLimit = new();
     public int LimitCount { get; private set; }
     public int LimitTime { get; private set; }
-    private object locker = new();
-    private HashedWheelTimer countdownManager;
-    private TimeSpan timeSpan;
+    private readonly Lock locker = new();
+    private readonly HashedWheelTimer countdownManager;
+    private readonly TimeSpan timeSpan;
     public RateLimiter(int limitCount = 5, int limitTime = 20)
     {
         LimitCount = limitCount;
@@ -75,7 +75,7 @@ public class RateLimiter
 
 class OnceTimerTask : TimerTask
 {
-    private Action callback;
+    private readonly Action callback;
     public OnceTimerTask(Action callback)
     {
         this.callback = callback;

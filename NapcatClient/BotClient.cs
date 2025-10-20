@@ -81,7 +81,7 @@ public class BotClient
         if (message.TryGetValue("echo", out JsonElement echo))
         {
             //return message
-            Actions.AddResponse(echo.GetString(), JsonSerializer.Deserialize<ResponseRootObject>(e.Data));
+            Actions.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(e.Data)!);
         }
         List<Message>? messageChain = null;
         if (message.TryGetValue("message_type", out JsonElement value))
@@ -96,7 +96,7 @@ public class BotClient
                 ReceivedGroupMessage receivedGroupMessage = 
                     JsonSerializer.Deserialize<ReceivedGroupMessage>(e.Data)!;
                 var groupId = receivedGroupMessage.group_id;
-                receivedGroupMessage.message = messageChain;
+                receivedGroupMessage.message = messageChain!;
                 OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
             }
         }

@@ -158,7 +158,7 @@ public static class MessageUtils
     /// <returns></returns>
     public static bool IsEqual(MessageChain a,MessageChain b)
     {
-        if (a == null || b == null) { return false; }
+        if (a.IsEmpty || b.IsEmpty) { return false; }
         var a1 = a.ToArray();
         var b1 = b.ToArray();
         if (a1.Length != b1.Length)
