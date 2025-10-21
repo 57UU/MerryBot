@@ -199,7 +199,7 @@ public class Actions
         var result=await _SendAction(act);
         var data = result.Data;
         long userId=data.GetProperty("user_id").GetInt64();
-        string nickname=data.GetProperty("nickname").GetString();
+        string nickname=data.GetProperty("nickname").GetString()!;
         return (userId,nickname);
     }
     public async Task<GroupMemberListData> GetGroupMemberListData(string groupId)
@@ -274,7 +274,6 @@ public class Actions
 }
 public class Act
 {
-    public Act() { }
     public Act(string action, dynamic parameters)
     {
         this.Action = action;

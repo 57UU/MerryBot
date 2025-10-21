@@ -145,7 +145,7 @@ public class Message
     }
 }
 
-
+#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 public class Sender
 {
     public long user_id { get; set; }
@@ -442,3 +442,5 @@ public class ForwardMessage
     [JsonPropertyName("messages")]
     public List<GroupMessage> Messages { get; set; } = new();
 }
+
+#pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。

@@ -81,7 +81,7 @@ public class ZhipuAi : IAiClient
         browserDef.Function.FunctionCall = async (parameters) =>
         {
             var url = parameters["url"];
-            var html = await browser.View(url.GetString());
+            var html = await browser.View(url.GetString()!);
             if (html.Length > 5000)
             {
                 html = string.Concat(html.AsSpan(0, 5000), "[省略过长内容]");
@@ -102,7 +102,7 @@ public class ZhipuAi : IAiClient
             {
                 internationalVersion = v.GetBoolean();
             }
-            var result = await browser.Search(query.GetString(),internationalVersion);
+            var result = await browser.Search(query.GetString()!,internationalVersion);
             return result;
         };
         bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
@@ -375,10 +375,10 @@ public class ZhipuAi : IAiClient
                         sb.Append($"[{i.Role}:{i.Level}]");
                     }
                     throw new Exception(sb.ToString());
-                }catch(Exception e){}
+                }catch(Exception){}
                 throw new Exception(rep);
             }
-            catch(Exception e){ }
+            catch(Exception){ }
             throw new HttpRequestException($"API请求失败: {response.StatusCode}");
         }
         // 读取并输出响应内容

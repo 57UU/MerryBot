@@ -208,7 +208,7 @@ public partial class Browser
                 }
             }
             driver.ExecuteScript(preprocessWbHot);
-            var result = driver.ExecuteScript(jsReader).ToString();
+            var result = driver.ExecuteScript(jsReader)!.ToString()!;
             return "|事件|热度|\n"+Trim(result);
         });
 
@@ -333,7 +333,7 @@ public class ResourceCountdown:IDisposable
     /// <summary>
     /// 计时器到期时执行的方法
     /// </summary>
-    private void OnTimerElapsed(object sender, ElapsedEventArgs e)
+    private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
     {
         ReleaseResource();
     }
