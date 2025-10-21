@@ -69,7 +69,10 @@ public class ViewVersion : Plugin
             gitInfo.AppendLine($"Date: {commitDate}");
             gitInfo.AppendLine($"Count: {commitCount}");
             gitInfo.AppendLine($"Commit: {commitHash.AsSpan(0, 12)}");
-            gitInfo.AppendLine($"By: {userName}");
+            if (!string.IsNullOrWhiteSpace(userName))
+            {
+                gitInfo.AppendLine($"By: {userName}");
+            }
 
             return gitInfo.ToString();
         }
