@@ -28,7 +28,7 @@ public static class Utils
             reader.Close();
             return result;
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return null;
         }

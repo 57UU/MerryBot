@@ -9,7 +9,16 @@ namespace MerryBot;
 public class Config
 {
     public static string SettingFile = "setting.json";
-    public static Config instance { get; private set; }
+    public static Config Instance {
+        get {
+            if (field == null)
+            {
+                throw new Exception("Config is not initialized!");
+            }
+            return field;
+        }
+        private set { field = value; }
+    }
     public async static Task Initialize()
     {
         try
@@ -19,10 +28,9 @@ public class Config
         }
         catch (Exception)
         {
-            instance = new Config();
+            Instance = new Config();
             save().Wait();
         }
-
     }
     static readonly JsonSerializerOptions settingOptions = new JsonSerializerOptions()
     {
@@ -34,20 +42,20 @@ public class Config
     public async static Task save()
     {
 
-        var json = JsonSerializer.Serialize(instance, options: settingOptions);
+        var json = JsonSerializer.Serialize(Instance, options: settingOptions);
         await Utils.write(SettingFile, json);
     }
     public async static Task load()
     {
 
         var json = await Utils.read(SettingFile);
-        var i = JsonSerializer.Deserialize<Config>(json, settingOptions);
+        Config i = JsonSerializer.Deserialize<Config>(json!, settingOptions)!;
         //foreach (var k in i.Variables.Keys)
         //{
         //    var v =(JsonElement) i.Variables[k];
         //    i.Variables[k] = JsonNode.Parse(v.GetRawText());
         //}
-        instance = i;
+        Instance = i;
 
     }
     public string napcat_server = "ws://<host>:<port>/";

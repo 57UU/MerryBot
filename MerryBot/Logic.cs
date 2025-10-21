@@ -19,17 +19,16 @@ internal class Logic
     private DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
     private List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-    private List<long> qqGroupIDs;
+    private List<long> qqGroupIDs {
+        get {
+            return Config.Instance.qq_groups;
+        }
+    }
     public Logic(BotClient botClient)
     {
         this.botClient = botClient;
         LoadPlugins();
-        LoadQqGroups();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
-    }
-    private void LoadQqGroups()
-    {
-        qqGroupIDs = Config.instance.qq_groups;
     }
 
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
@@ -168,8 +167,8 @@ internal class Logic
             {
                 Type[] constructorParameterTypes = [typeof(PluginInterop)];
                 logger.Debug($"find plugin {attribute.Name}");
-                ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes);
-
+                ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes)
+                    ?? throw new PluginNotUsableException("can not find specific constructor"); ;
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
                         qqGroupIDs,
@@ -179,7 +178,7 @@ internal class Logic
                             () => PluginStorageDatabase.GetPluginData(attribute.Name)
                             ),
                         botClient,
-                        Config.instance.Variables
+                        Config.Instance.Variables
                         );
                 // 创建构造函数参数数组
                 object[] constructorParameters = [interop];
@@ -195,7 +194,7 @@ internal class Logic
                     );
 
             }
-            catch (PlatformNotSupportedException ex)
+            catch (PluginNotUsableException ex)
             {
                 logger.Warn($"the plugin {attribute.Name} can not be loaded, {ex.Message}");
             }

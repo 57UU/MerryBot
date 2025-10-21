@@ -45,23 +45,23 @@ public class RunCommand : Plugin
         var isAuthorized = sender == authorized;
         if (useUnprivileged==false && !isAuthorized)
         {
-            Actions.SendGroupMessage(groupId, "401 Unauthorized\nYou do not have the permission");
+            _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nYou do not have the permission");
             return;
         }
         if (IsStartsWith(chain, "/sh"))
         {
-            var text = (chain[0].Data["text"] as string).Trim();
+            var text = (chain[0].Data["text"] as string)!.Trim();
             //rm first /sh
             var first = text.IndexOf(' ');
             if (first == -1)
             {
-                Actions.SendGroupMessage(groupId, "请输入命令");
+                _ = Actions.SendGroupMessage(groupId, "请输入命令");
                 return;
             }
             text = text[first..];
             if (text.Length == 0)
             {
-                Actions.SendGroupMessage(groupId, "请输入命令");
+                _ = Actions.SendGroupMessage(groupId, "请输入命令");
                 return;
             }
             if (text[0] == ' ')

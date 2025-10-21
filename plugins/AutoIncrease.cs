@@ -52,7 +52,7 @@ public class AutoIncrease : Plugin
                 {
                     //this has not been sent
                     Logger.Info("+1 message detected");
-                    Actions.SendGroupMessage(groupId, _lastMessage.chain);
+                    _=Actions.SendGroupMessage(groupId, _lastMessage.chain!);
                     _lastMessage.used = true;
                 }
             }

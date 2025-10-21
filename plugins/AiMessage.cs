@@ -26,7 +26,7 @@ public class AiMessage : Plugin
         var token = interop.GetVariable<string>(token_key);
         if (token == null)
         {
-            throw new Exception($"请在配置文件variable中设置{token_key}");
+            throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
         }
         var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         aiClient = new ZhipuAi(token, prompt, model);
@@ -120,7 +120,7 @@ public class AiMessage : Plugin
             shell.Function.Description = "执行linux bash shell命令.仅支持使用';'连接多条指令";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) => {
-                return await shellPlugin.terminal.RunCommandAutoTimeoutAsync(parameters["command"].GetString());
+                return await shellPlugin.terminal.RunCommandAutoTimeoutAsync(parameters["command"].GetString()!);
             };
             aiClient.RegisterTool(shell);
         }
@@ -173,7 +173,7 @@ public class AiMessage : Plugin
         {
             return;
         }
-        PreprocessMessage(messages,groupId,nickname,data.message_id);
+        _=PreprocessMessage(messages,groupId,nickname,data.message_id);
     }
     async Task<string> extractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
     {
@@ -188,7 +188,14 @@ public class AiMessage : Plugin
             {
                 string qq = item.Data["qq"].ToString();
                 var detail = await Actions.GetGroupMemberData(groupId.ToString(), qq);
-                sb.Append($" @{detail.Nickname} ");
+                if (detail != null) {
+                    sb.Append($" @{detail.Nickname} ");
+                }
+                else
+                {
+                    sb.Append($" @unknown ");
+                }
+                
             }else if (item.MessageType == "reply" && recursive)
             {
                 string referMessageId = item.Data["id"];
@@ -284,7 +291,7 @@ public class AiMessage : Plugin
                 Logger.Info("[New] " + text);
                 aiClient.Reset(groupId);
             }
-            handleMessage(groupId, text, messageId, nickname);
+            _ = handleMessage(groupId, text, messageId, nickname);
         }
     }
     async Task handleMessage(long groupId,string message,long messageId,string sender)

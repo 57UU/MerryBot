@@ -25,7 +25,7 @@ NLog.LogManager.Setup().LoadConfiguration(builder =>
 });
 LogManager.GetCurrentClassLogger().Debug("program start");
 
-var config = Config.instance;
+var config = Config.Instance;
 
 var botClient = new BotClient(config.napcat_server, config.napcat_token);
 botClient.Logger = new NLogAdapter();

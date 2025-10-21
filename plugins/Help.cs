@@ -12,17 +12,20 @@ namespace BotPlugin;
 [PluginTag("帮助", "使用 /help 来查看帮助")]
 public class Help : Plugin
 {
-    IEnumerable<PluginInfo> pluginTags;
+    IEnumerable<PluginInfo>? pluginTags;
     public Help(PluginInterop interop) : base(interop)
     {
     }
     public override void OnLoaded()
     {
         pluginTags = Interop.PluginInfoGetter();
-
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
+        if (pluginTags == null) {
+            _ = Actions.SendGroupMessage(groupId, "尚未完成加载");
+            return;
+        }
         if (!IsStartsWith(chain, "/help"))
         {
             return;
@@ -40,6 +43,6 @@ public class Help : Plugin
 
         }
         var help = $"已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
-        Actions.SendGroupMessage(groupId, help);
+        _ = Actions.SendGroupMessage(groupId, help);
     }
 }
