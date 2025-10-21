@@ -99,11 +99,7 @@ static class PluginUtils
     }
     public static List<Message> MessageSpan2List(MessageChain span)
     {
-        List<Message> list = new();
-        foreach (var item in span)
-        {
-            list.Add(item);
-        }
+        List<Message> list = [.. span];
         return list;
     }
 }
