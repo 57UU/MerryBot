@@ -19,6 +19,9 @@ using ZhipuClient;
 //    Console.WriteLine($"out:{result}");
 //}
 
+var version = ViewVersion.GetGitInfo();
+Console.WriteLine(version);
+
 Config.Initialize().Wait();
 var config=Config.instance;
 var model = ModelPreset.DeepSeekChat;

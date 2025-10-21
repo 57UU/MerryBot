@@ -30,7 +30,7 @@ Merry Bot
     {
         if (IsStartsWith(chain, "/about"))
         {
-            Actions.SendGroupMessage(groupId, aboutMessage);
+            _=Actions.SendGroupMessage(groupId, aboutMessage);
         }
     } 
 }

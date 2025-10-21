@@ -46,7 +46,7 @@ public class AiMessage : Plugin
                 {
                     throw new Exception("请求速率过高，请不要再发了");
                 }
-                string text = parameters["text"].GetString();
+                string text = parameters["text"].GetString()!;
                 await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
             }catch(Exception e)
             {

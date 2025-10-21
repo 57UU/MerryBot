@@ -15,7 +15,7 @@ public class ViewDialog : Plugin
     {
         Logger.Info("ViewDialog plugin start");
     }
-    AiMessage aiMessage;
+    AiMessage? aiMessage;
     public override void OnLoaded()
     {
         aiMessage=Interop.FindPlugin<AiMessage>()!;
@@ -31,12 +31,17 @@ public class ViewDialog : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
+        if (aiMessage == null)
+        {
+            Logger.Error("AiMessage plugin not found");
+            return;
+        }
         if (IsStartsWith(chain, "/dialog"))
         {
             var history=aiMessage.aiClient.GetDialogHistory(groupId);
             if (history.Length == 0)
             {
-                Actions.SendGroupMessage(groupId, "<EMPTY>");
+                _=Actions.SendGroupMessage(groupId, "<EMPTY>");
             }
             else
             {
