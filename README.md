@@ -4,8 +4,6 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 
 # 配置文件`setting.json`
 
-如果没有指定环境变量`MR_BOT_SETTING`，则默认使用工作目录下的`setting.json`文件。若指定，则使用指定的文件。
-
 ```json
 {
   "napcat_server": "ws://<address>:<port>", //napcat websocket地址
@@ -21,6 +19,12 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
   }
 }
 ```
+
+# 环境变量支持
+`MR_BOT_SETTING`：指向文件。如果没有指定环境变量，则默认使用工作目录下的`setting.json`文件。若指定，则使用指定的文件。
+`MR_BOT_LOG_DIR`：指向文件夹。用于保存日志文件。
+
+若没有指定，均默认使用工作目录。
 
 # 主要内置插件
 

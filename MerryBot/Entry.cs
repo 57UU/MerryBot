@@ -13,6 +13,11 @@ if(settingPath != null)
 Config.Initialize().Wait();
 //init logger
 var fileName = Utils.GenerateFileNameByCurrentTime();
+string? logPath = Environment.GetEnvironmentVariable("MR_BOT_LOG_DIR");
+if(logPath != null)
+{
+    fileName = Path.Combine(logPath, fileName);
+}
 NLog.LogManager.Setup().LoadConfiguration(builder =>
 {
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
