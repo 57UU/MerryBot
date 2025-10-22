@@ -12,7 +12,7 @@ public class ViewVersion : Plugin
     private string gitInfo;
     public ViewVersion(PluginInterop interop) : base(interop)
     {
-        gitInfo= GetGitInfo();
+        gitInfo= GetGitInfo().Trim();
         Logger.Info("version-view plugin start");
     }
     /// <summary>

@@ -298,7 +298,7 @@ public class AiMessage : Plugin
     {
         await foreach(var result in  aiClient.Ask(message, groupId, sender,groupId))
         {
-            if (result != null)
+            if (!string.IsNullOrWhiteSpace(result))
             {
                 await Actions.ChooseBestReplyMethod(groupId, messageId, result);
             }
