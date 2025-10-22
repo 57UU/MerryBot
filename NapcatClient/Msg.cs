@@ -50,6 +50,8 @@ public class Message
             Str.Dice => (string)Data["result"],
             Str.Rps => (string)Data["result"],
             Str.Poker => $"{Data["type"]}->{Data["id"]}",
+            Str.Forward => Data["id"],
+            Str.File => Data["name"],
             _ => Data.GetString(),
         };
         return $"{MessageType}:{v}";
@@ -124,7 +126,8 @@ public class Message
         public const string Dice= "dice";
         public const string Rps= "rps";//剪刀石头布
         public const string Poker= "poke";
-
+        public const string Forward= "forward";
+        public const string File= "file";
 
     }
     public override bool Equals(object? obj)
