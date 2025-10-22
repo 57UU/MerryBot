@@ -23,9 +23,11 @@ public class Message
     {
         this.MessageType = messageType;
     }
+#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
     public Message()
+#pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
     {
-
+        
     }
     public Message(string messageType, Dictionary<string, dynamic> data)
     {
@@ -38,22 +40,18 @@ public class Message
     }
     public string ToPreviewText()
     {
-        string v;
-        switch (MessageType)
+        string v = MessageType switch
         {
-            case Str.Text:
-                v=Data["text"];
-                break;
-            case Str.At:
-                v = Data["qq"];
-                break;
-            case Str.Image:
-                v = Data["file"];
-                break;
-            default:
-                v = Data.GetString();
-                break;
-        }
+            Str.Text => (string)Data["text"],
+            Str.At => (string)Data["qq"],
+            Str.Image => (string)Data["file"],
+            Str.Reply => (string)Data["id"],
+            Str.Face => (string)Data["face"],
+            Str.Dice => (string)Data["result"],
+            Str.Rps => (string)Data["result"],
+            Str.Poker => $"{Data["type"]}->{Data["id"]}",
+            _ => Data.GetString(),
+        };
         return $"{MessageType}:{v}";
     }
     /// <summary>
@@ -121,6 +119,13 @@ public class Message
         public const string Image = "image";
         public const string Text = "text";
         public const string At = "at";
+        public const string Reply = "reply";
+        public const string Face = "face";
+        public const string Dice= "dice";
+        public const string Rps= "rps";//剪刀石头布
+        public const string Poker= "poke";
+
+
     }
     public override bool Equals(object? obj)
     {

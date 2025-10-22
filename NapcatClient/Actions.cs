@@ -210,7 +210,7 @@ public class Actions
             );
         var result=await _SendAction(act);
         var data = result.Data;
-        return data.Deserialize<GroupMemberListData>();
+        return data.Deserialize<GroupMemberListData>()!;
     }
     /// <summary>
     /// 获取群成员信息
@@ -237,7 +237,7 @@ public class Actions
     /// </summary>
     /// <param name="messageId"></param>
     /// <returns></returns>
-    public async Task<GroupMessage> GetMessageById(string messageId)
+    public async Task<GroupMessage?> GetMessageById(string messageId)
     {
         Act act = new(
             action: "get_msg",
@@ -246,6 +246,10 @@ public class Actions
         var result = await _SendAction(act);
         var data = result.Data;
         var deserilzed= data.Deserialize<GroupMessage>();
+        if (deserilzed == null)
+        {
+            return null;
+        }
         BotUtils.ParseDynamicJsonValue(deserilzed.Message);
         return deserilzed;
     }

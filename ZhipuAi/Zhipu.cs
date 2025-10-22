@@ -228,7 +228,7 @@ public class ZhipuAi : IAiClient
             string response;
             try
             {
-                var aiResponse = await request(currentHistory,specialTag);
+                var aiResponse = await Request(currentHistory,specialTag);
                 var msg= aiResponse.Choices[0].Message;
                 response = msg.Content;
                 if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
@@ -296,7 +296,8 @@ public class ZhipuAi : IAiClient
         {
             try
             {
-                var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments);
+                var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments)
+                    ??throw new Exception("参数格式错误");
                 args.SpecialTag = specialTag;
                 message.Content = await tool.FunctionCall.Invoke(args);
                 Logger.Info("function result:"+message.Content);
@@ -336,7 +337,7 @@ public class ZhipuAi : IAiClient
         return usableFunctionCall;
 
     }
-    public async Task<ApiResponse> request(IEnumerable<ZhipuMessage> messages, long specialTag)
+    public async Task<ApiResponse> Request(IEnumerable<ZhipuMessage> messages, long specialTag)
     {
         var usableFunctionCall= await GetUsableToolsByTag(specialTag);
         // 创建请求数据
@@ -404,7 +405,7 @@ public class MessageConverter : JsonConverter<ZhipuMessage>
     {
         using JsonDocument doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
-        return JsonSerializer.Deserialize<ZhipuMessage>(root.GetRawText(), options);
+        return JsonSerializer.Deserialize<ZhipuMessage>(root.GetRawText(), options)!;
     }
 
     public override void Write(Utf8JsonWriter writer, ZhipuMessage value, JsonSerializerOptions options)

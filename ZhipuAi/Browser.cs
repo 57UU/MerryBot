@@ -24,10 +24,12 @@ namespace ZhipuClient;
 /// </summary>
 public partial class Browser
 {
-    ChromeDriver driver=null;
-    OpenQA.Selenium.Chrome.ChromeOptions options = new();
-    string getSearchResult;
-    string jsReader, preprocessWbHot,preprocessBingResult;
+    ChromeDriver? driver=null;
+    ChromeOptions options = new();
+#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    string getSearchResult=null;
+    string jsReader = null, preprocessWbHot = null, preprocessBingResult = null;
+#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     SemaphoreSlim mutex = new(1);
     private static Task<string> LoadScript(string fileName)
     {
@@ -130,7 +132,7 @@ public partial class Browser
         var task= Task.Run(async () =>
         {
             mutex.Wait();
-            driver.Navigate().GoToUrl(url);
+            driver!.Navigate().GoToUrl(url);
             await Task.Delay(100);
             var result= driver.ExecuteScript(jsReader)!.ToString()!;
             return Trim(result);
@@ -159,7 +161,7 @@ public partial class Browser
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver.Navigate().GoToUrl(url);
+            driver!.Navigate().GoToUrl(url);
             await Task.Delay(100);
             var result = driver.ExecuteScript(getSearchResult)!.ToString()!;
             
@@ -187,7 +189,7 @@ public partial class Browser
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver.Navigate().GoToUrl(url);
+            driver!.Navigate().GoToUrl(url);
             await Task.Delay(100);
             int delay = 0;
             while (true)

@@ -24,11 +24,11 @@ public class BotClient
         this.Actions = new Actions(WebSocket,Logger,this);
         Initialize().Wait();
     }
-    public long SelfId { get; private set; }
-    public string Nickname { get; private set; }
+    public long SelfId { get; private set; } = -1;
+    public string Nickname { get; private set; } = "unknown";
     public async Task Initialize()
     {
-        await Task.Delay(200);
+        await Task.Delay(100);
         //get account info
         var result = await Actions.GetAccountInfo();
         SelfId = result.userId;

@@ -9,17 +9,9 @@ namespace CommonLib;
 
 public static class JsonUtils
 {
-    public static dynamic GetActualValue(object o)
-    {
-        if (o == null)
-        {
-            return null;
-        }
-        throw new NotImplementedException();
-    }
     public static dynamic GetActualValue(JsonElement jsonElement)
     {
-        return jsonElement.ValueKind switch
+        var inner= jsonElement.ValueKind switch
         {
             JsonValueKind.Object => jsonElement.Deserialize<Dictionary<string, dynamic>>(),
             JsonValueKind.Array => jsonElement.EnumerateArray().Select(GetActualValue).ToList(),
@@ -31,6 +23,7 @@ public static class JsonUtils
             JsonValueKind.Undefined => null,
             _ => throw new ArgumentException("Invalid JSON element"),
         };
+        return inner!;
     }
     private static dynamic ConvertNumber(JsonElement jsonElement)
     {

@@ -23,12 +23,9 @@ public class AiMessage : Plugin
         var model = ModelPreset.Glm_4_6;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
-        var token = interop.GetVariable<string>(token_key);
-        if (token == null)
-        {
-            throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
-        }
-        var prompt= interop.GetVariable("ai-prompt", "你是乐于助人的助手");
+        var token = interop.GetVariable<string>(token_key) 
+            ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
+        var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         aiClient = new ZhipuAi(token, prompt, model);
         aiClient.Logger = Logger;
         //add voice tool
@@ -63,12 +60,9 @@ public class AiMessage : Plugin
     {
         try
         {
-            var anotherBot = Interop.GetJsonElement("bot-help");
-            if (anotherBot == null)
-            {
-                throw new Exception("please specific bot-help in variables");
-            }
-            long qq = anotherBot.Value.GetInt64();
+            var anotherBot = Interop.GetJsonElement("bot-help") 
+                ?? throw new Exception("please specific bot-help in variables");
+            long qq = anotherBot.GetInt64();
             var solver = new ToolDef();
             solver.Function.Name = "turn_to";
             solver.Function.Description = "让智慧AI处理某问题";
@@ -83,7 +77,7 @@ public class AiMessage : Plugin
                 }
                 var chain = NapcatClient.Action.Actions.EmptyMessageChain;
                 chain.Add(NapcatClient.Message.At(qq.ToString()));
-                chain.Add(NapcatClient.Message.Text($" {parameters["question"].ToString()}"));
+                chain.Add(NapcatClient.Message.Text($" {parameters["question"]}"));
                 await Actions.SendGroupMessage(parameters.SpecialTag, chain);
                 return "求助成功，你不用解决这个问题了";
             };
@@ -131,7 +125,7 @@ public class AiMessage : Plugin
 
     }
     internal IAiClient aiClient;
-    bool isContainsNew(string message)
+    static bool IsContainsNew(string message)
     {
         var l=message.Split(" ");
         foreach(var item in l)
@@ -175,7 +169,7 @@ public class AiMessage : Plugin
         }
         _=PreprocessMessage(messages,groupId,nickname,data.message_id);
     }
-    async Task<string> extractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
+    async Task<string> ExtractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
     {
         StringBuilder sb = new();
         string? referenceMessage=null;
@@ -200,8 +194,11 @@ public class AiMessage : Plugin
             {
                 string referMessageId = item.Data["id"];
                 var referMessage=await Actions.GetMessageById(referMessageId);
-                var extractedMessage = await extractMessage(referMessage.Message, groupId, false);
-                referenceMessage=$"\n引用内容：\n{extractedMessage}";
+                if (referMessage != null)
+                {
+                    var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false);
+                    referenceMessage = $"\n引用内容：\n{extractedMessage}";
+                }
             }else if (item.MessageType == "json")
             {
                 JsonElement json = JsonSerializer.Deserialize<JsonElement>(item.Data["data"]);
@@ -240,7 +237,7 @@ public class AiMessage : Plugin
                     forwardString.AppendLine("---转发消息---");
                     foreach (var msg in referMessage.Messages)
                     {
-                        var extractedMessage = await extractMessage(msg.Message, groupId, false);
+                        var extractedMessage = await ExtractMessage(msg.Message, groupId, false);
                         forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
                     }
                     forwardString.AppendLine("------");
@@ -271,30 +268,30 @@ public class AiMessage : Plugin
         string text;
         try
         {
-            text = await extractMessage(chain, groupId, true);
+            text = await ExtractMessage(chain, groupId, true);
         }
         catch (Exception ex) {
             Logger.Error($"extract failed:{ex.Message}\n{ex.StackTrace}");
             return;
         }
         
-        if (text.StartsWith("/"))
+        if (text.StartsWith('/'))
         {
             return;
         }
         if (!string.IsNullOrWhiteSpace(text))
         {
 
-            if (isContainsNew(text))
+            if (IsContainsNew(text))
             {
                 text = text.Replace("#新对话", "");
                 Logger.Info("[New] " + text);
                 aiClient.Reset(groupId);
             }
-            _ = handleMessage(groupId, text, messageId, nickname);
+            _ = HandleMessage(groupId, text, messageId, nickname);
         }
     }
-    async Task handleMessage(long groupId,string message,long messageId,string sender)
+    async Task HandleMessage(long groupId,string message,long messageId,string sender)
     {
         await foreach(var result in  aiClient.Ask(message, groupId, sender,groupId))
         {
