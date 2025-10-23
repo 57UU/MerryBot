@@ -19,8 +19,7 @@ using ZhipuClient;
 //    Console.WriteLine($"out:{result}");
 //}
 
-var version = ViewVersion.GetGitInfo();
-Console.WriteLine(version);
+Environment.Exit(1001);
 
 Config.Initialize().Wait();
 var config=Config.Instance;
