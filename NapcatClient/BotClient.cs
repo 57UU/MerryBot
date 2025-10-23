@@ -1,4 +1,4 @@
-﻿using NapcatClient.Action;
+using NapcatClient.Action;
 using WebSocketSharp;
 using CommonLib;
 using System.Text.Json;
@@ -91,20 +91,21 @@ public class BotClient
             //return message
             Actions.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(e.Data)!);
         }
-        List<Message>? messageChain = null;
         if (message.TryGetValue("message_type", out JsonElement value))
         {
             var messageType = ((JsonElement)value).GetString();
-            if (message.TryGetValue("message", out JsonElement messageValue))
-            {
-                messageChain = Message.ParseMessageChain(messageValue);
-            }
+
             if (messageType == "group")
             {
                 ReceivedGroupMessage receivedGroupMessage = 
                     JsonSerializer.Deserialize<ReceivedGroupMessage>(e.Data)!;
                 var groupId = receivedGroupMessage.group_id;
-                receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(messageChain!);
+                var rawChain = receivedGroupMessage.message!;
+                foreach (var item in rawChain)
+                {
+                    item.ParseJsonDynamic();
+                }
+                receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
                 OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
             }
         }
