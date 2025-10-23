@@ -9,7 +9,7 @@ using static System.Net.Mime.MediaTypeNames;
 
 namespace BotPlugin;
 
-[PluginTag("version", "/version查看当前版本;/update更新软件")]
+[PluginTag("version", "/version查看当前版本;/update更新软件",priority:114514)]
 public class ViewVersion : Plugin
 {
     private string gitInfo;
@@ -113,6 +113,10 @@ public class ViewVersion : Plugin
             if (authorized == data.sender.user_id)
             {
                 _ = Update(groupId);
+            }
+            else
+            {
+                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
     }
