@@ -169,7 +169,7 @@ internal class Logic
                 Type[] constructorParameterTypes = [typeof(PluginInterop)];
                 logger.Debug($"find plugin {attribute.Name}");
                 ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes)
-                    ?? throw new PluginNotUsableException("can not find specific constructor"); ;
+                    ?? throw new PluginNotUsableException("can not find specific constructor");
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
                         qqGroupIDs,

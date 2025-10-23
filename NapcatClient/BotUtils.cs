@@ -43,6 +43,35 @@ public static class BotUtils
             item.ParseJsonDynamic();
         }
     }
+    /// <summary>
+    /// 拼接连续的text消息
+    /// </summary>
+    /// <param name="raw"></param>
+    /// <returns></returns>
+    internal static List<Message> ConcatAdjacencyText(List<Message> raw)
+    {
+        List<Message> result = [];
+        StringBuilder sb = new();
+        foreach( var i in raw)
+        {
+            if(i.MessageType == "text")
+            {
+                sb.Append(i.Data["text"]);
+            }
+            else
+            {
+                sb.Append(Message.Text(sb.ToString()));
+                sb.Clear();
+                result.Add(i);
+            }
+        }
+        var tail=sb.ToString();
+        if (!string.IsNullOrWhiteSpace(tail))
+        {
+            result.Add(Message.Text(tail));
+        }
+        return result;
+    }
 }
 
 public static class Extensions
