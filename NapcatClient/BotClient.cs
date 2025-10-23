@@ -26,6 +26,7 @@ public class BotClient
     }
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
+    bool IsClosed = false;
     public async Task Initialize()
     {
         await Task.Delay(100);
@@ -46,7 +47,10 @@ public class BotClient
     private void WebSocket_OnClose(object? sender, CloseEventArgs e)
     {
         Logger.Error($"websocket closed: {e.Reason}");
-        _=Reconnect();
+        if (!IsClosed)
+        {
+            _ = Reconnect();
+        }
     }
 
     private void WebSocket_OnError(object? sender, WebSocketSharp.ErrorEventArgs e)
