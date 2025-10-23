@@ -38,6 +38,10 @@ public class BotClient
     {
 
     }
+    public void Close()
+    {
+        WebSocket.Close();
+    }
 
     private void WebSocket_OnClose(object? sender, CloseEventArgs e)
     {

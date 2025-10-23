@@ -23,9 +23,14 @@ NLog.LogManager.Setup().LoadConfiguration(builder =>
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{fileName}.log");
 });
-LogManager.GetCurrentClassLogger().Debug("program start");
+var currentLogger= LogManager.GetCurrentClassLogger();
+currentLogger.Debug("program start");
 
 var config = Config.Instance;
+if (config.AuthorizedUser < 0)
+{
+    currentLogger.Warn("'authorized-user' is not valid");
+}
 
 var botClient = new BotClient(config.napcat_server, config.napcat_token);
 botClient.Logger = new NLogAdapter();

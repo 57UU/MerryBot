@@ -27,16 +27,7 @@ public class RunCommand : Plugin
         }
         terminal = new();
         terminal.logger = Logger;
-        var tmp = interop.GetLongVariable("authorized-user");
-        if (tmp == null)
-        {
-            Logger.Error("authorized is null, please specify 'authorized-user' parameter in setting.json/variables");
-            //IsEnable = false;
-        }
-        else
-        {
-            authorized = tmp.Value;
-        }
+        authorized=interop.AuthorizedUser;
         Logger.Info("shell plugin started");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)

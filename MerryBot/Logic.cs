@@ -19,6 +19,7 @@ internal class Logic
     private DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
     private List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+    public long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
     private List<long> qqGroupIDs {
         get {
             return Config.Instance.qq_groups;
@@ -178,7 +179,9 @@ internal class Logic
                             () => PluginStorageDatabase.GetPluginData(attribute.Name)
                             ),
                         botClient,
-                        Config.Instance.Variables
+                        Config.Instance.Variables,
+                        Shutdown,
+                        AuthorizedUser
                         );
                 // 创建构造函数参数数组
                 object[] constructorParameters = [interop];
@@ -221,6 +224,16 @@ internal class Logic
         {
             i.Instance.OnLoaded();
         }
+    }
+    /// <summary>
+    /// save data
+    /// </summary>
+    public void Shutdown(int exitCode)
+    {
+        PluginStorageDatabase.Close();
+        botClient.Close();
+        NLog.LogManager.Flush();
+        Environment.Exit(exitCode);
     }
 }
 class PluginLogger(string tag) : ISimpleLogger

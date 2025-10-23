@@ -3,6 +3,7 @@ global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
 using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -48,7 +49,9 @@ public record PluginInterop(
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
     BotClient BotClient,
-    Detail Variables
+    Detail Variables,
+    Action<int> Shutdown,
+    long AuthorizedUser
     )
 {
     /// <summary>

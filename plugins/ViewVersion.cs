@@ -1,18 +1,27 @@
 ﻿using NapcatClient;
+using OpenQA.Selenium;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace BotPlugin;
 
-[PluginTag("version", "使用 /version 来查看关于")]
+[PluginTag("version", "/version查看当前版本;/update更新软件")]
 public class ViewVersion : Plugin
 {
     private string gitInfo;
+    private long authorized;
     public ViewVersion(PluginInterop interop) : base(interop)
     {
-        gitInfo= GetGitInfo().Trim();
+        gitInfo= GetGitInfo().Result.Trim();
+        authorized = interop.AuthorizedUser;
+        if (authorized < 0)
+        {
+            Logger.Warn("authorized-user is not valid, '/update' will be disabled");
+        }
         Logger.Info("version-view plugin start");
     }
     /// <summary>
@@ -20,7 +29,7 @@ public class ViewVersion : Plugin
     /// </summary>
     /// <param name="arguments">Git 命令参数</param>
     /// <returns>命令输出</returns>
-    private static string ExecuteGitCommand(string arguments)
+    private static async Task<string> ExecuteGitCommand(string arguments)
     {
         var process = new Process
         {
@@ -34,18 +43,18 @@ public class ViewVersion : Plugin
             }
         };
         process.Start();
-        string output = process.StandardOutput.ReadToEnd().Trim();
-        process.WaitForExit();
+        string output = (await process.StandardOutput.ReadToEndAsync()).Trim();
+        await process.WaitForExitAsync();
         return output;
     }
 
-    public static string GetGitInfo()
+    public static async Task<string> GetGitInfo()
     {
         try
         {
             // 使用单个命令获取大部分信息
             string gitLogFormat = "--pretty=format:%H|%ci|%s";
-            string logOutput = ExecuteGitCommand($"log -1 {gitLogFormat}");
+            string logOutput = await ExecuteGitCommand($"log -1 {gitLogFormat}");
             
             if (logOutput.StartsWith("Error:"))
                 return $"获取Git信息失败: {logOutput}";
@@ -59,8 +68,8 @@ public class ViewVersion : Plugin
             string commitMessage = logParts[2];
             
             // 获取其他信息
-            string commitCount = ExecuteGitCommand("rev-list --count HEAD");
-            string userName = ExecuteGitCommand("config user.name");
+            string commitCount = await ExecuteGitCommand("rev-list --count HEAD");
+            string userName = await ExecuteGitCommand("config user.name");
             
             // 格式化返回信息
             StringBuilder gitInfo = new StringBuilder();
@@ -81,11 +90,30 @@ public class ViewVersion : Plugin
             throw new PluginNotUsableException($"获取Git信息失败: {ex.Message}");
         }
     }
+    private async Task<string> GitFetchMerge()
+    {
+        await ExecuteGitCommand("fetch");
+        var diff=await ExecuteGitCommand("merge");
+        return diff;
+    }
+    private async Task Update(long groupId)
+    {
+        var diff=await GitFetchMerge();
+        diff = diff.Replace("+", "").Replace("-", "").Trim();
+        await Actions.SendGroupMessage(groupId, $"{diff}\nrestarting...");
+        Interop.Shutdown(CommonLib.ExitCode.RESTART);
+        
+    } 
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/version"))
         {
             _ = Actions.SendGroupMessage(groupId, gitInfo);
+        }else if (IsStartsWith(chain, "/update")){
+            if (authorized == data.sender.user_id)
+            {
+                _ = Update(groupId);
+            }
         }
     }
 }

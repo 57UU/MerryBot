@@ -25,7 +25,7 @@ public class SQLiteDataProvider
 
     public void Flush()
     {
-
+       
     }
     protected Task<int> ExecuteSQLAsync(string sql)
     {
