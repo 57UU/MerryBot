@@ -1,6 +1,6 @@
 #!/bin/bash
 
-restart_code=1001
+restart_code=101
 # 获取当前脚本所在目录
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 

@@ -19,8 +19,6 @@ using ZhipuClient;
 //    Console.WriteLine($"out:{result}");
 //}
 
-Environment.Exit(1001);
-
 Config.Initialize().Wait();
 var config=Config.Instance;
 var model = ModelPreset.DeepSeekChat;

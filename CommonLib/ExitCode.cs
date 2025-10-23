@@ -6,5 +6,5 @@ namespace CommonLib;
 
 public static class ExitCode
 {
-    public const int RESTART = 1001;
+    public const int RESTART = 101;
 }
