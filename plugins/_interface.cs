@@ -39,6 +39,7 @@ public record PluginStorage(StringSaver Saver,StringGetter Getter)
     public async Task<T> Load<T>(T defaultValue) where T : class
     {
         var data = await Getter();
+        if(string.IsNullOrEmpty(data)) return defaultValue;
         return JsonSerializer.Deserialize<T>(data, _jsonSerializerOptions) ?? defaultValue;
     }
     public async Task Save<T>(T data) where T : class

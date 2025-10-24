@@ -28,7 +28,7 @@ public class ViewVersion : Plugin
         }
         Logger.Info("version-view plugin start");
     }
-    public async override void OnLoaded()
+    public async override Task OnLoaded()
     {
         data=await Interop.PluginStorage.Load<Data>(new Data());
         Logger.Debug("data loaded");

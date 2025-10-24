@@ -225,7 +225,13 @@ internal class Logic
         //加载插件的OnLoaded函数
         foreach (var i in plugins)
         {
-            i.Instance.OnLoaded();
+            i.Instance.OnLoaded().ContinueWith(task =>
+            {
+                if (task.Exception != null)
+                {
+                    logger.Error($"the plugin {i.PluginTag.Name} OnLoaded failed: {task.Exception}");
+                }
+            });
         }
     }
     /// <summary>

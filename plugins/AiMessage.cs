@@ -103,7 +103,7 @@ public class AiMessage : Plugin
             Logger.Warn($"load bot help failed:{e.Message}");
         }
     }
-    public override void OnLoaded()
+    public async override Task OnLoaded()
     {
         var shellPlugin = Interop.FindPlugin<RunCommand>();
         if (shellPlugin != null)

@@ -16,7 +16,7 @@ public class Help : Plugin
     public Help(PluginInterop interop) : base(interop)
     {
     }
-    public override void OnLoaded()
+    public async override Task OnLoaded()
     {
         pluginTags = Interop.PluginInfoGetter();
     }

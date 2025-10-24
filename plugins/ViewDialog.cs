@@ -16,7 +16,7 @@ public class ViewDialog : Plugin
         Logger.Info("ViewDialog plugin start");
     }
     AiMessage? aiMessage;
-    public override void OnLoaded()
+    public async override Task OnLoaded()
     {
         aiMessage=Interop.FindPlugin<AiMessage>()!;
     }

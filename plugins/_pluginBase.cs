@@ -82,9 +82,9 @@ public abstract class Plugin
     {
 
     }
-    public virtual void OnLoaded()
+    public virtual Task OnLoaded()
     {
-
+        return Task.CompletedTask;
     }
 
     private static JsonSerializerOptions _options = new JsonSerializerOptions() { IncludeFields = true };
