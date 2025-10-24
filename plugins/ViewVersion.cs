@@ -14,6 +14,10 @@ public class ViewVersion : Plugin
 {
     private string gitInfo;
     private long authorized;
+#pragma warning disable CS8625
+    //data will be loaded in `OnLoaded` function
+    private Data data=null;
+#pragma warning restore CS8625
     public ViewVersion(PluginInterop interop) : base(interop)
     {
         gitInfo= GetGitInfo().Result.Trim();
@@ -23,6 +27,19 @@ public class ViewVersion : Plugin
             Logger.Warn("authorized-user is not valid, '/update' will be disabled");
         }
         Logger.Info("version-view plugin start");
+    }
+    public async override void OnLoaded()
+    {
+        data=await Interop.PluginStorage.Load<Data>(new Data());
+        Logger.Debug("data loaded");
+        //if  contains update flag, then reply update info
+        if (data.UpdateByGroupId > 0)
+        {
+            await Actions.SendGroupMessage(data.UpdateByGroupId, $"updated successful\n{gitInfo}");
+            data.UpdateByGroupId = -1;
+            await Interop.PluginStorage.Save(data);
+        }
+
     }
     /// <summary>
     /// 执行 Git 命令并返回输出
@@ -74,7 +91,7 @@ public class ViewVersion : Plugin
             // 格式化返回信息
             StringBuilder gitInfo = new StringBuilder();
             //gitInfo.AppendLine($"Git信息:");
-            gitInfo.AppendLine($"Message: {commitMessage}");
+            gitInfo.AppendLine($"Change: {commitMessage}");
             gitInfo.AppendLine($"Date: {commitDate}");
             gitInfo.AppendLine($"Count: {commitCount}");
             gitInfo.AppendLine($"Commit: {commitHash.AsSpan(0, 12)}");
@@ -101,6 +118,9 @@ public class ViewVersion : Plugin
         var diff=await GitFetchMerge();
         diff = diff.Replace("+", "").Replace("-", "").Trim();
         await Actions.SendGroupMessage(groupId, $"{diff}\nrestarting...");
+        //store the update info
+        data.UpdateByGroupId = groupId;
+        await Interop.PluginStorage.Save(data);
         Interop.Shutdown(CommonLib.ExitCode.RESTART);
         
     } 
@@ -120,5 +140,8 @@ public class ViewVersion : Plugin
             }
         }
     }
+    class Data
+    {
+        public long UpdateByGroupId=-1;
+    }
 }
-

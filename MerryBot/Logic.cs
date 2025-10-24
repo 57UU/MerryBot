@@ -1,6 +1,7 @@
 ﻿using BotPlugin;
 using CommonLib;
 using NapcatClient;
+using OpenQA.Selenium.BiDi.Network;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,6 +21,7 @@ internal class Logic
     private List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     public long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
+    readonly string[] CommandLineArguments= Environment.GetCommandLineArgs();
     private List<long> qqGroupIDs {
         get {
             return Config.Instance.qq_groups;
@@ -181,7 +183,8 @@ internal class Logic
                         botClient,
                         Config.Instance.Variables,
                         Shutdown,
-                        AuthorizedUser
+                        AuthorizedUser,
+                        CommandLineArguments
                         );
                 // 创建构造函数参数数组
                 object[] constructorParameters = [interop];

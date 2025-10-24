@@ -6,6 +6,7 @@ using NapcatClient.Action;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading.Tasks.Dataflow;
 
 namespace BotPlugin;
 
@@ -25,11 +26,27 @@ public record PluginInfo(
     PluginInterop Interop
     );
 /// <summary>
-/// 插件存储
+/// 插件存储，建议使用其内置的json方法进行存储
 /// </summary>
 /// <param name="Saver"></param>
 /// <param name="Getter"></param>
-public record PluginStorage(StringSaver Saver,StringGetter Getter);
+public record PluginStorage(StringSaver Saver,StringGetter Getter)
+{
+    private static readonly JsonSerializerOptions _jsonSerializerOptions = new()
+    {
+        IncludeFields = true,
+    };
+    public async Task<T> Load<T>(T defaultValue) where T : class
+    {
+        var data = await Getter();
+        return JsonSerializer.Deserialize<T>(data, _jsonSerializerOptions) ?? defaultValue;
+    }
+    public async Task Save<T>(T data) where T : class
+    {
+        var json = JsonSerializer.Serialize(data, _jsonSerializerOptions);
+        await Saver(json);
+    }
+}
 public delegate Task StringSaver(string data);
 public delegate Task<string> StringGetter();
 public delegate IEnumerable<PluginInfo> PluginInfoGetter();
@@ -51,7 +68,8 @@ public record PluginInterop(
     BotClient BotClient,
     Detail Variables,
     Action<int> Shutdown,
-    long AuthorizedUser
+    long AuthorizedUser,
+    string[] CommandLineArguments
     )
 {
     /// <summary>
