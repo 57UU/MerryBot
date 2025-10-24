@@ -171,14 +171,7 @@ public class ViewVersion : Plugin
     private async Task Update(long groupId)
     {
         var (diff, commitMessages) = await GitFetchMerge();
-        diff = diff.Replace("+", "").Replace("-", "").Trim();
-
-        // 检测是否已经是最新的
-        if (diff.Contains("Already up to date") || diff.Contains("Already up-to-date") || commitMessages.Contains("当前代码已经是最新版本"))
-        {
-            await Actions.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新。");
-            return; // 不需要重启
-        }
+        diff = diff.Replace("+", "").Replace("-", "").Replace("()","").Trim();
 
         await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
