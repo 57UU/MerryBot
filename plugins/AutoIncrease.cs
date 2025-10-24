@@ -25,10 +25,9 @@ public class AutoIncrease : Plugin
     public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         var _lastMessage = lastMessage.GetValueOrDefault(groupId);
-        
+        var chainList = data.message;
         if (_lastMessage == null)
         {
-            var chainList = PluginUtils.MessageSpan2List(chain);
             _lastMessage = new()
             {
                 chain = chainList,
@@ -59,7 +58,6 @@ public class AutoIncrease : Plugin
             else
             {
                 //不是重复消息
-                var chainList = PluginUtils.MessageSpan2List(chain);
                 _lastMessage!.Renew(chainList, data.sender.user_id);
 
             }
