@@ -107,7 +107,7 @@ public class ViewVersion : Plugin
             throw new PluginNotUsableException($"获取Git信息失败: {ex.Message}");
         }
     }
-    private async Task<string> GitFetchMerge()
+    private static async Task<string> GitFetchMerge()
     {
         await ExecuteGitCommand("fetch");
         var diff=await ExecuteGitCommand("merge");

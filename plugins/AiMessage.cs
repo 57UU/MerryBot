@@ -17,7 +17,7 @@ namespace BotPlugin;
 [PluginTag("AI机器人", "键入 #新对话 来开启新对话",isIgnore:false)]
 public class AiMessage : Plugin
 {
-    RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
+    readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
         var model = ModelPreset.Glm_4_6;

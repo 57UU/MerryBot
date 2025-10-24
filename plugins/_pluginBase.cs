@@ -65,6 +65,26 @@ public abstract class Plugin
         return false;
     }
     /// <summary>
+    /// 检测消息链是否以prefix开头
+    /// </summary>
+    /// <param name="chain">消息链</param>
+    /// <param name="prefix">前缀</param>
+    /// <returns></returns>
+    public static bool IsStartsWith(IEnumerable<Message> chain, string prefix)
+    {
+        var first= chain.FirstOrDefault();
+        if (first!=null && first.MessageType == "text")
+        {
+            string text = first.Data["text"];
+            text = text.Trim();
+            if (text.StartsWith(prefix))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    /// <summary>
     /// 当有新消息来时，此方法会被调用
     /// </summary>
     /// <param name="chain">接收到的消息链</param>

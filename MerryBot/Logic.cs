@@ -17,12 +17,14 @@ namespace MerryBot;
 internal class Logic
 {
     readonly BotClient botClient;
-    private DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
-    private List<PluginInfo> plugins = new();
+    private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
+    private readonly List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     public static long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
     readonly string[] CommandLineArguments= Environment.GetCommandLineArgs();
-    private List<long> QqGroupIDs
+    private MainPlugin? mainPlugin;
+
+    private static List<long> QqGroupIDs
     {
         get {
             return Config.Instance.qq_groups;
@@ -34,18 +36,44 @@ internal class Logic
         LoadPlugins();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
     }
-
-    public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
+    bool IsTargeted(ReceivedGroupMessage data)
     {
-        if (!QqGroupIDs.Contains(groupId))
+        var chain = data.message;
+        var selfId = data.self_id;
+        bool isTargeted = false;
+        if (chain[0].MessageType == "at")
         {
+            string target = chain[0].Data["qq"];
+            if (target == selfId.ToString())
+            {
+                isTargeted = true;
+            }
+        }
+        return isTargeted;
+    }
+    public void MainPluginInvokeNotInGroup(long groupId, List<Message> chain, ReceivedGroupMessage data)
+    {
+        if (mainPlugin == null)
+        {
+            logger.Error("Main Plugin is not loaded!");
             return;
         }
+        if (IsTargeted(data))
+        {
+            mainPlugin.OnMessageMentionedNotInGroup(groupId, CollectionsMarshal.AsSpan(chain)[1..], data);
+        }
+    }
+    public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
+    {
         if (chain.Count == 0)
         {
             return;
         }
-        
+        if (!QqGroupIDs.Contains(groupId))
+        {
+            MainPluginInvokeNotInGroup(groupId, chain, data);
+            return;
+        }
         ReadOnlySpan<Message> span=CollectionsMarshal.AsSpan(chain);
         bool isTargeted = false;
         long selfId = BotUtils.GetSelfId(data);
@@ -68,14 +96,7 @@ internal class Logic
             return;
         }
 
-        if (chain[0].MessageType == "at")
-        {
-            string target = chain[0].Data["qq"];
-            if (target == selfId.ToString())
-            {
-                isTargeted = true;
-            }
-        }
+        isTargeted= IsTargeted(data);
 
         if (isTargeted)
         {
@@ -149,7 +170,7 @@ internal class Logic
     {
         List<(Type type, PluginTag attribute)> list = [];
         Assembly assembly = Assembly.GetAssembly(typeof(Plugin))!;
-        foreach (Type type in assembly.GetTypes())
+        foreach (Type type in assembly.GetTypes().Append(typeof(MainPlugin))) // add MainPlugin
         {
             PluginTag attribute = type.GetCustomAttribute<PluginTag>()!;
             if (attribute != null && !attribute.IsIgnore)
@@ -166,13 +187,12 @@ internal class Logic
         allPlugins.Sort((a, b) => {
             return a.attribute.Priority.CompareTo(b.attribute.Priority);
         });
+        Type[] constructorParameterTypes = [typeof(PluginInterop)];
         foreach (var (type,attribute) in allPlugins) {
             try
             {
-                Type[] constructorParameterTypes = [typeof(PluginInterop)];
                 logger.Debug($"find plugin {attribute.Name}");
-                ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes)
-                    ?? throw new PluginNotUsableException("can not find specific constructor");
+
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
                         QqGroupIDs,
@@ -187,11 +207,23 @@ internal class Logic
                         AuthorizedUser,
                         CommandLineArguments
                         );
-                // 创建构造函数参数数组
-                object[] constructorParameters = [interop];
 
-                // 使用构造函数创建对象
-                Plugin pluginInstance = (Plugin)constructorInfo!.Invoke(constructorParameters);
+                Plugin pluginInstance;
+                if (type == typeof(MainPlugin))
+                {
+                    mainPlugin = new MainPlugin(interop,this);
+                    pluginInstance= mainPlugin;
+                }
+                else
+                {
+                    ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes)
+                        ?? throw new PluginNotUsableException("can not find specific constructor");
+                    // 创建构造函数参数数组
+                    object[] constructorParameters = [interop];
+                    // 使用构造函数创建对象
+                    pluginInstance = (Plugin)constructorInfo!.Invoke(constructorParameters);
+                }
+                    
                 plugins.Add(
                     new PluginInfo(
                         pluginInstance,

@@ -25,7 +25,7 @@ public class HeruiSaying :Plugin
         {
             return;
         }
-        Actions.SendGroupMessage(groupId, PickOne());
+        _=Actions.SendGroupMessage(groupId, PickOne());
     }
     private string PickOne()
     {
