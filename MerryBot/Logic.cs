@@ -63,6 +63,7 @@ internal class Logic
             mainPlugin.OnMessageMentionedNotInGroup(groupId, CollectionsMarshal.AsSpan(chain)[1..], data);
         }
     }
+
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
     {
         if (chain.Count == 0)

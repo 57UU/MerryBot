@@ -15,8 +15,22 @@ internal class MainPlugin : Plugin
     {
         this.logic = logic;
     }
+    bool VerifyAuthority(long groupId, ReceivedGroupMessage data)
+    {
+        if (data.sender.user_id != Interop.AuthorizedUser)
+        {
+            _ = Actions.ReplyGroupMessage(groupId, data.message_id, "Permission Denied: Unauthorized");
+            return false;
+        }
+        return true;
+    }
     public void OnMessageMentionedNotInGroup(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
+        if(!VerifyAuthority(groupId, data))
+        {
+            return;
+        }
+
         if (IsStartsWith(chain, "/activate"))
         {
             Logger.Info($"execute activating on {groupId}");
@@ -35,6 +49,10 @@ internal class MainPlugin : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
+        if (!VerifyAuthority(groupId, data))
+        {
+            return;
+        }
         if (IsStartsWith(chain, "/deactivate"))
         {
             Logger.Info($"execute deactivating on {groupId}");
