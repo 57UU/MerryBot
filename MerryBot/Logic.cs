@@ -20,9 +20,10 @@ internal class Logic
     private DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
     private List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-    public long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
+    public static long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
     readonly string[] CommandLineArguments= Environment.GetCommandLineArgs();
-    private List<long> qqGroupIDs {
+    private List<long> QqGroupIDs
+    {
         get {
             return Config.Instance.qq_groups;
         }
@@ -36,7 +37,7 @@ internal class Logic
 
     public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
     {
-        if (!qqGroupIDs.Contains(groupId))
+        if (!QqGroupIDs.Contains(groupId))
         {
             return;
         }
@@ -174,7 +175,7 @@ internal class Logic
                     ?? throw new PluginNotUsableException("can not find specific constructor");
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
-                        qqGroupIDs,
+                        QqGroupIDs,
                         () => plugins,
                         new PluginStorage(
                             (s) => PluginStorageDatabase.StorePluginData(attribute.Name, s),

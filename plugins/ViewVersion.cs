@@ -35,7 +35,7 @@ public class ViewVersion : Plugin
         //if  contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
         {
-            await Actions.SendGroupMessage(data.UpdateByGroupId, $"updated successful\n{gitInfo}");
+            await Actions.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
             data.UpdateByGroupId = -1;
             await Interop.PluginStorage.Save(data);
         }

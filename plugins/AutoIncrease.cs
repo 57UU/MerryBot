@@ -20,7 +20,7 @@ public class AutoIncrease : Plugin
         });
     }
     //store each group
-    Dictionary<long, ChainWithSender> lastMessage = new();
+    private readonly Dictionary<long, ChainWithSender> lastMessage = [];
 
     public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {

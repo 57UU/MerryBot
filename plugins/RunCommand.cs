@@ -235,6 +235,7 @@ public class Terminal : IDisposable
             _process.Kill();
         }
         _process.Dispose();
+        GC.SuppressFinalize(this);
     }
     public static string EscapeForShell(string input)
     {

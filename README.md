@@ -12,6 +12,7 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
     114514,
     1919810
   ],
+  "authorized-user":114514,//授权用户qq号，插件可在高危操作时验证qq号
   "variables": {
     "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
     "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
@@ -37,11 +38,21 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 - 查看时间
 - 发送语音
 - 查看微博热搜
+- linux终端
 
 *: 网络访问相关funtion call 通过seleium操纵chrome（需要提前安装）实现。
 
 ## 锐言锐语
 随机返回一句herui老师的谆谆教诲
+
+## 自动加一
+当有刷屏消息时，自动发送刷屏信息。
+
+## 终端
+提供linux终端，需要配置merrybot用户且当前用户有权限切换到merrybot用户。
+## 快速更新
+自动执行`git fetch && git merge`，并以101状态码退出程序。
+配合`launch.sh`脚本可实现自动编译运行。
 
 # 插件开发
 1. 一个插件应当放在`plugins`项目的一个文件中

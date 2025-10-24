@@ -33,7 +33,7 @@ public static class Utils
             return null;
         }
     }
-    public static IEnumerable<string> readDir(string path)
+    public static IEnumerable<string> ReadDir(string path)
     {
         var realPath = path;
         DirectoryInfo dirInfo = new DirectoryInfo(realPath);
