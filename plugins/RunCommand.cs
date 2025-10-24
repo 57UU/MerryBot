@@ -75,7 +75,7 @@ public class RunCommand : Plugin
 }
 
 
-public class Terminal : IDisposable
+public partial class Terminal : IDisposable
 {
     private readonly Process _process;
     private readonly StreamWriter _writer;
@@ -250,11 +250,8 @@ public class Terminal : IDisposable
         if (string.IsNullOrWhiteSpace(input))
             return false;
 
-        // 常见的命令分隔符
-        string pattern = @"(\|\||&&)";
-
         // 找到第一个分隔符
-        var match = Regex.Match(input, pattern);
+        var match = _splitRegex().Match(input);
         return match.Success;
     }
     public static List<string> SplitCommands(string input)
@@ -325,4 +322,7 @@ public class Terminal : IDisposable
 
         return commands;
     }
+
+    [GeneratedRegex(@"(\|\||&&)")]
+    private static partial Regex _splitRegex();
 }

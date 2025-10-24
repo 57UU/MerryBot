@@ -10,7 +10,7 @@ using static System.Net.Mime.MediaTypeNames;
 namespace BotPlugin;
 
 [PluginTag("version", "/version查看当前版本;/update更新软件",priority:114514)]
-public class ViewVersion : Plugin
+public partial class ViewVersion : Plugin
 {
     private string gitInfo;
     private long authorized;
@@ -171,7 +171,7 @@ public class ViewVersion : Plugin
     private async Task Update(long groupId)
     {
         var (diff, commitMessages) = await GitFetchMerge();
-        diff = diff.Replace("+", "").Replace("-", "").Replace("()","").Trim();
+        diff = _redundantRegex().Replace(diff, "").Trim();
 
         await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
@@ -200,4 +200,7 @@ public class ViewVersion : Plugin
     {
         public long UpdateByGroupId=-1;
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]|\(\)")]
+    private static partial System.Text.RegularExpressions.Regex _redundantRegex();
 }
