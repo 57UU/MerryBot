@@ -107,17 +107,61 @@ public class ViewVersion : Plugin
             throw new PluginNotUsableException($"获取Git信息失败: {ex.Message}");
         }
     }
-    private static async Task<string> GitFetchMerge()
+    private static async Task<(string diff, string commitMessages)> GitFetchMerge()
     {
         await ExecuteGitCommand("fetch");
-        var diff=await ExecuteGitCommand("merge");
-        return diff;
+        var diff = await ExecuteGitCommand("merge");
+        
+        // 获取merge的commit messages
+        string commitMessages;
+        try
+        {
+            // 获取最近一次merge操作引入的所有commit
+            // 使用 ORIG_HEAD 可以获取merge前的HEAD位置
+            string mergeCommits = await ExecuteGitCommand("log ORIG_HEAD..HEAD --pretty=format:%s");
+            
+            if (string.IsNullOrWhiteSpace(mergeCommits))
+            {
+                // 如果ORIG_HEAD不可用，尝试获取最近5个commit
+                mergeCommits = await ExecuteGitCommand("log -5 --pretty=format:%s");
+            }
+            
+            if (string.IsNullOrWhiteSpace(mergeCommits))
+            {
+                commitMessages = "无法获取提交信息";
+            }
+            else
+            {
+                // 将多行提交信息格式化为更易读的形式
+                var lines = mergeCommits.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                if (lines.Length == 1)
+                {
+                    commitMessages = lines[0];
+                }
+                else
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"合并了 {lines.Length} 个提交:");
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        sb.AppendLine($"{i + 1}. {lines[i]}");
+                    }
+                    commitMessages = sb.ToString();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            commitMessages = $"获取提交信息时出错: {ex.Message}";
+        }
+        
+        return (diff, commitMessages);
     }
     private async Task Update(long groupId)
     {
-        var diff=await GitFetchMerge();
+        var (diff, commitMessages) = await GitFetchMerge();
         diff = diff.Replace("+", "").Replace("-", "").Trim();
-        await Actions.SendGroupMessage(groupId, $"{diff}\nrestarting...");
+        await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
         data.UpdateByGroupId = groupId;
         await Interop.PluginStorage.Save(data);
