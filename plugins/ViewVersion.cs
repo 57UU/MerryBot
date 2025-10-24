@@ -107,46 +107,57 @@ public class ViewVersion : Plugin
             throw new PluginNotUsableException($"获取Git信息失败: {ex.Message}");
         }
     }
-    private static async Task<(string diff, string commitMessages)> GitFetchMerge()
+    /// <summary>
+    /// 执行git fetch和merge操作，并获取合并前后的提交信息
+    /// </summary>
+    /// <returns>合并结果和提交信息</returns>
+    public static async Task<(string diff, string commitMessages)> GitFetchMerge()
     {
+        // 先获取当前HEAD的commit哈希值
+        string beforeCommit = await ExecuteGitCommand("rev-parse HEAD");
+        
+        // 执行fetch和merge
         await ExecuteGitCommand("fetch");
         var diff = await ExecuteGitCommand("merge");
         
-        // 获取merge的commit messages
+        // 获取合并后的HEAD
+        string afterCommit = await ExecuteGitCommand("rev-parse HEAD");
+        
         string commitMessages;
         try
         {
-            // 获取最近一次merge操作引入的所有commit
-            // 使用 ORIG_HEAD 可以获取merge前的HEAD位置
-            string mergeCommits = await ExecuteGitCommand("log ORIG_HEAD..HEAD --pretty=format:%s");
-            
-            if (string.IsNullOrWhiteSpace(mergeCommits))
+            // 如果前后commit相同，说明没有更新
+            if (beforeCommit.Trim() == afterCommit.Trim())
             {
-                // 如果ORIG_HEAD不可用，尝试获取最近5个commit
-                mergeCommits = await ExecuteGitCommand("log -5 --pretty=format:%s");
-            }
-            
-            if (string.IsNullOrWhiteSpace(mergeCommits))
-            {
-                commitMessages = "无法获取提交信息";
+                commitMessages = "当前代码已经是最新版本";
             }
             else
             {
-                // 将多行提交信息格式化为更易读的形式
-                var lines = mergeCommits.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (lines.Length == 1)
+                // 获取两个commit之间的所有提交
+                string rangeCommits = await ExecuteGitCommand($"log {beforeCommit.Trim()}..{afterCommit.Trim()} --pretty=format:%s");
+                
+                if (string.IsNullOrWhiteSpace(rangeCommits))
                 {
-                    commitMessages = lines[0];
+                    commitMessages = "没有新的提交信息";
                 }
                 else
                 {
-                    var sb = new StringBuilder();
-                    sb.AppendLine($"合并了 {lines.Length} 个提交:");
-                    for (int i = 0; i < lines.Length; i++)
+                    // 将多行提交信息格式化为更易读的形式
+                    var lines = rangeCommits.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length == 1)
                     {
-                        sb.AppendLine($"{i + 1}. {lines[i]}");
+                        commitMessages = lines[0];
                     }
-                    commitMessages = sb.ToString();
+                    else
+                    {
+                        var sb = new StringBuilder();
+                        sb.AppendLine($"合并了 {lines.Length} 个提交:");
+                        for (int i = 0; i < lines.Length; i++)
+                        {
+                            sb.AppendLine($"{i + 1}. {lines[i]}");
+                        }
+                        commitMessages = sb.ToString();
+                    }
                 }
             }
         }
@@ -161,6 +172,14 @@ public class ViewVersion : Plugin
     {
         var (diff, commitMessages) = await GitFetchMerge();
         diff = diff.Replace("+", "").Replace("-", "").Trim();
+
+        // 检测是否已经是最新的
+        if (diff.Contains("Already up to date") || diff.Contains("Already up-to-date") || commitMessages.Contains("当前代码已经是最新版本"))
+        {
+            await Actions.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新。");
+            return; // 不需要重启
+        }
+
         await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
         data.UpdateByGroupId = groupId;

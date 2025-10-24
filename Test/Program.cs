@@ -19,6 +19,11 @@ using ZhipuClient;
 //    Console.WriteLine($"out:{result}");
 //}
 
+var (a,b)=await ViewVersion.GitFetchMerge();
+Console.WriteLine(a);
+Console.WriteLine(b);
+
+
 Config.Initialize().Wait();
 var config=Config.Instance;
 var model = ModelPreset.DeepSeekChat;
