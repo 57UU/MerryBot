@@ -26,13 +26,12 @@ internal class MainPlugin : Plugin
     }
     public void OnMessageMentionedNotInGroup(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        if(!VerifyAuthority(groupId, data))
-        {
-            return;
-        }
-
         if (IsStartsWith(chain, "/activate"))
         {
+            if (!VerifyAuthority(groupId, data))
+            {
+                return;
+            }
             Logger.Info($"execute activating on {groupId}");
             var group = Config.Instance.qq_groups;
             if (group.Contains(groupId))
@@ -49,12 +48,12 @@ internal class MainPlugin : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        if (!VerifyAuthority(groupId, data))
-        {
-            return;
-        }
         if (IsStartsWith(chain, "/deactivate"))
         {
+            if (!VerifyAuthority(groupId, data))
+            {
+                return;
+            }
             Logger.Info($"execute deactivating on {groupId}");
             var result = Config.Instance.qq_groups.Remove(groupId);
             Task.Run(async () => {
