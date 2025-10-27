@@ -17,8 +17,9 @@ public class BotClient
         Uri url = new($"{address}?access_token={token}");
         WebSocket = new(url);
         this.Logger = logger;
-        WebSocket.ReconnectTimeout = TimeSpan.FromSeconds(3);
+        WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
+        WebSocket.DisconnectionHappened.Subscribe(WebSocket_Disconnected);
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
         WebSocket.Start();
         this.Actions = new Actions(WebSocket,Logger,this);
@@ -42,6 +43,13 @@ public class BotClient
     public void Close()
     {
         WebSocket.Dispose();
+    }
+    private async Task WebSocket_Disconnected(DisconnectionInfo d)
+    {
+        Logger.Warn($"websocket disconnect:{d.CloseStatus}");
+        //try reconnect
+        await Task.Delay(5000);
+        await WebSocket.Start();
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
