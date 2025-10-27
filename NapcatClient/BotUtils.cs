@@ -18,7 +18,7 @@ public static class BotUtils
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         };
     }
-    public static string Serilize<T>(T obj)
+    public static string Serialize<T>(T obj)
     {
         return JsonSerializer.Serialize<T>(obj, options);
     }

@@ -41,7 +41,7 @@ public class HeruiSaying :Plugin
         while (true) {
             await Update();
             Logger.Info("data loaded");
-            await Task.Delay(1000*60*5);//update every 5 min
+            await Task.Delay(1000*60*60);//update every 1 hour
         }
     }
     private async Task Update()

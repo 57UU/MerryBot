@@ -85,7 +85,10 @@ public class Message
     {
         foreach (var j in Data)
         {
-            Data[j.Key] = JsonUtils.GetActualValue(j.Value);
+            if (j.Value != null)
+            {
+                Data[j.Key] = JsonUtils.GetActualValue(j.Value);
+            } 
         }
     }
     public static Message Text(string text)

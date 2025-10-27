@@ -27,7 +27,7 @@ public class Actions
     {
         var echo = $"{echoCount++}";
         act.Echo = echo;
-        var json = BotUtils.Serilize(act);
+        var json = BotUtils.Serialize(act);
         Logger.Info($"sending: {json}");
         await Task.Run(() =>
         {
