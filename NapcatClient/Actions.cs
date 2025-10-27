@@ -2,16 +2,16 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using WebSocketSharp;
+using Websocket.Client;
 
 namespace NapcatClient.Action;
 
 public class Actions
 {
-    readonly WebSocket WebSocket;
+    readonly WebsocketClient WebSocket;
     readonly ISimpleLogger Logger;
     readonly BotClient bot;
-    public Actions(WebSocket WebSocket, ISimpleLogger logger, BotClient bot)
+    public Actions(WebsocketClient WebSocket, ISimpleLogger logger, BotClient bot)
     {
         this.WebSocket = WebSocket;
         Logger = logger;

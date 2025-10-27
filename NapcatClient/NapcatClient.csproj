@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="websocketsharp.core" Version="1.0.1" />
+    <PackageReference Include="Websocket.Client" Version="5.3.0" />
   </ItemGroup>
 
   <ItemGroup>

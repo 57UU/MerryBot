@@ -1,5 +1,4 @@
-﻿using Helpers;
-using NapcatClient;
+﻿using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
