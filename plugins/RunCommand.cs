@@ -1,6 +1,7 @@
 ﻿using CommonLib;
 using NapcatClient;
 using OpenQA.Selenium;
+using OpenQA.Selenium.BiDi.Input;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -58,14 +59,21 @@ public class RunCommand : Plugin
             {
                 text = text[1..];
             }
-            HandleCommand(text, groupId,data.message_id,isAuthorized);
+            _=HandleCommand(text, groupId,data.message_id,isAuthorized);
         }
     }
     internal Terminal terminal ;
-    async void HandleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
+    async Task HandleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
     {
         string result;
-        result = await terminal.RunCommandAutoTimeoutAsync(command,timeoutMs:1000);
+        try
+        {
+            result = await terminal.RunCommandAutoTimeoutAsync(command, timeoutMs: 2000);
+        }
+        catch (Exception e) { 
+            result = $"error:{e.Message}";
+        }
+        
         result = PluginUtils.ConstraintLength(result, 3000);
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);
@@ -76,23 +84,31 @@ public class RunCommand : Plugin
 
 public partial class Terminal : IDisposable
 {
-    private readonly Process _process;
-    private readonly StreamWriter _writer;
-    private readonly StreamReader _reader;
-    private readonly StreamReader _errorReader;
+    private Process _process=null;
+    private StreamWriter _writer=null;
+    private StreamReader _reader=null;
+    private StreamReader _errorReader=null;
     private readonly string _endMarker = "__END__";
     private readonly SemaphoreSlim mutex = new(1);
     public ISimpleLogger logger=ConsoleLogger.Instance;
 
-    bool isInitialized = false;
+    bool isGotoHome = false;
+    readonly string shell, arguments;
     public Terminal(string shell = "sudo", string arguments = "-u merrybot /bin/bash")
+    {
+        this.shell = shell;
+        this.arguments = arguments;
+        InitializeProcess();
+        logger.Info("bash created");
+    }
+    private void InitializeProcess()
     {
         _process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = shell,
-                Arguments=arguments,
+                Arguments = arguments,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -104,7 +120,19 @@ public partial class Terminal : IDisposable
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
-        logger.Info("bash created");
+        isGotoHome = false;
+    }
+    private void RestartProcess()
+    {
+        try
+        {
+            Dispose();
+            InitializeProcess();
+        }
+        catch (Exception e)
+        {
+            logger.Error($"shell error:{e.Message}");
+        }
     }
     public async Task<bool> IsBuiltinAsync(string command)
     {
@@ -113,7 +141,7 @@ public partial class Terminal : IDisposable
         logger.Trace($"test builtin result:{result}");
         return result == "builtin" || result == "keyword";
     }
-    public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 1000)
+    public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 2000)
     {
         if (IsContainMultipleCommands(command))
         {
@@ -139,13 +167,13 @@ public partial class Terminal : IDisposable
     /// <param name="command">要执行的命令</param>
     /// <param name="timeoutMs">超时毫秒数</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 1000)
+    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 2000)
     {
-        if (!isInitialized)
+        if (!isGotoHome)
         {
             await _writer.WriteLineAsync("cd ~");
             await _writer.FlushAsync();
-            isInitialized = true;
+            isGotoHome = true;
         }
         if (mutex.CurrentCount < 1)
         {
@@ -194,7 +222,12 @@ public partial class Terminal : IDisposable
             output = output.Trim().Replace("\t", " ");
             if (string.IsNullOrWhiteSpace(output))
             {
-                return "[无输出]";
+                output= "[无输出]";
+            }
+            if (_process.HasExited)
+            {
+                RestartProcess();
+                output +="\nProcess Exited. Restarting...";
             }
             return output;
         }
