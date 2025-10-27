@@ -20,7 +20,7 @@ public class BotClient
         WebSocket = new(url);
         WebSocket.ErrorReconnectTimeout = TimeSpan.FromSeconds(5);
         this.Logger = logger;
-        WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
+        WebSocket.ReconnectTimeout = TimeSpan.FromSeconds(10);// need heartbeats
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
         WebSocket.DisconnectionHappened.Subscribe(d=>_=WebSocket_Disconnected(d));
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
