@@ -18,6 +18,7 @@ public class BotClient
         Uri url = new($"{address}?access_token={token}");
 
         WebSocket = new(url);
+        WebSocket.ErrorReconnectTimeout = TimeSpan.FromSeconds(5);
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
@@ -48,11 +49,11 @@ public class BotClient
     }
     private async Task WebSocket_Disconnected(DisconnectionInfo d)
     {
-        Logger.Warn($"websocket disconnect:{d.CloseStatus}");
+        Logger.Warn($"websocket disconnect:{d.CloseStatusDescription}");
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
-        Logger.Warn($"websocket reconnect:{reconnectionInfo}");
+        Logger.Warn($"websocket reconnect:{reconnectionInfo.Type}");
     }
 
     private void WebSocket_OnMessage(string? text)
