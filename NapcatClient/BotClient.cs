@@ -23,7 +23,7 @@ public class BotClient
                 KeepAliveInterval = TimeSpan.FromSeconds(5),
             }
         });
-        WebSocket = new(url, factory);
+        WebSocket = new(url);
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
@@ -55,9 +55,6 @@ public class BotClient
     private async Task WebSocket_Disconnected(DisconnectionInfo d)
     {
         Logger.Warn($"websocket disconnect:{d.CloseStatus}");
-        //try reconnect
-        await Task.Delay(5000);
-        await WebSocket.Reconnect();
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
