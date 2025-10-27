@@ -1,6 +1,7 @@
 using CommonLib;
 using NapcatClient.Action;
 using System;
+using System.Net.WebSockets;
 using System.Text.Json;
 using Websocket.Client;
 namespace NapcatClient;
@@ -15,13 +16,20 @@ public class BotClient
     public BotClient(string address, string token, ISimpleLogger logger)
     {
         Uri url = new($"{address}?access_token={token}");
-        WebSocket = new(url);
+        var factory = new Func<ClientWebSocket>(() => new ClientWebSocket
+        {
+            Options =
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(5),
+            }
+        });
+        WebSocket = new(url, factory);
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
         WebSocket.DisconnectionHappened.Subscribe(d=>_=WebSocket_Disconnected(d));
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
-        WebSocket.Start();
+        WebSocket.Start().Wait();
         this.Actions = new Actions(WebSocket,Logger,this);
         Initialize().Wait();
     }
@@ -49,7 +57,7 @@ public class BotClient
         Logger.Warn($"websocket disconnect:{d.CloseStatus}");
         //try reconnect
         await Task.Delay(5000);
-        await WebSocket.Start();
+        await WebSocket.Reconnect();
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
