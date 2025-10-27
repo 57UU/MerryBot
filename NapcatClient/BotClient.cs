@@ -16,13 +16,7 @@ public class BotClient
     public BotClient(string address, string token, ISimpleLogger logger)
     {
         Uri url = new($"{address}?access_token={token}");
-        var factory = new Func<ClientWebSocket>(() => new ClientWebSocket
-        {
-            Options =
-            {
-                KeepAliveInterval = TimeSpan.FromSeconds(5),
-            }
-        });
+
         WebSocket = new(url);
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);

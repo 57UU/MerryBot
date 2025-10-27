@@ -1,5 +1,6 @@
 ﻿using BotPlugin;
 using CommonLib;
+using DataProvider;
 using NapcatClient;
 using OpenQA.Selenium.BiDi.Network;
 using System;
@@ -17,7 +18,7 @@ namespace MerryBot;
 internal class Logic
 {
     readonly BotClient botClient;
-    private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase = new();
+    private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase;
     private readonly List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     public static long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
@@ -30,9 +31,10 @@ internal class Logic
             return Config.Instance.qq_groups;
         }
     }
-    public Logic(BotClient botClient)
+    public Logic(BotClient botClient,string dbPath)
     {
         this.botClient = botClient;
+        PluginStorageDatabase = new(dbPath);
         LoadPlugins();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
     }

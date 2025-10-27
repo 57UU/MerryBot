@@ -4,24 +4,27 @@ using MerryBot;
 using NapcatClient;
 using NLog;
 
-string? settingPath = Environment.GetEnvironmentVariable("MR_BOT_SETTING");
-if(settingPath != null)
+string? dataPath = Environment.GetEnvironmentVariable("MERRY_BOT");
+string logFileDir = "log";
+string dbPath = "plugin_data.db";
+if (dataPath != null)
 {
-    Config.SettingFile= settingPath;
+    Config.SettingFile = Path.Combine(dataPath, "setting.json");
+    logFileDir = Path.Combine(dataPath, logFileDir);
+    dbPath=Path.Combine(dataPath, dbPath);
 }
+if (!Directory.Exists(logFileDir))
+{
+    Console.WriteLine("log directory created");
+}
+var logFilePath=Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
 Config.Initialize().Wait();
 //init logger
-var fileName = Utils.GenerateFileNameByCurrentTime();
-string? logPath = Environment.GetEnvironmentVariable("MR_BOT_LOG_DIR");
-if(logPath != null)
-{
-    fileName = Path.Combine(logPath, fileName);
-}
 NLog.LogManager.Setup().LoadConfiguration(builder =>
 {
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{fileName}.log");
+    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{logFilePath}.log");
 });
 var currentLogger= LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
@@ -36,7 +39,7 @@ var botClient = new BotClient(config.napcat_server, config.napcat_token);
 botClient.Logger = new NLogAdapter();
 
 
-Logic logic = new Logic(botClient);
+Logic logic = new Logic(botClient, dbPath);
 
 
 
