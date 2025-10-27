@@ -19,7 +19,7 @@ public class BotClient
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromHours(6);
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
-        WebSocket.DisconnectionHappened.Subscribe(WebSocket_Disconnected);
+        WebSocket.DisconnectionHappened.Subscribe(d=>_=WebSocket_Disconnected(d));
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
         WebSocket.Start();
         this.Actions = new Actions(WebSocket,Logger,this);
