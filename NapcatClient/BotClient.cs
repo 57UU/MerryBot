@@ -22,7 +22,15 @@ public class BotClient
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromSeconds(10);// need heartbeats
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
-        WebSocket.DisconnectionHappened.Subscribe(d=>_=WebSocket_Disconnected(d));
+        WebSocket.DisconnectionHappened.Subscribe(d => {
+            _ = WebSocket_Disconnected(d)
+            .ContinueWith(result => {
+                if (result.Exception != null)
+                {
+                    logger.Error($"MessageReceive:{result.Exception.Message}");
+                }
+            });
+        });
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
         WebSocket.Start().Wait();
         this.Actions = new Actions(WebSocket,Logger,this);
@@ -30,7 +38,6 @@ public class BotClient
     }
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
-    bool IsClosed = false;
     public async Task Initialize()
     {
         await Task.Delay(100);

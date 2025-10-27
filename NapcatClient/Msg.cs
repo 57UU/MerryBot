@@ -46,7 +46,7 @@ public class Message
             Str.At => (string)Data["qq"],
             Str.Image => (string)Data["file"],
             Str.Reply => (string)Data["id"],
-            Str.Face => (string)Data["face"],
+            Str.Face => (string)Data["id"],
             Str.Dice => (string)Data["result"],
             Str.Rps => (string)Data["result"],
             Str.Poker => $"{Data["type"]}->{Data["id"]}",
@@ -83,12 +83,22 @@ public class Message
     }
     internal void ParseJsonDynamic()
     {
+        //discard null
+        List<string> nullKeys = new();
         foreach (var j in Data)
         {
-            if (j.Value != null)
+            if(j.Value is null)
+            {
+                nullKeys.Add(j.Key);
+            }
+            else
             {
                 Data[j.Key] = JsonUtils.GetActualValue(j.Value);
-            } 
+            }  
+        }
+        foreach (var j in nullKeys)
+        {
+            Data.Remove(j);
         }
     }
     public static Message Text(string text)
