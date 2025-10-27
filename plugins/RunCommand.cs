@@ -84,11 +84,14 @@ public class RunCommand : Plugin
 
 public partial class Terminal : IDisposable
 {
+#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     private Process _process=null;
-    private StreamWriter _writer=null;
-    private StreamReader _reader=null;
-    private StreamReader _errorReader=null;
-    private readonly string _endMarker = "__END__";
+    private StreamWriter _writer = null;
+    private StreamReader _reader = null;
+    private StreamReader _errorReader = null;
+#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+
+    private readonly string _endMarker = $"_END_{Guid.NewGuid()}";
     private readonly SemaphoreSlim mutex = new(1);
     public ISimpleLogger logger=ConsoleLogger.Instance;
 
@@ -180,7 +183,6 @@ public partial class Terminal : IDisposable
             return "请等待上一个命令执行";
         }
         await mutex.WaitAsync();
-        string marker = $"{_endMarker}_{Guid.NewGuid()}";
 
         // 用 Linux 的 timeout 包装
         float sec = timeoutMs / 1000.0f;
@@ -194,7 +196,7 @@ public partial class Terminal : IDisposable
         {
             fullCommand = $"{command};";
         }
-        fullCommand = $"{fullCommand}echo -e '\\n{marker}\\n';echo -e '\\n{marker}\\n' >&2";
+        fullCommand = $"{fullCommand}echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2";
 
         logger.Trace($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
@@ -203,8 +205,8 @@ public partial class Terminal : IDisposable
 
         try
         {
-            var readStandardOutTask = _readOutput(_reader, marker)!;
-            var readErrorTask = _readOutput(_errorReader, marker)!;
+            var readStandardOutTask = _readOutput(_reader, _endMarker)!;
+            var readErrorTask = _readOutput(_errorReader, _endMarker)!;
             await Task.WhenAll(readStandardOutTask, readErrorTask);
 
             var _standardOutTrim = readStandardOutTask.Result!.Trim();
