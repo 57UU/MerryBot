@@ -170,7 +170,7 @@ public partial class Terminal : IDisposable
     /// <param name="command">要执行的命令</param>
     /// <param name="timeoutMs">超时毫秒数</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 2000)
+    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 2000,bool useHardTimeout=false)
     {
         if (!isGotoHome)
         {
@@ -202,15 +202,25 @@ public partial class Terminal : IDisposable
         await _writer.WriteLineAsync(fullCommand);
         await _writer.FlushAsync();
 
+        var ctsToken = new CancellationTokenSource();
+        if (useHardTimeout)
+        {
+            ctsToken.CancelAfter(timeoutMs);
+        }
 
         try
         {
-            var readStandardOutTask = _readOutput(_reader, _endMarker)!;
-            var readErrorTask = _readOutput(_errorReader, _endMarker)!;
+            var readStandardOutTask = _readOutput(_reader, _endMarker,ctsToken.Token)!;
+            var readErrorTask = _readOutput(_errorReader, _endMarker,ctsToken.Token)!;
             await Task.WhenAll(readStandardOutTask, readErrorTask);
 
-            var _standardOutTrim = readStandardOutTask.Result!.Trim();
-            var _errTrim = readErrorTask.Result!.Trim();
+            var (_standardOutTrim,cancelled) = readStandardOutTask.Result;
+            var (_errTrim,cancelled2) = readErrorTask.Result;
+            _standardOutTrim = _standardOutTrim.Trim();
+            _errTrim = _errTrim.Trim();
+
+            cancelled = cancelled || cancelled2;
+
             string output;
             if (string.IsNullOrWhiteSpace(_errTrim))
             {
@@ -225,6 +235,14 @@ public partial class Terminal : IDisposable
             if (string.IsNullOrWhiteSpace(output))
             {
                 output= "[无输出]";
+            }
+            if(cancelled){
+                if(TryKillProcess()){
+                    output +="\n命令执行时间过长，终止shell";
+                }
+                else{
+                    output +="\n命令执行时间过长，终止shell失败";
+                }
             }
             if (_process.HasExited)
             {
@@ -241,25 +259,47 @@ public partial class Terminal : IDisposable
             mutex.Release();
         }
     }
-    private static async Task<string> _readOutput(StreamReader reader,string endMarker)
+    private bool TryKillProcess()
+    {
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill();
+                return true;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // 记录日志
+            return false;
+        }
+    }
+    private static async Task<(string content,bool isCancelled)> _readOutput(StreamReader reader,string endMarker,CancellationToken token)
     {
         var sb = new StringBuilder();
-        while (true)
-        {
-            string? line = await reader.ReadLineAsync();
-            //logger.Info($"line received: {line}");
-            if (line == null) break;
-
-            if (line.Trim() == endMarker)
+        try{
+            while (true)
             {
-                //logger.Info("end reached");
-                break;
+                string? line = await reader.ReadLineAsync(token);
+                //logger.Info($"line received: {line}");
+                if (line == null) break;
+
+                if (line.Trim() == endMarker)
+                {
+                    //logger.Info("end reached");
+                    break;
+                }
+
+
+                sb.AppendLine(line);
             }
-
-
-            sb.AppendLine(line);
+        }catch(OperationCanceledException)
+        {
+            return (sb.ToString(),true);
         }
-        return sb.ToString();
+        return (sb.ToString(),false);
     }
 
     public void Dispose()

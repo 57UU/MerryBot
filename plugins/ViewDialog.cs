@@ -56,7 +56,7 @@ public class ViewDialog : Plugin
                     else if (item.Role == ZhipuAi.ASSISTANT) { 
                         var item2 = item as AssistantMessage;
                         sb.Append("assistant: " + ConstraintLength(item.Content.Trim()));
-                        if(item2?.ToolCalls!=null && item2.ToolCalls.Count>0)
+                        if(item2?.ToolCalls !=null && item2.ToolCalls.Count>0)
                         {
                             foreach(var i in item2.ToolCalls)
                             {
