@@ -20,7 +20,16 @@ public class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     public AiMessage(PluginInterop interop) : base(interop)
     {
-        var model = ModelPreset.Glm_4_6;
+        //display available model
+        ModelPreset.DisplayAllModels();
+        var model = ModelPreset.GetModelByName(
+            interop.GetVariable<string>("llm-model")
+            );
+        if (model == null)
+        {
+            Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
+            model = ModelPreset.Glm_4_5_Free;
+        }
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key) 
@@ -110,13 +119,14 @@ public class AiMessage : Plugin
             var terminal = new Terminal();
             //add Linux shell
             var shell = new ToolDef();
+            int timeout = 5;//second
             shell.Function.Name = "shell";
-            shell.Function.Description = "执行Linux bash shell命令.(时间限制为5s)";
+            shell.Function.Description = $"执行Linux bash shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) => {
                 return await terminal.RunCommandAsync(
                     parameters["command"].GetString()!,
-                    timeoutMs:5000,
+                    timeoutMs: timeout*1000,
                     useHardTimeout:true
                     );
             };
@@ -124,7 +134,7 @@ public class AiMessage : Plugin
         }
         else
         {
-            Logger.Warn("shell plugin not found, ai can not use it");
+            Logger.Warn("only Linux shell is supported, ai can not use it");
         }
 
     }
