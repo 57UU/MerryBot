@@ -68,7 +68,7 @@ public class RunCommand : Plugin
         string result;
         try
         {
-            result = await terminal.RunCommandAutoTimeoutAsync(command, timeoutMs: 2000);
+            result = await terminal.RunCommandAsync(command, timeoutMs: 2000,useHardTimeout:true);
         }
         catch (Exception e) { 
             result = $"error:{e.Message}";
@@ -139,11 +139,17 @@ public partial class Terminal : IDisposable
     }
     public async Task<bool> IsBuiltinAsync(string command)
     {
-        var result = await RunCommandAsync($"type -t {command}"
-            ,false, timeoutMs: -1);
+        var result = await RunCommandAsync($"type -t {command}", timeoutMs: -1);
         logger.Trace($"test builtin result:{result}");
         return result == "builtin" || result == "keyword";
     }
+    /// <summary>
+    /// 自动检测是否需要启用timeout，但shell兼容性有限
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="timeoutMs"></param>
+    /// <returns></returns>
+    [Obsolete]
     public async Task<string> RunCommandAutoTimeoutAsync(string command, int timeoutMs = 2000)
     {
         if (IsContainMultipleCommands(command))
@@ -158,7 +164,7 @@ public partial class Terminal : IDisposable
             var isBuiltin = await IsBuiltinAsync(c);
             var useTimeout = !isBuiltin;
             logger.Info($"type is builtin? {isBuiltin}");
-            var result1= await RunCommandAsync(c, useTimeout, timeoutMs);
+            var result1= await RunCommandAsync(c, timeoutMs,useSoftTimeout: useTimeout);
             sb.AppendLine(result1.Replace("\n"," "));
         }
         return sb.ToString().TrimEnd();
@@ -170,7 +176,7 @@ public partial class Terminal : IDisposable
     /// <param name="command">要执行的命令</param>
     /// <param name="timeoutMs">超时毫秒数</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command,bool useTimeout, int timeoutMs = 2000,bool useHardTimeout=false)
+    public async Task<string> RunCommandAsync(string command, int timeoutMs = 2000, bool useSoftTimeout=false,bool useHardTimeout=false)
     {
         if (!isGotoHome)
         {
@@ -188,7 +194,7 @@ public partial class Terminal : IDisposable
         float sec = timeoutMs / 1000.0f;
 
         string fullCommand;
-        if (useTimeout)
+        if (useSoftTimeout)
         {
             fullCommand = $"timeout -k 0.5s {sec}s {command}|| ([ $? -eq 124 ] && echo \"timeout:{sec}s\";); ";
         }
@@ -205,7 +211,7 @@ public partial class Terminal : IDisposable
         var ctsToken = new CancellationTokenSource();
         if (useHardTimeout)
         {
-            ctsToken.CancelAfter(timeoutMs);
+            ctsToken.CancelAfter(timeoutMs+500);
         }
 
         try
@@ -237,7 +243,7 @@ public partial class Terminal : IDisposable
                 output= "[无输出]";
             }
             if(cancelled){
-                if(TryKillProcess()){
+                if(await TryKillProcessAsync()){
                     output +="\n命令执行时间过长，终止shell";
                 }
                 else{
@@ -259,20 +265,21 @@ public partial class Terminal : IDisposable
             mutex.Release();
         }
     }
-    private bool TryKillProcess()
+    private async Task<bool> TryKillProcessAsync()
     {
         try
         {
             if (!_process.HasExited)
             {
                 _process.Kill();
+                await _process.WaitForExitAsync();
                 return true;
             }
             return false;
         }
         catch (Exception ex)
         {
-            // 记录日志
+            logger.Error($"bash exit failed {ex.Message}");
             return false;
         }
     }

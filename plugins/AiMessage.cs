@@ -108,13 +108,17 @@ public class AiMessage : Plugin
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var terminal = new Terminal();
-            //add linux shell
+            //add Linux shell
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.Function.Description = "执行Linux bash shell命令.";
+            shell.Function.Description = "执行Linux bash shell命令.(时间限制为5s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) => {
-                return await terminal.RunCommandAsync(parameters["command"].GetString()!,false,useHardTimeout:true);
+                return await terminal.RunCommandAsync(
+                    parameters["command"].GetString()!,
+                    timeoutMs:5000,
+                    useHardTimeout:true
+                    );
             };
             aiClient.RegisterTool(shell);
         }

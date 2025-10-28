@@ -21,8 +21,9 @@ public class ViewDialog : Plugin
         aiMessage=Interop.FindPlugin<AiMessage>()!;
     }
     const int lengthConstraint = 30;
-    static string ConstraintLength(string s)
+    static string ConstraintLength(string? s)
     {
+        if (s == null) return string.Empty;
         if (s.Length > lengthConstraint)
         {
             s= string.Concat(s.AsSpan(0, lengthConstraint), "...");
