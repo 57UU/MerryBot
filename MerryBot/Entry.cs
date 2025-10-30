@@ -1,4 +1,4 @@
-﻿
+
 
 using MerryBot;
 using NapcatClient;
@@ -38,12 +38,24 @@ if (config.AuthorizedUser < 0)
     currentLogger.Warn("'authorized-user' is not valid");
 }
 
-var botClient = new BotClient(config.napcat_server, config.napcat_token);
+var botClient = new BotClient(config.NapcatServer, config.NapcatToken);
 botClient.Logger = new NLogAdapter();
 
 
 Logic logic = new Logic(botClient, dbPath);
 
+// 使用 CancellationTokenSource 来控制程序生命周期
+using var cts = new CancellationTokenSource();
 
+// 处理 Ctrl+C 信号，优雅地关闭程序
+Console.CancelKeyPress += (sender, e) =>
+{
+    e.Cancel = true; // 防止进程立即终止
+    currentLogger.Info("Shutdown signal received, closing...");
+    cts.Cancel();
+};
 
-await Utils.WaitForever();
+await Utils.WaitForShutdownAsync(cts.Token);
+
+currentLogger.Info("Application is shutting down...");
+logic.Shutdown();

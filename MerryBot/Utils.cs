@@ -49,11 +49,26 @@ public static class Utils
         var t = DateTime.Now;
         return $"{t.Year}-{t.Month}-{t.Day}_{t.Hour}-{t.Minute}-{t.Second}";
     }
+    
+    // 旧方法，保留以保持向后兼容
+    [Obsolete("Use WaitForShutdownAsync instead for more elegant async shutdown handling")]
     public async static Task WaitForever()
     {
         while (true)
         {
             await Task.Delay(int.MaxValue);
+        }
+    }
+    
+    public static async Task WaitForShutdownAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常的取消，不需要处理
         }
     }
 }

@@ -58,9 +58,12 @@ public class Config
         Instance = i;
 
     }
-    public string napcat_server = "ws://<host>:<port>/";
-    public string napcat_token = "napcat";
-    public List<long> qq_groups = [];
+    [JsonPropertyName("napcat_server")]
+    public string NapcatServer = "ws://<host>:<port>/";
+    [JsonPropertyName("napcat_token")]
+    public string NapcatToken = "napcat";
+    [JsonPropertyName("qq_groups")]
+    public List<long> QqGroups = [];
     [JsonPropertyName("authorized-user")]
     public long AuthorizedUser = -1;
     [JsonPropertyName("variables")]

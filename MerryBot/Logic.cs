@@ -28,7 +28,7 @@ internal class Logic
     private static List<long> QqGroupIDs
     {
         get {
-            return Config.Instance.qq_groups;
+            return Config.Instance.QqGroups;
         }
     }
     public Logic(BotClient botClient,string dbPath)
@@ -271,13 +271,13 @@ internal class Logic
         }
     }
     /// <summary>
-    /// save data
+    /// save data and shutdown
     /// </summary>
-    public void Shutdown(int exitCode)
+    public void Shutdown(int exitCode=0)
     {
         PluginStorageDatabase.Close();
         botClient.Close();
-        NLog.LogManager.Flush();
+        NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);
     }
 }
