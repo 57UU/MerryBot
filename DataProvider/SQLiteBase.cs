@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,9 +10,10 @@ namespace DataProvider;
 public class SQLiteDataProvider
 {
     protected SqliteConnection dbConn;
+    private readonly Dictionary<string, SqliteCommand> _preparedCommands = new Dictionary<string, SqliteCommand>();
+    
     public SQLiteDataProvider(string databaseName)
     {
-
         dbConn = new($"Data Source={databaseName}");
         sqlBuilder = new SQLBuilder(dbConn);
         dbConn.Open();
@@ -20,6 +21,13 @@ public class SQLiteDataProvider
 
     public void Close()
     {
+        // 清理所有预编译命令
+        foreach (var command in _preparedCommands.Values)
+        {
+            command.Dispose();
+        }
+        _preparedCommands.Clear();
+        
         dbConn.Close();
     }
 
@@ -27,13 +35,44 @@ public class SQLiteDataProvider
     {
        
     }
+    
+    // 预编译SQL语句
+    protected SqliteCommand PrepareStatement(string sql)
+    {
+        if (_preparedCommands.TryGetValue(sql, out var existingCommand))
+        {
+            // 清除之前的参数
+            existingCommand.Parameters.Clear();
+            return existingCommand;
+        }
+        
+        var command = new SqliteCommand(sql, dbConn);
+        _preparedCommands[sql] = command;
+        return command;
+    }
+    
+    // 使用预编译语句执行SQL
+    protected async Task<int> ExecutePreparedAsync(string sql, Action<SqliteCommand> parameterSetup)
+    {
+        var command = PrepareStatement(sql);
+        parameterSetup(command);
+        return await ExecuteSQLAsync(command);
+    }
+    
+    // 使用预编译语句读取数据
+    protected async Task<SqliteDataReader> ReadPreparedAsync(string sql, Action<SqliteCommand> parameterSetup)
+    {
+        var command = PrepareStatement(sql);
+        parameterSetup(command);
+        return await ReadLineAsync(command);
+    }
+
     protected Task<int> ExecuteSQLAsync(string sql)
     {
         var command = new SqliteCommand(sql, dbConn);
         return ExecuteSQLAsync(command);
-
-
     }
+    
     protected async Task<int> ExecuteSQLAsync(SqliteCommand command)
     {
         try
@@ -44,17 +83,19 @@ public class SQLiteDataProvider
         {
             throw new DatabaseException("Server SQL exception",e);
         }
-
     }
+    
     protected Task<int> ExecuteSQLAsync(_builder builder)
     {
         return ExecuteSQLAsync(builder.Command);
     }
+    
     protected Task<SqliteDataReader> ReadLineAsync(string sql)
     {
         SqliteCommand command = new SqliteCommand(sql, dbConn);
         return ReadLineAsync(command);
     }
+    
     protected Task<SqliteDataReader> ReadLineAsync(_builder builder)
     {
         return ReadLineAsync(builder.Command);
@@ -69,16 +110,19 @@ public class SQLiteDataProvider
     {
         return ReadOneLineAsync(new SqliteCommand(sql, dbConn));
     }
+    
     protected async Task<SqliteDataReader> ReadOneLineAsync(SqliteCommand command)
     {
         var a =await ReadLineAsync(command);
         await a.ReadAsync();
         return a;
     }
+    
     protected Task<SqliteDataReader> ReadOneLineAsync(_builder builder)
     {
         return ReadOneLineAsync(builder.Command);
     }
+    
     public async Task RemoveAll()
     {
         GetAllTables().GetAsyncEnumerator().Current.ToArray();
@@ -89,6 +133,7 @@ public class SQLiteDataProvider
         }
         await Task.WhenAll(tasks.ToArray());
     }
+    
     protected async IAsyncEnumerable<string> GetAllTables()
     {
         var all_tables = "SELECT name FROM sqlite_master WHERE type='table' order by name";
@@ -99,19 +144,21 @@ public class SQLiteDataProvider
         }
 
     }
+    
     protected async Task<bool> IsTableExists(string tableName)
     {
         var sql = $"SELECT name FROM sqlite_master WHERE name='{tableName}' AND type='table'";
         return await (await ReadLineAsync(sql)).ReadAsync();
     }
+    
     protected SQLBuilder sqlBuilder;
-
 
     protected _builder BuildSQL(string sql)
     {
         return sqlBuilder.build(sql);
     }
 }
+
 public class SQLBuilder
 {
     SqliteConnection conn;
@@ -123,8 +170,8 @@ public class SQLBuilder
     {
         return new _builder(sql, conn);
     }
-
 }
+
 public class _builder
 {
     public SqliteCommand Command { get; private set; }
@@ -137,8 +184,8 @@ public class _builder
         Command.Parameters.AddWithValue(parameter, value);
         return this;
     }
-
 }
+
 public class DatabaseException : Exception
 {
     public DatabaseException(string message,Exception? inner=null) : base(message,inner) { }
