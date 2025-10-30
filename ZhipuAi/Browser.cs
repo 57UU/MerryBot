@@ -22,7 +22,7 @@ namespace ZhipuClient;
 /// <summary>
 /// access web pages with headless chrome
 /// </summary>
-public partial class Browser
+public partial class Browser : IDisposable
 {
     ChromeDriver? driver=null;
     ChromeOptions options = new();
@@ -244,6 +244,13 @@ public partial class Browser
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex DuplicatedRegex();
+
+    public void Dispose()
+    {
+        resourceCountdown.Dispose();
+        driver?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }
 
 

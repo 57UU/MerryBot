@@ -138,7 +138,7 @@ public class AiMessage : Plugin
         }
 
     }
-    internal IAiClient aiClient;
+    internal ZhipuAi aiClient;
     static bool IsContainsNew(string message)
     {
         var l=message.Split(" ");
@@ -314,6 +314,11 @@ public class AiMessage : Plugin
                 await Actions.ChooseBestReplyMethod(groupId, messageId, result);
             }
         }
+    }
+    public override void Dispose()
+    {
+        aiClient.Dispose();
+        GC.SuppressFinalize(this);
     }
     
 }

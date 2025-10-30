@@ -275,6 +275,11 @@ internal class Logic
     /// </summary>
     public void Shutdown(int exitCode=0)
     {
+        //close plugin
+        foreach (var i in plugins)
+        {
+            i.Instance.Dispose();
+        }
         PluginStorageDatabase.Close();
         botClient.Close();
         NLog.LogManager.Shutdown();

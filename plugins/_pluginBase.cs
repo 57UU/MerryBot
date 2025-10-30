@@ -11,7 +11,7 @@ namespace BotPlugin;
 /// <summary>
 /// 插件的基类，所有插件必须继承此类，实现了基本的方法
 /// </summary>
-public abstract class Plugin
+public abstract class Plugin : IDisposable
 {
     /// <summary>
     /// 动作类，用于发送消息等
@@ -133,5 +133,10 @@ public abstract class Plugin
         }
         var data = JsonSerializer.Deserialize<T>(json, _options)!;
         return data;
+    }
+
+    public virtual void Dispose()
+    {
+        
     }
 }

@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace ZhipuClient;
 
-public class ZhipuAi : IAiClient
+public class ZhipuAi : IDisposable
 {
     string token;
     string apiUrl;
@@ -389,6 +389,12 @@ public class ZhipuAi : IAiClient
 
         var json = JsonSerializer.Deserialize<ApiResponse>(responseBody)!;
         return json;
+    }
+
+    public void Dispose()
+    {
+        browser.Dispose();
+        GC.SuppressFinalize(this);
     }
 
 
