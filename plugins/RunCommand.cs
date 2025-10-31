@@ -200,12 +200,13 @@ public partial class Terminal : IDisposable
         }
         else
         {
-            fullCommand = $"{command};";
+            fullCommand = command;
         }
-        fullCommand = $"{fullCommand}echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2";
+        //fullCommand = $"{fullCommand}echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2";
 
         logger.Trace($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
+        await _writer.WriteAsync("echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2");
         await _writer.FlushAsync();
 
         var ctsToken = new CancellationTokenSource();
