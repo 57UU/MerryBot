@@ -14,6 +14,7 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
   ],
   "authorized-user":114514,//授权用户qq号，插件可在高危操作时验证qq号
   "variables": {
+    "llm-model": "deepseek-chat",// 选择的llm模型
     "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
     "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
     "ai-prompt": "你是一个助人为乐的AI助手" //ai 提示词
@@ -21,10 +22,14 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 }
 ```
 
+note: `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
 
-程序产生的数据都会保存在这个文件夹下。
+程序产生的数据都会保存在这个文件夹下：
+1. 日志文件
+2. 配置文件
+3. 插件存储
 
 # 主要内置插件
 
@@ -52,6 +57,8 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 ## 快速更新
 自动执行`git fetch && git merge`，并以101状态码退出程序。
 配合`launch.sh`脚本可实现自动编译运行。
+## MainPlugin
+特权插件，用于管理bot。在未监听的群聊中使用`@bot /activate`即可激活bot，使用`@bot /deactivate`即可取消bot监听。
 
 # 插件开发
 1. 一个插件应当放在`plugins`项目的一个文件中
@@ -125,6 +132,8 @@ Merry Bot
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截指定消息被后续插件处理|
+|Action<int> Shutdown|关闭程序，参数为退出码|
+|long AuthorizedUser|获取授权用户的QQ号|
 
 ### 插件存储-PluginStorage
 
@@ -134,6 +143,8 @@ Merry Bot
 |:---:|:---|
 |Task Saver(string data)|异步存储字符串|
 |Task<string> Getter()|异步读取字符串|
+|Task\<T\> Load\<T\>(T defaultValue)|异步加载并反序列化对象，如果不存在则返回默认值|
+|Task Save\<T\>(T data)|异步存储并序列化对象|
 
 ### 工具类-`MessageUtils`
 |API|Description|

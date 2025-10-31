@@ -1,6 +1,7 @@
 #!/bin/bash
 
 restart_code=101
+runtime="linux-arm64"
 # 获取当前脚本所在目录
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -9,8 +10,8 @@ while true; do
     # 发布优化版本
     echo "开始发布优化版本..."
     dotnet publish MerryBot/MerryBot.csproj -c Release \
-        -r linux-arm64 \
-        --self-contained true \
+        -r $runtime \
+        --self-contained false \
         -p:PublishTrimmed=false \
         -p:TrimMode=link \
         -p:PublishSingleFile=false \
@@ -23,7 +24,7 @@ while true; do
 
     # 运行应用程序
     echo "启动应用程序..."
-    cd MerryBot/bin/Release/net10.0/linux-arm64/publish
+    cd MerryBot/bin/Release/net10.0/$runtime/publish
     ./MerryBot
     exit_code=$?
 
