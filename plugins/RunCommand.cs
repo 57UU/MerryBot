@@ -206,7 +206,7 @@ public partial class Terminal : IDisposable
 
         logger.Trace($"CMD: {fullCommand}");
         await _writer.WriteLineAsync(fullCommand);
-        await _writer.WriteLineAsync($"{fullCommand}echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2");
+        await _writer.WriteLineAsync($"echo -e '\\n{_endMarker}\\n';echo -e '\\n{_endMarker}\\n' >&2");
         await _writer.FlushAsync();
 
         var ctsToken = new CancellationTokenSource();
