@@ -57,7 +57,7 @@ public class BotClient
     }
     private async Task WebSocket_Disconnected(DisconnectionInfo d)
     {
-        Logger.Warn($"websocket disconnect:{d.CloseStatus},{d.CloseStatusDescription}");
+        Logger.Warn($"websocket disconnect:{d.Type},{d.CloseStatus},{d.CloseStatusDescription}");
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
