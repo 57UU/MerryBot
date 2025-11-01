@@ -9,7 +9,7 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 while true; do
     # 发布优化版本
     echo "开始发布优化版本..."
-    dotnet publish MerryBot/MerryBot.csproj -c Release \
+    if ! dotnet publish MerryBot/MerryBot.csproj -c Release \
         -r $runtime \
         --self-contained false \
         -p:PublishTrimmed=false \
@@ -20,7 +20,10 @@ while true; do
         -p:PublishReadyToRunShowWarnings=true \
         -p:PublishAot=false \
         -p:DebugType=None \
-        -p:DebugSymbols=true
+        -p:DebugSymbols=true; then
+        echo "dotnet publish 失败，退出脚本"
+        exit 1
+    fi
 
     # 运行应用程序
     echo "启动应用程序..."
@@ -32,6 +35,8 @@ while true; do
     if [ $exit_code -eq $restart_code ]; then
         echo "程序退出码为 $exit_code，等于重启码，准备重新编译并启动..."
         cd "$project_dir"
+        # 添加短暂延迟确保资源释放
+        sleep 1
         continue  # 继续循环，重新编译并启动
     else
         echo "程序退出码为 $exit_code，不等于重启码，退出脚本"
