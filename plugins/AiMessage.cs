@@ -129,7 +129,7 @@ public class AiMessage : Plugin
                     timeoutMs: timeout*1000,
                     useHardTimeout:true
                     );
-                return PluginUtils.ConstraintLength(result, 3000);
+                return PluginUtils.ConstraintLength(result, 1500);
             };
             aiClient.RegisterTool(shell);
         }

@@ -28,7 +28,7 @@ public class BotClient
             .ContinueWith(result => {
                 if (result.Exception != null)
                 {
-                    logger.Error($"MessageReceive:{result.Exception.Message}");
+                    logger.Error($"Error:{result.Exception.Message}");
                 }
             });
         });
@@ -57,7 +57,7 @@ public class BotClient
     }
     private async Task WebSocket_Disconnected(DisconnectionInfo d)
     {
-        Logger.Warn($"websocket disconnect:{d.CloseStatusDescription}");
+        Logger.Warn($"websocket disconnect:{d.CloseStatus},{d.CloseStatusDescription}");
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
