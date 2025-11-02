@@ -121,12 +121,12 @@ public class AiMessage : Plugin
             var shell = new ToolDef();
             int timeout = 5;//second
             shell.Function.Name = "shell";
-            shell.Function.Description = $"执行Linux bash shell命令.(限时{timeout}s)";
+            shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) => {
                 var result= await terminal.RunCommandAsync(
                     parameters["command"].GetString()!,
-                    timeoutMs: timeout*1000,
+                    timeoutMs: timeout*1000+500,
                     useHardTimeout:true
                     );
                 return PluginUtils.ConstraintLength(result, 1500);

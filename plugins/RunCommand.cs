@@ -68,7 +68,7 @@ public class RunCommand : Plugin
         string result;
         try
         {
-            result = await terminal.RunCommandAsync(command, timeoutMs: 2000,useHardTimeout:true);
+            result = await terminal.RunCommandAsync(command, timeoutMs: 3000,useHardTimeout:true);
         }
         catch (Exception e) { 
             result = $"error:{e.Message}";
@@ -97,7 +97,7 @@ public partial class Terminal : IDisposable
 
     bool isGotoHome = false;
     readonly string shell, arguments;
-    public Terminal(string shell = "sudo", string arguments = "-u merrybot /bin/bash")
+    public Terminal(string shell = "sudo", string arguments = "-u merrybot /bin/sh")
     {
         this.shell = shell;
         this.arguments = arguments;
