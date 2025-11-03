@@ -68,7 +68,7 @@ public class BotClient
     {
         if (text == null)
         {
-            Logger.Trace("empty message received");
+            Logger.Debug("empty message received");
             return;
         }
         Logger.Trace($"websocket on message: {text}");

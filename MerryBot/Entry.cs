@@ -27,7 +27,7 @@ Config.Initialize().Wait();
 NLog.LogManager.Setup().LoadConfiguration(builder =>
 {
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{logFilePath}.log");
+    builder.ForLogger().FilterMinLevel(LogLevel.Trace).WriteToFile(fileName: $"{logFilePath}.log");
 });
 var currentLogger= LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
