@@ -71,4 +71,16 @@ public static class Utils
             // 正常的取消，不需要处理
         }
     }
+    public static bool CreateDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("路径不能为空或空白", nameof(path));
+
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+            return true;
+        }
+        return false;
+    }
 }

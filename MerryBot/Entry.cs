@@ -4,11 +4,8 @@ using MerryBot;
 using NapcatClient;
 using NLog;
 
+// --- data path ---
 string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT")??"data";
-if (!Directory.Exists(dataPath))
-{
-    Console.WriteLine("data directory created");
-}
 string logFileDir = "log";
 string dbPath = "plugin_data.db";
 
@@ -16,9 +13,12 @@ Config.SettingFile = Path.Combine(dataPath, "setting.json");
 logFileDir = Path.Combine(dataPath, logFileDir);
 dbPath=Path.Combine(dataPath, dbPath);
 
-if (!Directory.Exists(logFileDir))
+if(Utils.CreateDirectory(dataPath)){
+    Console.WriteLine($"data directory created:{dataPath}");
+}
+if (Utils.CreateDirectory(logFileDir))
 {
-    Console.WriteLine("log directory created");
+    Console.WriteLine($"log directory created:{logFileDir}");
 }
 var logFilePath=Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
