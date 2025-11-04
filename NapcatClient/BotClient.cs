@@ -13,13 +13,18 @@ public class BotClient
     public Actions Actions { get; private set; }
     public event GroupMessageCallback? OnGroupMessageReceived;
 
+    // 消息接收监控相关字段
+    private DateTime _lastMessageTime = DateTime.Now;
+    private readonly Timer _messageMonitorTimer;
+    private const int MessageTimeoutSeconds = 15; // 消息超时15秒
+
     public BotClient(string address, string token, ISimpleLogger logger)
     {
         Uri url = new($"{address}?access_token={token}");
 
         WebSocket = new(url);
         WebSocket.ErrorReconnectTimeout = TimeSpan.FromSeconds(5);
-        WebSocket.LostReconnectTimeout= TimeSpan.FromSeconds(30);
+        WebSocket.LostReconnectTimeout = TimeSpan.FromSeconds(30);
         this.Logger = logger;
         WebSocket.ReconnectTimeout = TimeSpan.FromSeconds(10);// need heartbeats
         WebSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
@@ -33,10 +38,34 @@ public class BotClient
             });
         });
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
+        
+        // 初始化消息监控定时器
+        _messageMonitorTimer = new Timer(CheckMessageActivity, null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
+        
         WebSocket.Start().Wait();
         this.Actions = new Actions(WebSocket,Logger,this);
         Initialize().Wait();
     }
+    
+    // 消息活动检测方法
+    private void CheckMessageActivity(object? state)
+    {
+        var timeSinceLastMessage = DateTime.Now - _lastMessageTime;
+        if (timeSinceLastMessage.TotalSeconds > MessageTimeoutSeconds)
+        {
+            Logger.Warn($"超过{MessageTimeoutSeconds}秒未收到任何消息，尝试重新连接");
+            try
+            {
+                // 手动触发重连
+                WebSocket.Reconnect();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"手动重连失败: {ex.Message}");
+            }
+        }
+    }
+    
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
     public async Task Initialize()
@@ -53,19 +82,27 @@ public class BotClient
     }
     public void Close()
     {
+        _messageMonitorTimer?.Dispose();
         WebSocket.Dispose();
     }
     private async Task WebSocket_Disconnected(DisconnectionInfo d)
     {
         Logger.Warn($"websocket disconnect:{d.Type},{d.CloseStatus},{d.CloseStatusDescription}");
+        // 重置消息时间，避免重连后立即触发消息超时
+        _lastMessageTime = DateTime.Now;
     }
     private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
     {
         Logger.Warn($"websocket reconnect:{reconnectionInfo.Type}");
+        // 重连后重置消息时间
+        _lastMessageTime = DateTime.Now;
     }
 
     private void WebSocket_OnMessage(string? text)
     {
+        // 更新最后消息时间 - 任何消息都表示连接活跃
+        _lastMessageTime = DateTime.Now;
+        
         if (text == null)
         {
             Logger.Debug("empty message received");
@@ -101,6 +138,8 @@ public class BotClient
     private void WebSocket_OnOpen(object? sender, EventArgs e)
     {
         Logger.Info("websocket open");
+        // 连接打开时重置消息时间
+        _lastMessageTime = DateTime.Now;
     }
 }
 
