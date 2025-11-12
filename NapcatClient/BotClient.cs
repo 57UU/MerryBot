@@ -40,7 +40,7 @@ public class BotClient
         WebSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
         
         // 初始化消息监控定时器
-        _messageMonitorTimer = new Timer(CheckMessageActivity, null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
+        _messageMonitorTimer = new Timer((o) =>_=CheckMessageActivity(), null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
         
         WebSocket.Start().Wait();
         this.Actions = new Actions(WebSocket,Logger,this);
@@ -48,7 +48,7 @@ public class BotClient
     }
     
     // 消息活动检测方法
-    private void CheckMessageActivity(object? state)
+    private async Task CheckMessageActivity()
     {
         var timeSinceLastMessage = DateTime.Now - _lastMessageTime;
         if (timeSinceLastMessage.TotalSeconds > MessageTimeoutSeconds)
@@ -57,7 +57,8 @@ public class BotClient
             try
             {
                 // 手动触发重连
-                WebSocket.Reconnect();
+                await WebSocket.Stop(WebSocketCloseStatus.NormalClosure,"no message receivied");
+                await WebSocket.Start();
             }
             catch (Exception ex)
             {

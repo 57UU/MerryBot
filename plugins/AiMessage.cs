@@ -74,7 +74,7 @@ public class AiMessage : Plugin
             long qq = anotherBot.GetInt64();
             var solver = new ToolDef();
             solver.Function.Name = "turn_to";
-            solver.Function.Description = "让智慧AI处理某问题";
+            solver.Function.Description = "让智能AI处理某问题";
             solver.Function.Parameters.AddRequired("question", new ParameterProperty() { Type = "string", Description = "要处理的问题" });
             solver.Function.FunctionCall = async (parameters) =>
             {
@@ -90,7 +90,7 @@ public class AiMessage : Plugin
                 await Actions.SendGroupMessage(parameters.SpecialTag, chain);
                 return "求助成功，你不用解决这个问题了";
             };
-            solver.DynamicPrompt = "如果问题非常复杂，请智慧AI求助";
+            solver.DynamicPrompt = "如果问题非常复杂，请智能AI求助";
             solver.isUseable = async (tag) =>
             {
                 var groupList = await Actions.GetGroupMemberData(tag.ToString(), qq.ToString());
