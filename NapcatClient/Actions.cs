@@ -8,12 +8,13 @@ namespace NapcatClient.Action;
 
 public class Actions
 {
-    readonly WebsocketClient WebSocket;
+    WebsocketClient WebSocket{
+        get => bot.WebSocket;
+    }
     readonly ISimpleLogger Logger;
     readonly BotClient bot;
-    public Actions(WebsocketClient WebSocket, ISimpleLogger logger, BotClient bot)
+    public Actions(ISimpleLogger logger, BotClient bot)
     {
-        this.WebSocket = WebSocket;
         Logger = logger;
         this.bot = bot;
     }
