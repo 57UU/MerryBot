@@ -15,7 +15,7 @@ public class ModelPreset
     public ModelPreset(string model, bool thinking,string url= "https://open.bigmodel.cn/api/paas/v4/chat/completions",string provider="zhipu")
     {
         this.model = model;
-        this.thinking = true;
+        this.thinking = thinking;
         this.url = url;
         this.provider = provider;
         modelsByName[model] = this;

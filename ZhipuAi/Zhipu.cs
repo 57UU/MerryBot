@@ -26,19 +26,19 @@ public class ZhipuAi : IDisposable
     public const string ASSISTANT = "assistant";
     public const string TOOL = "tool";
     //finish reason
-    public const string STOP= "stop";
-    public const string TOOL_CALL= "tool_calls";
-    public const string LENGTH= "length";
-    public const string SENSITIVE= "sensitive";
-    public const string NETWORK_ERROR= "network_error";
+    public const string STOP = "stop";
+    public const string TOOL_CALL = "tool_calls";
+    public const string LENGTH = "length";
+    public const string SENSITIVE = "sensitive";
+    public const string NETWORK_ERROR = "network_error";
     HttpClient client = new HttpClient();
     List<ToolDef> Tools { get; set; } = new();
-    Dictionary<string,FunctionDef> functionMapper=new();
+    Dictionary<string, FunctionDef> functionMapper = new();
     public bool UseDynamicPrompt { get; set; } = true;
     readonly string prompt;
     readonly Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
-    public ZhipuAi(string token,string prompt, ModelPreset modelPreset)
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset)
     {
         this.token = token;
         this.prompt = prompt;
@@ -48,7 +48,7 @@ public class ZhipuAi : IDisposable
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
-            Content=prompt,
+            Content = prompt,
         };
         // 创建HttpClient并设置请求头
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
@@ -69,7 +69,7 @@ public class ZhipuAi : IDisposable
         watch.Function.Description = "查看现在的时间";
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
-        var weiboHot= new ToolDef();
+        var weiboHot = new ToolDef();
         weiboHot.Function.Name = "view_weibo_hot";
         weiboHot.Function.Description = "查看微博热搜";
         weiboHot.Function.FunctionCall = async (parameters) => await browser.GetWeiboHot();
@@ -98,11 +98,11 @@ public class ZhipuAi : IDisposable
         {
             var query = parameters["query"];
             var internationalVersion = false;
-            if(parameters.TryGetValue("internationalVersion",out var v))
+            if (parameters.TryGetValue("internationalVersion", out var v))
             {
                 internationalVersion = v.GetBoolean();
             }
-            var result = await browser.Search(query.GetString()!,internationalVersion);
+            var result = await browser.Search(query.GetString()!, internationalVersion);
             return result;
         };
         bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
@@ -119,11 +119,11 @@ public class ZhipuAi : IDisposable
     }
     readonly Dictionary<long, List<ZhipuMessage>> history = new();
     readonly Dictionary<long, SemaphoreSlim> mutex = new();
-    readonly Lock mutexMutex =new();
+    readonly Lock mutexMutex = new();
     public ReadOnlySpan<ZhipuMessage> GetDialogHistory(long uid)
     {
-        history.TryGetValue(uid,out var dialog);
-        if(dialog == null)
+        history.TryGetValue(uid, out var dialog);
+        if (dialog == null)
         {
             return Span<ZhipuMessage>.Empty;
         }
@@ -140,7 +140,7 @@ public class ZhipuAi : IDisposable
                     mutex.Add(groupId, new SemaphoreSlim(1));
                 }
             }
-        }   
+        }
         return mutex[groupId];
     }
     ZhipuMessage SystemPrompt;
@@ -150,10 +150,10 @@ public class ZhipuAi : IDisposable
     /// <param name="id"></param>
     public void Reset(long id)
     {
-        var mutex=EnsureMutexExists(id);
+        var mutex = EnsureMutexExists(id);
         mutex.Wait();
         history.Remove(id);
-        mutex.Release(); 
+        mutex.Release();
     }
     public TimeSpan AutoNewSpan = TimeSpan.FromHours(12);
     /// <summary>
@@ -164,9 +164,9 @@ public class ZhipuAi : IDisposable
     /// <param name="sender">发送者</param>
     /// <param name="specialTag">一个tag，该tag会出现在function call的参数中</param>
     /// <returns>异步字符串迭代器，模型返回结果</returns>
-    public async IAsyncEnumerable<string> Ask(string content,long id,string sender,long specialTag=0)
+    public async IAsyncEnumerable<string> Ask(string content, long id, string sender, long specialTag = 0)
     {
-        var mutex=EnsureMutexExists(id);
+        var mutex = EnsureMutexExists(id);
         if (mutex.CurrentCount == 0)
         {
             yield return "上一个请求尚未完成";
@@ -180,7 +180,7 @@ public class ZhipuAi : IDisposable
             var lastMessage = value.LastOrDefault();
             if (lastMessage != null)
             {
-                if(DateTime.Now-lastMessage.time> AutoNewSpan)
+                if (DateTime.Now - lastMessage.time > AutoNewSpan)
                 {
                     history.Remove(id);
                 }
@@ -192,22 +192,23 @@ public class ZhipuAi : IDisposable
             currentHistory = new List<ZhipuMessage>();
             history.Add(id, currentHistory);
             ZhipuMessage prompt;
-            
+
             if (UseDynamicPrompt)
             {
                 StringBuilder sb = new(SystemPrompt.Content);
                 sb.AppendLine($"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}");
                 var usableTools = await GetUsableToolsByTag(specialTag);
-                foreach(var tool in usableTools)
+                foreach (var tool in usableTools)
                 {
                     if (!string.IsNullOrWhiteSpace(tool.DynamicPrompt))
                     {
                         sb.AppendLine(tool.DynamicPrompt);
                     }
                 }
-                prompt = new() { 
-                    Role=SystemPrompt.Role,
-                    Content=sb.ToString(),
+                prompt = new()
+                {
+                    Role = SystemPrompt.Role,
+                    Content = sb.ToString(),
                 };
             }
             else
@@ -228,8 +229,8 @@ public class ZhipuAi : IDisposable
             string response;
             try
             {
-                var aiResponse = await Request(currentHistory,specialTag);
-                var msg= aiResponse.Choices[0].Message;
+                var aiResponse = await Request(currentHistory, specialTag);
+                var msg = aiResponse.Choices[0].Message;
                 response = msg.Content;
                 if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
                 {
@@ -251,10 +252,10 @@ public class ZhipuAi : IDisposable
                     List<Task<ToolMessage>> tasks = new();
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
                     {
-                        tasks.Add(HandleFunctionCall(f.Function,f.Id,specialTag));
+                        tasks.Add(HandleFunctionCall(f.Function, f.Id, specialTag));
                     }
                     await Task.WhenAll(tasks);
-                    foreach(var i in tasks)
+                    foreach (var i in tasks)
                     {
                         currentHistory.Add(i.Result);
                     }
@@ -267,7 +268,7 @@ public class ZhipuAi : IDisposable
                         Role = msg.Role,
                         Content = msg.Content
                     });
-                    done =true;
+                    done = true;
                 }
             }
             catch (Exception e)
@@ -285,41 +286,41 @@ public class ZhipuAi : IDisposable
 
 
     }
-    async Task<ToolMessage> HandleFunctionCall(Function func,string id,long specialTag)
+    async Task<ToolMessage> HandleFunctionCall(Function func, string id, long specialTag)
     {
         ToolMessage message = new();
         message.Role = TOOL;
         message.Id = id;
-        functionMapper.TryGetValue(func.Name,out var tool);
+        functionMapper.TryGetValue(func.Name, out var tool);
         Logger.Info($"FuncCall:{func.Name} {func.Arguments}");
         if (tool != null)
         {
             try
             {
                 var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments)
-                    ??throw new Exception("参数格式错误");
+                    ?? throw new Exception("参数格式错误");
                 args.SpecialTag = specialTag;
                 message.Content = await tool.FunctionCall.Invoke(args);
-                Logger.Info("function result:"+message.Content);
+                Logger.Info("function result:" + message.Content);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 message.Content = "调用失败: " + e.Message;
-                Logger.Warn("function error:"+e.Message);
+                Logger.Warn("function error:" + e.Message);
             }
         }
         else
         {
             message.Content = "Error: " + func.Name + " not found";
-            Logger.Warn("function not found:"+func.Name);
+            Logger.Warn("function not found:" + func.Name);
         }
-        
+
         return message;
     }
     Dictionary<long, List<ToolDef>> _usableToolsCache = new();
     internal async Task<List<ToolDef>> GetUsableToolsByTag(long tag)
     {
-        if(_usableToolsCache.TryGetValue(tag, out var cache))
+        if (_usableToolsCache.TryGetValue(tag, out var cache))
         {
             return cache;
         }
@@ -339,22 +340,21 @@ public class ZhipuAi : IDisposable
     }
     public async Task<ApiResponse> Request(IEnumerable<ZhipuMessage> messages, long specialTag)
     {
-        var usableFunctionCall= await GetUsableToolsByTag(specialTag);
+        var usableFunctionCall = await GetUsableToolsByTag(specialTag);
         // 创建请求数据
-        var requestData = new
-        {
-            model = model,
-            messages = messages,
-            tools = usableFunctionCall,
-            thinking = new
-            {
-                type= EnableModelThinking?"enabled":"disabled",
-            },
+        var requestData = new Dictionary<String, object> {
+            {"model",model},
+            {"messages",messages },
+            { "tools",usableFunctionCall},
         };
+        if (EnableModelThinking)
+        {
+            requestData["thinking"] = "enabled";
+        }
         var req = new HttpRequestMessage(HttpMethod.Post, apiUrl);
 
         // 序列化请求数据为JSON
-        string jsonData = JsonSerializer.Serialize(requestData,options);
+        string jsonData = JsonSerializer.Serialize(requestData, options);
         req.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
         req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
@@ -371,15 +371,16 @@ public class ZhipuAi : IDisposable
                 {
                     var err = JsonSerializer.Deserialize<ApiResponse>(rep)!;
                     StringBuilder sb = new("内容问题：");
-                    foreach(var i in err.ContentFilters)
+                    foreach (var i in err.ContentFilters)
                     {
                         sb.Append($"[{i.Role}:{i.Level}]");
                     }
                     throw new Exception(sb.ToString());
-                }catch(Exception){}
+                }
+                catch (Exception) { }
                 throw new Exception(rep);
             }
-            catch(Exception){ }
+            catch (Exception) { }
             throw new HttpRequestException($"API请求失败: {response.StatusCode}");
         }
         // 读取并输出响应内容
@@ -400,8 +401,8 @@ public class ZhipuAi : IDisposable
 
     // 使用方式
     JsonSerializerOptions options = new JsonSerializerOptions();
-    
-    
+
+
 }
 
 // 创建自定义转换器
@@ -416,6 +417,6 @@ public class MessageConverter : JsonConverter<ZhipuMessage>
 
     public override void Write(Utf8JsonWriter writer, ZhipuMessage value, JsonSerializerOptions options)
     {
-            JsonSerializer.Serialize(writer, value, value.GetType());
+        JsonSerializer.Serialize(writer, value, value.GetType());
     }
 }
