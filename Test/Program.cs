@@ -18,10 +18,12 @@ using ZhipuClient;
 //    var result=await terminal.RunCommandAutoTimeoutAsync(input);
 //    Console.WriteLine($"out:{result}");
 //}
+//Browser browser = new Browser(false);
+//var result = await browser.Search("React 最近漏洞 安全漏洞 2025", false);
 
-var (a,b)=await ViewVersion.GitFetchMerge();
-Console.WriteLine(a);
-Console.WriteLine(b);
+//var (a,b)=await ViewVersion.GitFetchMerge();
+//Console.WriteLine(a);
+//Console.WriteLine(b);
 
 
 Config.Initialize().Wait();

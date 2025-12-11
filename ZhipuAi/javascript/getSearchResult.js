@@ -63,7 +63,7 @@ for(let entry of table.childNodes){
         p=specificNodes.lineClampParagraph
         result.push({
             title:a.innerText.split("\n")[0],
-            description:p.innerHTML,
+            content:p.innerHTML,
             link:a.href
         });
     }

@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
@@ -24,10 +25,10 @@ namespace ZhipuClient;
 /// </summary>
 public partial class Browser : IDisposable
 {
-    ChromeDriver? driver=null;
+    ChromeDriver? driver = null;
     ChromeOptions options = new();
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
-    string getSearchResult=null;
+    string getSearchResult = null;
     string jsReader = null, preprocessWbHot = null, preprocessBingResult = null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     SemaphoreSlim mutex = new(1);
@@ -37,17 +38,17 @@ public partial class Browser : IDisposable
         {
             fileName += ".js";
         }
-        return File.ReadAllTextAsync("./javascript/"+fileName, Encoding.UTF8);
+        return File.ReadAllTextAsync("./javascript/" + fileName, Encoding.UTF8);
     }
     private async Task LoadScripts()
     {
         string[] scriptFiles = [
-            "readWeb", 
-            "getSearchResult",
+            "readWeb",
+            "getSearchResult2",
             "preprocessWbHot",
             "preprocessBingResult"
             ];
-        List<Task<string>> tasks= new();
+        List<Task<string>> tasks = new();
         foreach (var file in scriptFiles)
         {
             tasks.Add(LoadScript(file));
@@ -59,15 +60,18 @@ public partial class Browser : IDisposable
         preprocessBingResult = tasks[3].Result;
     }
     readonly StealthInstanceSettings stealthInstanceSettings = new();
-    readonly ResourceCountdown resourceCountdown ;
-    public Browser()
+    readonly ResourceCountdown resourceCountdown;
+    public Browser(bool headless = true)
     {
         resourceCountdown = new(CloseBrowser);
-        options.AddArgument("--headless");
-        options.AddArgument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0");
-        //options.AddArgument("--disable-gpu");
-        options.AddArgument("--window-size=1920,1080");
-        options.AddArgument("--disable-blink-features=AutomationControlled");
+
+        options.ConfigureForWebScraping();
+
+        if (headless)
+        {
+            options.EnableHeadlessMode();
+        }
+
         options.ApplyStealth();
 
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
@@ -77,19 +81,22 @@ public partial class Browser : IDisposable
             stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
         }
 
-        
-        LoadScripts().Wait(); 
+
+        LoadScripts().Wait();
     }
-    private Task<ChromeDriver> LoadBrowser()
+    private async Task<ChromeDriver> LoadBrowser()
     {
         resourceCountdown.Start();
-        return Task.Run(() => driver = Stealth.Instantiate(options, stealthInstanceSettings));
+        var b = await Task.Run(() => driver = Stealth.Instantiate(options, stealthInstanceSettings));
+        //先搜一下，不知道为什么第一次搜出来的东西没有相关性
+        await Search("java 漏洞",false);
+        return b;
     }
     private void CloseBrowser()
     {
         if (driver == null)
         {
-            return; 
+            return;
         }
         driver.Quit();
         driver.Dispose();
@@ -129,16 +136,17 @@ public partial class Browser : IDisposable
     public async Task<string> View(Uri url)
     {
         await UseBrowser();
-        var task= Task.Run(async () =>
+        var task = Task.Run(async () =>
         {
             mutex.Wait();
             driver!.Navigate().GoToUrl(url);
-            await Task.Delay(100);
-            var result= driver.ExecuteScript(jsReader)!.ToString()!;
+            await Task.Delay(ExecuteScriptDelayTime);
+            var result = driver.ExecuteScript(jsReader)!.ToString()!;
             return Trim(result);
         });
 
-        return await task.ContinueWith((t) => {
+        return await task.ContinueWith((t) =>
+        {
             GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
@@ -148,27 +156,29 @@ public partial class Browser : IDisposable
             return $"调用失败 {t.Exception}";
         });
     }
+    public int ExecuteScriptDelayTime { set; get; } = 50;
     /// <summary>
     /// bing search
     /// </summary>
     /// <param name="keyword"></param>
     /// <returns>search reasult</returns>
-    public async Task<string> Search(string keyword,bool internationalVersion)
+    public async Task<string> Search(string keyword, bool internationalVersion)
     {
         await UseBrowser();
-        var url = ToStandardUri($"https://cn.bing.com/search?q={HttpUtility.UrlEncode(keyword)}" +
+        var url = ToStandardUri($"https://cn.bing.com/search?q={HttpUtility.UrlEncode(keyword)}&FORM=ANNTA1&adppc=EDGEXST&PC=U531" +
             (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
         {
             mutex.Wait();
             driver!.Navigate().GoToUrl(url);
-            await Task.Delay(100);
+            await Task.Delay(ExecuteScriptDelayTime);
             var result = driver.ExecuteScript(getSearchResult)!.ToString()!;
-            
-            return Trim(result);
+
+            return FormatSearchResult(result);
         });
 
-        return await await task.ContinueWith(async(t) => {
+        return await await task.ContinueWith(async (t) =>
+        {
             GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
@@ -179,18 +189,31 @@ public partial class Browser : IDisposable
             return await View(url);
         });
     }
+    private static string FormatSearchResult(string raw)
+    {
+        List<SearchResult> obj = JsonSerializer.Deserialize<List<SearchResult>>(raw)!;
+        StringBuilder sb = new();
+        foreach (SearchResult item in obj)
+        {
+            sb.AppendLine($"# {item.Title}");
+            sb.AppendLine($"- {item.Content}");
+            sb.AppendLine($"- {item.Link}");
+        }
+        return sb.ToString();
+
+    }
     public async Task<string> GetWeiboHot()
     {
         await UseBrowser();
         var url = "https://m.weibo.cn/p/106003type=25&filter_type=realtimehot";
         var query = "return document.querySelector(\"#app > div:nth-child(1) > div:nth-child(2) > div:nth-child(3) > div > div\")";
         var delayTimeout = 1500;
-        var checkInterval =400;
+        var checkInterval = 400;
         var task = Task.Run(async () =>
         {
             mutex.Wait();
             driver!.Navigate().GoToUrl(url);
-            await Task.Delay(100);
+            await Task.Delay(ExecuteScriptDelayTime);
             int delay = 0;
             while (true)
             {
@@ -211,10 +234,11 @@ public partial class Browser : IDisposable
             }
             driver.ExecuteScript(preprocessWbHot);
             var result = driver.ExecuteScript(jsReader)!.ToString()!;
-            return "|事件|热度|\n"+Trim(result);
+            return "|事件|热度|\n" + Trim(result);
         });
 
-        return await task.ContinueWith((t) => {
+        return await task.ContinueWith((t) =>
+        {
             GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
@@ -253,102 +277,3 @@ public partial class Browser : IDisposable
     }
 }
 
-
-public class ResourceCountdown:IDisposable
-{
-    // 倒计时时间：5分钟（毫秒）
-    private readonly int TimeoutMilliseconds;
-
-    // 计时器对象
-    private readonly System.Timers.Timer _timer;
-
-    // 释放资源的回调函数
-    private readonly Action _releaseCallback;
-
-    // 资源是否已释放的标志
-    public bool IsReleased { get; private set; }
-
-    /// <summary>
-    /// 构造函数
-    /// </summary>
-    /// <param name="resource">需要管理的资源</param>
-    /// <param name="releaseCallback">释放资源的回调函数</param>
-    public ResourceCountdown(Action releaseCallback, int timeoutMilliseconds = 5 * 60 * 1000)
-    {
-        TimeoutMilliseconds=timeoutMilliseconds;
-        _releaseCallback = releaseCallback ?? throw new ArgumentNullException(nameof(releaseCallback));
-        IsReleased = false;
-        // 初始化计时器
-        _timer = new(TimeoutMilliseconds);
-        _timer.Elapsed += OnTimerElapsed;
-        _timer.AutoReset = false; // 只触发一次，需要手动重置
-    }
-    /// <summary>
-    /// 开始跟踪资源
-    /// </summary>
-    public void Start()
-    {
-        // 启动计时器
-        _timer.Start();
-        IsReleased = false;
-    }
-
-    /// <summary>
-    /// 使用资源，重置倒计时
-    /// </summary>
-    public void UseResource()
-    {
-        if (IsReleased)
-        {
-            return;
-        }
-
-        // 重置计时器
-        ResetTimer();
-    }
-
-    /// <summary>
-    /// 重置倒计时
-    /// </summary>
-    public void ResetTimer()
-    {
-        if (IsReleased)
-        {
-            return;
-        }
-
-        // 停止并重新启动计时器，重置倒计时
-        _timer.Stop();
-        _timer.Start();
-    }
-
-    /// <summary>
-    /// 手动释放资源
-    /// </summary>
-    public void ReleaseResource()
-    {
-        if (IsReleased)
-        {
-            return;
-        }
-
-        // 调用释放资源的回调函数
-        _releaseCallback();
-
-        // 标记为已释放
-        IsReleased = true;
-    }
-
-    /// <summary>
-    /// 计时器到期时执行的方法
-    /// </summary>
-    private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
-    {
-        ReleaseResource();
-    }
-
-    public void Dispose()
-    {
-        ((IDisposable)_timer).Dispose();
-    }
-}

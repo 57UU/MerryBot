@@ -1,8 +1,49 @@
+const retain_a_tag=false;
+
 /**
- * 获取页面中所有a标签的href属性
+ * 判断href是否为正常网址
+ * @param {string} href - 要检查的href值
+ * @returns {boolean} - 如果是正常网址返回true，否则返回false
+ */
+function isNormalUrl(href) {
+  if (!href) return false;
+  
+  // 忽略javascript:、mailto:、tel:等协议
+  const invalidProtocols = ['javascript:', 'mailto:', 'tel:', 'sms:', 'ftp:', 'file:'];
+  for (const protocol of invalidProtocols) {
+    if (href.toLowerCase().startsWith(protocol)) {
+      return false;
+    }
+  }
+  
+  // 忽略javascript:void(0)和类似的javascript表达式
+  if (href.toLowerCase() === 'javascript:void(0)' || href.toLowerCase() === 'javascript:void(0);') {
+    return false;
+  }
+  
+  // 接受http://、https://开头的绝对URL
+  // 接受相对路径（以/、./、../开头）
+  // 接受以www.开头的URL
+  return (
+    href.startsWith('http://') || 
+    href.startsWith('https://') || 
+    href.startsWith('/') || 
+    href.startsWith('./') || 
+    href.startsWith('../') ||
+    href.startsWith('www.')
+  );
+}
+
+/**
+ * 获取页面中所有a标签的href属性（如果retain_a_tag为true）
  * @returns {Array<string>} - 包含所有href属性值的数组
  */
 function extractAllHrefs() {
+  // 如果不保留a标签，直接返回空数组
+  if (!retain_a_tag) {
+    return [];
+  }
+  
   // 创建一个空数组存储href值
   const hrefs = [];
 
@@ -12,8 +53,8 @@ function extractAllHrefs() {
   // 遍历所有a标签，提取href属性
   aTags.forEach(aTag => {
     const href = aTag.getAttribute('href');
-    if (href) {
-      // 确保href不为空
+    if (href && isNormalUrl(href)) {
+      // 确保href为正常网址
       hrefs.push({
         href,
         text: aTag.textContent.trim()
@@ -25,7 +66,7 @@ function extractAllHrefs() {
 }
 
 /**
- * 获取净化后的HTML，只保留可见文本和a标签的href属性
+ * 获取净化后的HTML，只保留可见文本和a标签的href属性（如果retain_a_tag为true）
  * @returns {string} - 净化后的HTML
  */
 function getCleanHTML() {
@@ -35,9 +76,15 @@ function getCleanHTML() {
 
   // 移除所有不可见元素和不需要的标签
   removeInvisibleElements(clonedDoc);
-
-  // 清理所有标签的属性，只保留a标签的href属性
-  cleanAttributes(clonedDoc);
+  
+  
+  if (retain_a_tag) {
+    // 清理所有标签的属性，只保留a标签的href属性
+    cleanAttributes(clonedDoc);
+  } else {
+    // 如果不保留a标签，移除所有a标签
+    removeAllATags(clonedDoc);
+  }
 
   // 返回净化后的HTML
   return cleanHtmlTags(clonedDoc.outerHTML);
@@ -59,11 +106,15 @@ function tryRemove(selector){
 }
 
 function cleanHtmlTags(html) {
-  // 移除所有标签
-  // 移除除a标签外的所有HTML标签
-  html= html.replace(/<(?!a\b)[^>]+>/g, '|');
+  if (!retain_a_tag) {
+    // 如果不保留a标签，移除所有HTML标签
+    html = html.replace(/<[^>]+>/g, '|');
+  } else {
+    // 移除除a标签外的所有HTML标签
+    html = html.replace(/<(?!a\b)[^>]+>/g, '|');
+  }
   // 将连续的竖线或空格替换为单个竖线
-  html= html.replace(/[\|\s][\|\s\n]*[\|\s]/g, '|');
+  html = html.replace(/[\|\s][\|\s\n]*[\|\s]/g, '|');
   return html;
 }
 
@@ -179,6 +230,24 @@ function removeEmptyElements(doc) {
 }
 
 /**
+ * 移除文档中的所有a标签，将其内容保留
+ * @param {HTMLElement} doc - 文档元素
+ */
+function removeAllATags(doc) {
+  const aTags = doc.querySelectorAll('a');
+  const aTagsArray = Array.from(aTags);
+  
+  aTagsArray.forEach(aTag => {
+    // 保留a标签的内容，将子节点移动到父节点
+    while (aTag.firstChild) {
+      aTag.parentNode.insertBefore(aTag.firstChild, aTag);
+    }
+    // 移除a标签
+    aTag.parentNode.removeChild(aTag);
+  });
+}
+
+/**
  * 清理所有标签的属性，只保留a标签的href属性
  * @param {HTMLElement} doc - 文档元素
  */
@@ -196,8 +265,8 @@ function cleanAttributes(doc) {
     // 移除所有属性
     [...el.attributes].forEach(attr => el.removeAttribute(attr.name));
 
-    // 为a标签恢复href属性
-    if (el.tagName.toLowerCase() === 'a' && href) {
+    // 为a标签恢复href属性，但只保留正常网址
+    if (el.tagName.toLowerCase() === 'a' && href && isNormalUrl(href)) {
       el.setAttribute('href', href);
     }
   });
