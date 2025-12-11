@@ -171,7 +171,7 @@ public partial class ViewVersion : Plugin
     private async Task Update(long groupId)
     {
         var (diff, commitMessages) = await GitFetchMerge();
-        diff = _redundantRegex().Replace(diff, "").Trim();
+        diff = _redundantRegex().Replace(diff, "").Replace("()","").Trim();
 
         await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
@@ -201,6 +201,6 @@ public partial class ViewVersion : Plugin
         public long UpdateByGroupId=-1;
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]|\(\)")]
+    [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]")]
     private static partial System.Text.RegularExpressions.Regex _redundantRegex();
 }
