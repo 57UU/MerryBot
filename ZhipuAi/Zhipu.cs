@@ -7,10 +7,12 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
 using System.Threading.Tasks;
 
 namespace ZhipuClient;
@@ -18,9 +20,8 @@ namespace ZhipuClient;
 public class ZhipuAi : IDisposable
 {
     string token;
-    string apiUrl;
-    public string model;
-    public bool EnableModelThinking;
+    ModelPreset modelPreset;
+
     public const string SYSTEM = "system";
     public const string USER = "user";
     public const string ASSISTANT = "assistant";
@@ -42,9 +43,7 @@ public class ZhipuAi : IDisposable
     {
         this.token = token;
         this.prompt = prompt;
-        model = modelPreset.model;
-        EnableModelThinking = modelPreset.thinking;
-        apiUrl = modelPreset.url;
+        this.modelPreset= modelPreset;
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
@@ -69,11 +68,13 @@ public class ZhipuAi : IDisposable
         watch.Function.Description = "查看现在的时间";
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
+
         var weiboHot = new ToolDef();
         weiboHot.Function.Name = "view_weibo_hot";
         weiboHot.Function.Description = "查看微博热搜";
         weiboHot.Function.FunctionCall = async (parameters) => await browser.GetWeiboHot();
         RegisterTool(weiboHot);
+
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
         browserDef.Function.Description = "查看网页主要内容";
@@ -89,24 +90,28 @@ public class ZhipuAi : IDisposable
             return html;
         };
         RegisterTool(browserDef);
-        var bingSearch = new ToolDef();
-        bingSearch.Function.Name = "search";
-        bingSearch.Function.Description = "使用Bing进行网络搜索";
-        bingSearch.Function.Parameters.AddRequired("query", new ParameterProperty() { Type = "string", Description = "keyword" });
-        bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版搜索" });
-        bingSearch.Function.FunctionCall = async (parameters) =>
+
+        if (modelPreset.enableSearch)
         {
-            var query = parameters["query"];
-            var internationalVersion = false;
-            if (parameters.TryGetValue("internationalVersion", out var v))
+            var bingSearch = new ToolDef();
+            bingSearch.Function.Name = "search";
+            bingSearch.Function.Description = "使用Bing进行网络搜索";
+            bingSearch.Function.Parameters.AddRequired("query", new ParameterProperty() { Type = "string", Description = "keyword" });
+            bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版搜索" });
+            bingSearch.Function.FunctionCall = async (parameters) =>
             {
-                internationalVersion = v.GetBoolean();
-            }
-            var result = await browser.Search(query.GetString()!, internationalVersion);
-            return result;
-        };
-        bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
-        RegisterTool(bingSearch);
+                var query = parameters["query"];
+                var internationalVersion = false;
+                if (parameters.TryGetValue("internationalVersion", out var v))
+                {
+                    internationalVersion = v.GetBoolean();
+                }
+                var result = await browser.Search(query.GetString()!, internationalVersion);
+                return result;
+            };
+            bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
+            RegisterTool(bingSearch);
+        }
     }
     /// <summary>
     /// register tool so that it can be called by assistant
@@ -343,15 +348,13 @@ public class ZhipuAi : IDisposable
         var usableFunctionCall = await GetUsableToolsByTag(specialTag);
         // 创建请求数据
         var requestData = new Dictionary<String, object> {
-            {"model",model},
+            {"model",modelPreset.model},
             {"messages",messages },
-            { "tools",usableFunctionCall},
+            {"tools",usableFunctionCall},
         };
-        if (EnableModelThinking)
-        {
-            requestData["thinking"] = "enabled";
-        }
-        var req = new HttpRequestMessage(HttpMethod.Post, apiUrl);
+        requestData = requestData.Concat(modelPreset.extraBody).ToDictionary();
+
+        var req = new HttpRequestMessage(HttpMethod.Post, modelPreset.url);
 
         // 序列化请求数据为JSON
         string jsonData = JsonSerializer.Serialize(requestData, options);
@@ -399,8 +402,9 @@ public class ZhipuAi : IDisposable
     }
 
 
-    // 使用方式
-    JsonSerializerOptions options = new JsonSerializerOptions();
+    JsonSerializerOptions options = new JsonSerializerOptions {
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
 
 
 }

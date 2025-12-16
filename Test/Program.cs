@@ -28,7 +28,7 @@ using ZhipuClient;
 
 Config.Initialize().Wait();
 var config=Config.Instance;
-var model = ModelPreset.DeepSeekChat;
+var model = ModelPreset.Qwen3Max;
 var token_key = model.ApiTokenDictKey;
 string token = ((JsonElement)config.Variables[token_key]).GetString()!;
 string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString()!;
