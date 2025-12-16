@@ -17,7 +17,9 @@ namespace BotPlugin;
 [PluginTag("AI机器人", "键入 #新对话 来开启新对话",isIgnore:false)]
 public class AiMessage : Plugin
 {
+    bool useFunctionCallToReply = true;
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
+    readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     public AiMessage(PluginInterop interop) : base(interop)
     {
         //display available model
@@ -61,6 +63,34 @@ public class AiMessage : Plugin
             return "发送成功。你不必回复‘已发送’,也不必重复发送的信息";
         };
         aiClient.RegisterTool(voiceSender);
+        if (useFunctionCallToReply)
+        {
+            var replyTool = new ToolDef();
+            replyTool.Function.Name = "reply";
+            replyTool.Function.Description = "回复消息";
+            replyTool.DynamicPrompt = "要回复消息时，请使用reply工具";
+            replyTool.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要回复的内容" });
+            replyTool.Function.FunctionCall = async (parameters) =>
+            {
+
+                try
+                {
+                    messageRateLimiter.Increase(parameters.SpecialTag);
+                    if (messageRateLimiter.CheckIsLimited(parameters.SpecialTag))
+                    {
+                        throw new Exception("请求速率过高，请不要再发了");
+                    }
+                    string text = parameters["text"].GetString()!;
+                    await Actions.SendGroupMessage(parameters.SpecialTag, text);
+                }
+                catch (Exception e)
+                {
+                    return $"发送失败:{e.Message}";
+                }
+                return "成功";
+            };
+            aiClient.RegisterTool(replyTool);
+        }
         // turn to another bot
         AddBotForHelp();
 
@@ -310,7 +340,7 @@ public class AiMessage : Plugin
     {
         await foreach(var result in  aiClient.Ask(message, groupId, sender,groupId))
         {
-            if (!string.IsNullOrWhiteSpace(result))
+            if (!useFunctionCallToReply && !string.IsNullOrWhiteSpace(result))
             {
                 await Actions.ChooseBestReplyMethod(groupId, messageId, result);
             }
