@@ -68,7 +68,7 @@ public class AiMessage : Plugin
             var replyTool = new ToolDef();
             replyTool.Function.Name = "reply";
             replyTool.Function.Description = "回复消息";
-            replyTool.DynamicPrompt = "要回复消息时，请使用reply工具";
+            replyTool.DynamicPrompt = "需要回复消息时，使用reply工具";
             replyTool.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要回复的内容" });
             replyTool.Function.FunctionCall = async (parameters) =>
             {
