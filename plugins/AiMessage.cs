@@ -17,7 +17,7 @@ namespace BotPlugin;
 [PluginTag("AI机器人", "键入 #新对话 来开启新对话",isIgnore:false)]
 public class AiMessage : Plugin
 {
-    bool useFunctionCallToReply = true;
+    bool useFunctionCallToReply;
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     public AiMessage(PluginInterop interop) : base(interop)
@@ -32,6 +32,7 @@ public class AiMessage : Plugin
             Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
             model = ModelPreset.Glm_4_5_Free;
         }
+        useFunctionCallToReply=interop.GetJsonElement("use_function_call_reply")?.GetBoolean()??true;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key) 
@@ -68,7 +69,7 @@ public class AiMessage : Plugin
             var replyTool = new ToolDef();
             replyTool.Function.Name = "reply";
             replyTool.Function.Description = "回复消息";
-            replyTool.DynamicPrompt = "需要回复消息时，使用reply工具";
+            replyTool.DynamicPrompt = "需要发送消息时，使用reply工具";
             replyTool.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要回复的内容" });
             replyTool.Function.FunctionCall = async (parameters) =>
             {
@@ -81,7 +82,10 @@ public class AiMessage : Plugin
                         throw new Exception("请求速率过高，请不要再发了");
                     }
                     string text = parameters["text"].GetString()!;
-                    await Actions.SendGroupMessage(parameters.SpecialTag, text);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        await Actions.SendGroupMessage(parameters.SpecialTag, text);
+                    }
                 }
                 catch (Exception e)
                 {
