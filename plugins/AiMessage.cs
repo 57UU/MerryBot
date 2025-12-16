@@ -32,7 +32,7 @@ public class AiMessage : Plugin
             Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
             model = ModelPreset.Glm_4_5_Free;
         }
-        useFunctionCallToReply=interop.GetJsonElement("use_function_call_reply")?.GetBoolean()??true;
+        useFunctionCallToReply=interop.GetJsonElement("use_function_call_reply")?.GetBoolean()??false;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key) 

@@ -71,24 +71,23 @@ public class ModelPreset
 
 
     public static readonly ModelPreset Glm_4_5_Free = new ModelPreset(
-        model: "GLM-4.5-Flash",
-        url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-        provider: "zhipu",
-        extraBody: Empty.Add("thinking","enabled")
+            model: "GLM-4.5-Flash",
+            url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            provider: "zhipu",
+            extraBody: Empty.Add("thinking","enabled")
         );
     public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
     public static readonly ModelPreset Glm_4_6 = Glm_4_5_Free.With("GLM-4.6",extraBody:Empty);
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
-        "deepseek-chat",
-        "https://api.deepseek.com/chat/completions",
-        "deepseek"
+            "deepseek-chat",
+            "https://api.deepseek.com/chat/completions",
+            "deepseek"
         );
     public static readonly ModelPreset Qwen3Max = new(
-        "qwen3-max",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-        "ali",
-        Empty.Add("enable_search",true),
-        enableSearch:false
+            "qwen3-max",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "ali",
+            Empty.Add("enable_search",true)
         );
     public static readonly ModelPreset Qwen3Plus = Qwen3Max.With("qwen-plus-latest");
 }
