@@ -60,8 +60,12 @@ public static class BotUtils
             }
             else
             {
-                sb.Append(Message.Text(sb.ToString()));
-                sb.Clear();
+                // 当遇到非text类型消息时，如果之前有积累的文本，将其添加到结果列表
+                if (sb.Length > 0)
+                {
+                    result.Add(Message.Text(sb.ToString()));
+                    sb.Clear();
+                }
                 result.Add(i);
             }
         }
