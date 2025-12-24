@@ -20,7 +20,7 @@ namespace ZhipuClient;
 public class ZhipuAi : IDisposable
 {
     string token;
-    public ModelPreset modelPreset {  get; set; }
+    public ModelPreset ModelPreset {  get; private set; }
 
     public const string SYSTEM = "system";
     public const string USER = "user";
@@ -43,20 +43,26 @@ public class ZhipuAi : IDisposable
     {
         this.token = token;
         this.prompt = prompt;
-        this.modelPreset= modelPreset;
+        
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
             Content = prompt,
         };
-        // 创建HttpClient并设置请求头
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        SetModelPreset(modelPreset, token);
         //set timeout
         client.Timeout = TimeSpan.FromSeconds(50);
         options.Converters.Add(new MessageConverter());
         //tools
         AddBuiltInTools();
 
+    }
+    public void SetModelPreset(ModelPreset modelPreset,string token)
+    {
+        client.DefaultRequestHeaders.Clear();
+        // 创建HttpClient并设置请求头
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        this.ModelPreset = modelPreset;
     }
     /// <summary>
     /// register built-in tools
@@ -91,7 +97,7 @@ public class ZhipuAi : IDisposable
         };
         RegisterTool(browserDef);
 
-        if (modelPreset.enableSearch)
+        if (ModelPreset.enableSearch)
         {
             var bingSearch = new ToolDef();
             bingSearch.Function.Name = "search";
@@ -348,13 +354,13 @@ public class ZhipuAi : IDisposable
         var usableFunctionCall = await GetUsableToolsByTag(specialTag);
         // 创建请求数据
         var requestData = new Dictionary<String, object> {
-            {"model",modelPreset.model},
+            {"model",ModelPreset.model},
             {"messages",messages },
             {"tools",usableFunctionCall},
         };
-        requestData = requestData.Concat(modelPreset.extraBody).ToDictionary();
+        requestData = requestData.Concat(ModelPreset.extraBody).ToDictionary();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, modelPreset.CompletionUrl);
+        var req = new HttpRequestMessage(HttpMethod.Post, ModelPreset.CompletionUrl);
 
         // 序列化请求数据为JSON
         string jsonData = JsonSerializer.Serialize(requestData, options);
@@ -402,7 +408,8 @@ public class ZhipuAi : IDisposable
     }
 
 
-    JsonSerializerOptions options = new JsonSerializerOptions {
+    JsonSerializerOptions options = new JsonSerializerOptions
+    {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
     };
 

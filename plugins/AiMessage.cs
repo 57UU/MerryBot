@@ -15,7 +15,7 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BotPlugin;
 
-[PluginTag("AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型",isIgnore:false)]
+[PluginTag("AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型",isIgnore:false)]
 public class AiMessage : Plugin
 {
     bool useFunctionCallToReply;
@@ -227,10 +227,18 @@ public class AiMessage : Plugin
             var tag = textList[1];
             var model = ModelPreset.GetModelByName(tag);
             if (model != null) {
-                //valid
-                aiClient.modelPreset=model;
-                Interop.SetVarible(LLM_KEY,tag);
-                _ = Actions.ReplyGroupMessage(groupId, messageId, $"set model: {tag}");
+                //access token
+                string? token = Interop.GetVariable<string>(model.ApiTokenDictKey);
+                if (token != null) {
+                    //valid
+                    aiClient.SetModelPreset(model,token);
+                    Interop.SetVarible(LLM_KEY, tag);
+                    _ = Actions.ReplyGroupMessage(groupId, messageId, $"set model: {tag}");
+                }
+                else
+                {
+                    _ = Actions.ReplyGroupMessage(groupId, messageId, $"no token for: {model.ApiTokenDictKey}");
+                }
             }
             else
             {
@@ -352,9 +360,12 @@ public class AiMessage : Plugin
         
         if (text.StartsWith('/'))
         {
-            if (text.StartsWith("/setllm") && data.sender.user_id==Interop.AuthorizedUser)
+            if (text.StartsWith("/setllm"))
             {
                 _=SetLlmModel(text, groupId, messageId);
+            }else if (text.StartsWith("/getllm"))
+            {
+                _= Actions.ReplyGroupMessage(groupId, messageId,$"current llm: {aiClient.ModelPreset.model}");
             }
             return;
         }
