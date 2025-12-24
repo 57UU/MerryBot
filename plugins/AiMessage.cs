@@ -219,9 +219,9 @@ public class AiMessage : Plugin
             _ = PreprocessMessage(messages, groupId, nickname, data);
         }   
     }
-    async Task SetLlmModel(IEnumerable<NapcatClient.Message> chain, long groupId, long messageId)
+    async Task SetLlmModel(string text, long groupId, long messageId)
     {
-        string[] textList = chain.First().ToString().Split(' ');
+        string[] textList = text.Split(' ');
         if (textList.Length > 1)
         {
             var tag = textList[1];
@@ -230,6 +230,7 @@ public class AiMessage : Plugin
                 //valid
                 aiClient.modelPreset=model;
                 Interop.SetVarible(LLM_KEY,tag);
+                _ = Actions.ReplyGroupMessage(groupId, messageId, $"set model: {tag}");
             }
             else
             {
@@ -353,7 +354,7 @@ public class AiMessage : Plugin
         {
             if (text.StartsWith("/setllm") && data.sender.user_id==Interop.AuthorizedUser)
             {
-                _=SetLlmModel(chain,groupId, messageId);
+                _=SetLlmModel(text, groupId, messageId);
             }
             return;
         }
