@@ -90,4 +90,9 @@ public class ModelPreset
             Empty.Add("enable_search",true)
         );
     public static readonly ModelPreset Qwen3Plus = Qwen3Max.With("qwen-plus-latest");
+    public static readonly ModelPreset XiaomiMimoV2 = new(
+        "mimo-v2-flash",
+        "https://api.xiaomimimo.com/v1/chat/completions",
+        "xiaomi"
+        );
 }

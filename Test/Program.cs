@@ -25,10 +25,13 @@ using ZhipuClient;
 //Console.WriteLine(a);
 //Console.WriteLine(b);
 
+string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
+
+Config.SettingFile = Path.Combine(dataPath, "setting.json");
 
 Config.Initialize().Wait();
 var config=Config.Instance;
-var model = ModelPreset.Qwen3Max;
+var model = ModelPreset.XiaomiMimoV2;
 var token_key = model.ApiTokenDictKey;
 string token = ((JsonElement)config.Variables[token_key]).GetString()!;
 string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString()!;
