@@ -208,7 +208,8 @@ internal class Logic
                         Config.Instance.Variables,
                         Shutdown,
                         AuthorizedUser,
-                        CommandLineArguments
+                        CommandLineArguments,
+                        Config.Save
                         );
 
                 Plugin pluginInstance;

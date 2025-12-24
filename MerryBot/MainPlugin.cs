@@ -41,7 +41,7 @@ internal class MainPlugin : Plugin
             }
             group.Add(groupId);
             Task.Run(async () => {
-                await Config.save();
+                await Config.Save();
                 await Actions.ReplyGroupMessage(groupId, data.message_id,$"active on {groupId}");
             });
         }
@@ -57,7 +57,7 @@ internal class MainPlugin : Plugin
             Logger.Info($"execute deactivating on {groupId}");
             var result = Config.Instance.QqGroups.Remove(groupId);
             Task.Run(async () => {
-                await Config.save();
+                await Config.Save();
                 if (!result)
                 {
                     await Actions.ReplyGroupMessage(groupId, data.message_id, "error: not active");

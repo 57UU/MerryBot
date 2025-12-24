@@ -1,6 +1,7 @@
 using CommonLib;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Text;
 using System.Threading.Tasks;
 using ZhipuClient;
 
@@ -19,6 +20,7 @@ public class ModelPreset
     private static ImmutableDictionary<string, object> Empty = ImmutableDictionary<string, object>.Empty;
 
     private static readonly Dictionary<string, ModelPreset> modelsByName = new();
+    public string CompletionUrl => $"{url}/chat/completions";
     public ModelPreset(string model, string url, string provider, ImmutableDictionary<string, object>? extraBody = null, bool enableSearch=true)
     {
         this.model = model;
@@ -66,13 +68,23 @@ public class ModelPreset
         }
         Console.WriteLine();
     }
+    public static string AllModels()
+    {
+        StringBuilder sb = new();
+        foreach (var item in modelsByName)
+        {
+            sb.Append($"{item.Key} By {item.Value.provider};");
+        }
+        sb.AppendLine();
+        return sb.ToString();
+    }
     public string ApiTokenDictKey => $"ai-token-{provider}";
 
 
 
     public static readonly ModelPreset Glm_4_5_Free = new ModelPreset(
             model: "GLM-4.5-Flash",
-            url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            url: "https://open.bigmodel.cn/api/paas/v4",
             provider: "zhipu",
             extraBody: Empty.Add("thinking","enabled")
         );
@@ -80,19 +92,19 @@ public class ModelPreset
     public static readonly ModelPreset Glm_4_6 = Glm_4_5_Free.With("GLM-4.6",extraBody:Empty);
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
             "deepseek-chat",
-            "https://api.deepseek.com/chat/completions",
+            "https://api.deepseek.com",
             "deepseek"
         );
     public static readonly ModelPreset Qwen3Max = new(
             "qwen3-max",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "ali",
             Empty.Add("enable_search",true)
         );
     public static readonly ModelPreset Qwen3Plus = Qwen3Max.With("qwen-plus-latest");
     public static readonly ModelPreset XiaomiMimoV2 = new(
         "mimo-v2-flash",
-        "https://api.xiaomimimo.com/v1/chat/completions",
+        "https://api.xiaomimimo.com/v1",
         "xiaomi"
         );
 }

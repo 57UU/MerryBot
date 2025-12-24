@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,18 +15,19 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BotPlugin;
 
-[PluginTag("AI机器人", "键入 #新对话 来开启新对话",isIgnore:false)]
+[PluginTag("AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型",isIgnore:false)]
 public class AiMessage : Plugin
 {
     bool useFunctionCallToReply;
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
+    const string LLM_KEY = "llm-model";
     public AiMessage(PluginInterop interop) : base(interop)
     {
         //display available model
         ModelPreset.DisplayAllModels();
         var model = ModelPreset.GetModelByName(
-            interop.GetVariable<string>("llm-model")
+            interop.GetVariable<string>(LLM_KEY)
             );
         if (model == null)
         {
@@ -96,7 +98,7 @@ public class AiMessage : Plugin
             aiClient.RegisterTool(replyTool);
         }
         // turn to another bot
-        AddBotForHelp();
+        //AddBotForHelp();
 
     }
     private void AddBotForHelp()
@@ -212,11 +214,33 @@ public class AiMessage : Plugin
             }
 
         }
-        if (!isTargeted)
+        if (isTargeted)
         {
-            return;
+            _ = PreprocessMessage(messages, groupId, nickname, data);
+        }   
+    }
+    async Task SetLlmModel(IEnumerable<NapcatClient.Message> chain, long groupId, long messageId)
+    {
+        string[] textList = chain.First().ToString().Split(' ');
+        if (textList.Length > 1)
+        {
+            var tag = textList[1];
+            var model = ModelPreset.GetModelByName(tag);
+            if (model != null) {
+                //valid
+                aiClient.modelPreset=model;
+                Interop.SetVarible(LLM_KEY,tag);
+            }
+            else
+            {
+                _ = Actions.ReplyGroupMessage(groupId, messageId, $"invalid model tag\n{ModelPreset.AllModels()}");
+            }
         }
-        _=PreprocessMessage(messages,groupId,nickname,data.message_id);
+        else
+        {
+            _ = Actions.ReplyGroupMessage(groupId, messageId, $"/setllm [model-tag]\n{ModelPreset.AllModels()}");
+        }
+        
     }
     async Task<string> ExtractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
     {
@@ -311,8 +335,9 @@ public class AiMessage : Plugin
         var text = sb.ToString();
         return text;
     }
-    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,long messageId)
+    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,ReceivedGroupMessage data)
     {
+        var messageId = data.message_id;
         //concat text
         string text;
         try
@@ -326,6 +351,10 @@ public class AiMessage : Plugin
         
         if (text.StartsWith('/'))
         {
+            if (text.StartsWith("/setllm") && data.sender.user_id==Interop.AuthorizedUser)
+            {
+                _=SetLlmModel(chain,groupId, messageId);
+            }
             return;
         }
         if (!string.IsNullOrWhiteSpace(text))

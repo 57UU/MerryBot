@@ -20,7 +20,7 @@ namespace ZhipuClient;
 public class ZhipuAi : IDisposable
 {
     string token;
-    ModelPreset modelPreset;
+    public ModelPreset modelPreset {  get; set; }
 
     public const string SYSTEM = "system";
     public const string USER = "user";
@@ -354,7 +354,7 @@ public class ZhipuAi : IDisposable
         };
         requestData = requestData.Concat(modelPreset.extraBody).ToDictionary();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, modelPreset.url);
+        var req = new HttpRequestMessage(HttpMethod.Post, modelPreset.CompletionUrl);
 
         // 序列化请求数据为JSON
         string jsonData = JsonSerializer.Serialize(requestData, options);

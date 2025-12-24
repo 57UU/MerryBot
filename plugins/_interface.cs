@@ -70,7 +70,8 @@ public record PluginInterop(
     Detail Variables,
     Action<int> Shutdown,
     long AuthorizedUser,
-    string[] CommandLineArguments
+    string[] CommandLineArguments,
+    Func<Task> ConfigSaver
     )
 {
     /// <summary>
@@ -137,6 +138,14 @@ public record PluginInterop(
         }
         var realValue = (JsonElement)value;
         return realValue.Deserialize<T>();
+    }
+    internal void SetVarible(string key,dynamic value)
+    {
+        Variables[key] = value;
+    }
+    internal async Task SaveConfig()
+    {
+
     }
 }
 

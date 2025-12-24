@@ -23,13 +23,13 @@ public class Config
     {
         try
         {
-            await load();
-            await save();
+            await Load();
+            await Save();
         }
         catch (Exception)
         {
             Instance = new Config();
-            save().Wait();
+            Save().Wait();
         }
     }
     static readonly JsonSerializerOptions settingOptions = new JsonSerializerOptions()
@@ -39,13 +39,13 @@ public class Config
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
-    public async static Task save()
+    public async static Task Save()
     {
 
         var json = JsonSerializer.Serialize(Instance, options: settingOptions);
         await Utils.write(SettingFile, json);
     }
-    public async static Task load()
+    public async static Task Load()
     {
 
         var json = await Utils.read(SettingFile);
