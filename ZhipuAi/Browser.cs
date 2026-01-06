@@ -2,6 +2,7 @@
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.DevTools;
 using OpenQA.Selenium.Support.Extensions;
+using OpenQA.Selenium.Support.UI;
 using SeleniumStealth.NET.Clients;
 using SeleniumStealth.NET.Clients.Enums;
 using SeleniumStealth.NET.Clients.Extensions;
@@ -20,12 +21,25 @@ using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipuClient;
 
+class DriverPack
+{
+    public ChromeDriver driver;
+    public WebDriverWait driverWait;
+    public bool isSearchInitialized = false;
+    public DriverPack(ChromeDriver driver)
+    {
+        this.driver = driver;
+        driverWait = new WebDriverWait(driver!, TimeSpan.FromSeconds(15));
+    }
+}
+
 /// <summary>
 /// access web pages with headless chrome
 /// </summary>
 public partial class Browser : IDisposable
 {
-    ChromeDriver? driver = null;
+    DriverPack? driverPack;
+    ChromeDriver? driver { get { return driverPack?.driver; } }
     ChromeOptions options = new();
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     string getSearchResult = null;
@@ -87,20 +101,45 @@ public partial class Browser : IDisposable
     private async Task<ChromeDriver> LoadBrowser()
     {
         resourceCountdown.Start();
-        var b = await Task.Run(() => driver = Stealth.Instantiate(options, stealthInstanceSettings));
-        //先搜一下，不知道为什么第一次搜出来的东西没有相关性
-        await Search("java 漏洞",false);
-        return b;
+        var driver = await Task.Run(() => Stealth.Instantiate(options, stealthInstanceSettings));
+        driverPack = new(driver);
+        return driver;
+    }
+    /// <summary>
+    /// wait for web page to be loaded (supports both regular pages and SPAs)
+    /// </summary>
+    /// <returns></returns>
+    private Task EnsurePageLoaded()
+    {
+        return Task.Run(() =>
+        {
+            driverPack!.driverWait.Until(d =>
+                ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState")!.Equals("complete")
+            );
+
+            var hasRootElement = ((IJavaScriptExecutor)driverPack!.driver).ExecuteScript("return document.getElementById('root') !== null");
+            if (hasRootElement != null && (bool)hasRootElement)
+            {
+                //SPA
+                driverPack!.driverWait.Until(d =>
+                {
+                    var rootElement = d.FindElement(By.Id("root"));
+                    if (rootElement == null) return false;
+                    var innerHTML = ((IJavaScriptExecutor)d).ExecuteScript("return arguments[0].innerHTML", rootElement);
+                    return innerHTML != null && !string.IsNullOrEmpty(innerHTML.ToString()) && innerHTML.ToString().Trim().Length > 0;
+                });
+            }
+        });
     }
     private void CloseBrowser()
     {
-        if (driver == null)
+        if (driverPack == null)
         {
             return;
         }
-        driver.Quit();
-        driver.Dispose();
-        driver = null;
+        driverPack.driver.Quit();
+        driverPack.driver.Dispose();
+        driverPack = null;
     }
     private async Task UseBrowser()
     {
@@ -139,9 +178,11 @@ public partial class Browser : IDisposable
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver!.Navigate().GoToUrl(url);
+            await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
+            await EnsurePageLoaded();
             var result = driver.ExecuteScript(jsReader)!.ToString()!;
+            var text = driver.ExecuteScript("return document.body.innerHTML")!.ToString();
             return Trim(result);
         });
 
@@ -165,12 +206,18 @@ public partial class Browser : IDisposable
     public async Task<string> Search(string keyword, bool internationalVersion)
     {
         await UseBrowser();
+        if (!driverPack!.isSearchInitialized)
+        {
+            driverPack.isSearchInitialized = true;
+            //先搜一下，不知道为什么第一次搜出来的东西没有相关性
+            await Search("java 漏洞", false);
+        }
         var url = ToStandardUri($"https://cn.bing.com/search?q={HttpUtility.UrlEncode(keyword)}&FORM=ANNTA1&adppc=EDGEXST&PC=U531" +
             (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver!.Navigate().GoToUrl(url);
+            await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             var result = driver.ExecuteScript(getSearchResult)!.ToString()!;
 
@@ -212,7 +259,7 @@ public partial class Browser : IDisposable
         var task = Task.Run(async () =>
         {
             mutex.Wait();
-            driver!.Navigate().GoToUrl(url);
+            await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             int delay = 0;
             while (true)
