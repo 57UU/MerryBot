@@ -149,9 +149,10 @@ public partial class Browser : IDisposable
         }
         resourceCountdown.UseResource();
     }
-    private void GotoBlankPage()
+    private async Task GotoBlankPage()
     {
-        driver?.Navigate().GoToUrl("about:blank");
+        if (driver != null)
+            await driver.Navigate().GoToUrlAsync("about:blank");
     }
     static string Trim(string s)
     {
@@ -177,7 +178,7 @@ public partial class Browser : IDisposable
         await UseBrowser();
         var task = Task.Run(async () =>
         {
-            mutex.Wait();
+            await mutex.WaitAsync();
             await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             await EnsurePageLoaded();
@@ -188,7 +189,7 @@ public partial class Browser : IDisposable
 
         return await task.ContinueWith((t) =>
         {
-            GotoBlankPage();
+            _=GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -216,7 +217,7 @@ public partial class Browser : IDisposable
             (internationalVersion ? "&ensearch=1" : string.Empty));
         var task = Task.Run(async () =>
         {
-            mutex.Wait();
+            await mutex.WaitAsync();
             await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             var result = driver.ExecuteScript(getSearchResult)!.ToString()!;
@@ -226,7 +227,7 @@ public partial class Browser : IDisposable
 
         return await await task.ContinueWith(async (t) =>
         {
-            GotoBlankPage();
+            _=GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -258,7 +259,7 @@ public partial class Browser : IDisposable
         var checkInterval = 400;
         var task = Task.Run(async () =>
         {
-            mutex.Wait();
+            await mutex.WaitAsync();
             await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             int delay = 0;
@@ -286,7 +287,7 @@ public partial class Browser : IDisposable
 
         return await task.ContinueWith((t) =>
         {
-            GotoBlankPage();
+            _=GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
