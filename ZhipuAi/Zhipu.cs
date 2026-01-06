@@ -101,9 +101,9 @@ public class ZhipuAi : IDisposable
         {
             var bingSearch = new ToolDef();
             bingSearch.Function.Name = "search";
-            bingSearch.Function.Description = "使用Bing进行网络搜索";
+            bingSearch.Function.Description = "使用Bing搜索";
             bingSearch.Function.Parameters.AddRequired("query", new ParameterProperty() { Type = "string", Description = "keyword" });
-            bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版搜索" });
+            bingSearch.Function.Parameters.AddNonRequired("internationalVersion", new ParameterProperty() { Type = "boolean", Description = "是否启用国际版" });
             bingSearch.Function.FunctionCall = async (parameters) =>
             {
                 var query = parameters["query"];
