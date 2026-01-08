@@ -113,6 +113,12 @@ function cleanHtmlTags(html) {
     // 移除除a标签外的所有HTML标签
     html = html.replace(/<(?!a\b)[^>]+>/g, '|');
   }
+  
+  // 解码HTML实体
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = html;
+  html = textarea.value;
+  
   // 将连续的竖线或空格替换为单个竖线
   html = html.replace(/[\|\s][\|\s\n]*[\|\s]/g, '|');
   return html;
