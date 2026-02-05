@@ -11,8 +11,10 @@ public class Actions
     WebsocketClient WebSocket{
         get => bot.WebSocket;
     }
-    readonly ISimpleLogger Logger;
-    readonly BotClient bot;
+    private readonly ISimpleLogger Logger;
+    private readonly BotClient bot;
+    private readonly RequestCaching requestCaching = new(TimeSpan.FromMinutes(1));
+
     public Actions(ISimpleLogger logger, BotClient bot)
     {
         Logger = logger;
@@ -20,12 +22,17 @@ public class Actions
     }
     private static readonly SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
     private ulong echoCount = 0;
-    public Task<ResponseRootObject> _SendAction(ParameteredAct act)
+    public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey =null, TimeSpan? expiration = null)
     {
-        return _SendAction(act.ToAct());
+        return _SendAction(act.ToAct(), cacheKey, expiration);
     }
-    public async Task<ResponseRootObject> _SendAction(Act act)
+    public async Task<ResponseRootObject> _SendAction(Act act, string? cacheKey =null, TimeSpan? expiration = null)
     {
+        if (cacheKey != null && requestCaching.TryGetCache(cacheKey, out ResponseRootObject? cacheRes))
+        {
+            return cacheRes!;
+        }
+        
         var echo = $"{echoCount++}";
         act.Echo = echo;
         var json = BotUtils.Serialize(act);
@@ -34,7 +41,12 @@ public class Actions
         {
             WebSocket.Send(json);
         });
-        return await WaitForResponse(echo);
+        var res = await WaitForResponse(echo);
+        if (cacheKey != null)
+        {
+            requestCaching.SetCache(cacheKey, res, expiration);
+        }
+        return res!;
     }
     internal void AddResponse(string echo, ResponseRootObject response)
     {
@@ -209,7 +221,7 @@ public class Actions
             action: "get_group_member_list",
             parameters: new { group_id = groupId, no_cache=false }
             );
-        var result=await _SendAction(act);
+        var result=await _SendAction(act, $"group_member_list_{groupId}");
         var data = result.Data;
         return data.Deserialize<GroupMemberListData>()!;
     }
@@ -225,7 +237,7 @@ public class Actions
             action: "get_group_member_info",
             parameters: new { group_id = groupId, user_id=qq, no_cache = false }
             );
-        var result = await _SendAction(act);
+        var result = await _SendAction(act, $"group_member_info_{groupId}_{qq}");
         if (result.Status == "failed")
         {
             return null;
@@ -244,7 +256,7 @@ public class Actions
             action: "get_msg",
             parameters: new { message_id=messageId }
             );
-        var result = await _SendAction(act);
+        var result = await _SendAction(act, $"get_msg_{messageId}");
         var data = result.Data;
         var deserilzed= data.Deserialize<GroupMessage>();
         if (deserilzed == null)
@@ -260,7 +272,7 @@ public class Actions
             action: "get_forward_msg",
             parameters: new { message_id=messageId }
             );
-        var result = await _SendAction(act);
+        var result = await _SendAction(act, $"get_forward_msg_{messageId}");
         var data = result.Data;
         var deserilzed= data.Deserialize<ForwardMessage>();
         if (deserilzed == null)
