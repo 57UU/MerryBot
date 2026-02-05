@@ -13,7 +13,7 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
     1919810
   ],
   "authorized-user":114514,//授权用户qq号，插件可在高危操作时验证qq号
-  "variables": {
+  "variables": {// 插件可以访问这里定义的变量
     "llm-model": "deepseek-chat",// 选择的llm模型
     "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
     "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
@@ -131,9 +131,16 @@ Merry Bot
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
-|List<MessageInterceptor> Interceptors|设置拦截器，拦截指定消息被后续插件处理|
+|List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
 |Action<int> Shutdown|关闭程序，参数为退出码|
 |long AuthorizedUser|获取授权用户的QQ号|
+
+### 拦截器-Interceptors
+方法签名：
+```csharp
+public delegate bool MessageInterceptor(ReceivedGroupMessage data)
+```
+返回true拦截，false不拦截。
 
 ### 插件存储-PluginStorage
 

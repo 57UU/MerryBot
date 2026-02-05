@@ -39,6 +39,8 @@ public class ZhipuAi : IDisposable
     readonly string prompt;
     readonly Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
+    public int MaxWebContentLength { get; set; } = 5000;
+    public int SlidingWindowContext { get; set; } = 100;
     public ZhipuAi(string token, string prompt, ModelPreset modelPreset)
     {
         this.token = token;
@@ -51,7 +53,7 @@ public class ZhipuAi : IDisposable
         };
         SetModelPreset(modelPreset, token);
         //set timeout
-        client.Timeout = TimeSpan.FromSeconds(50);
+        client.Timeout = TimeSpan.FromSeconds(10);
         options.Converters.Add(new MessageConverter());
         //tools
         AddBuiltInTools();
@@ -89,9 +91,9 @@ public class ZhipuAi : IDisposable
         {
             var url = parameters["url"];
             var html = await browser.View(url.GetString()!);
-            if (html.Length > 5000)
+            if (html.Length > MaxWebContentLength)
             {
-                html = string.Concat(html.AsSpan(0, 5000), "[省略过长内容]");
+                html = string.Concat(html.AsSpan(0, MaxWebContentLength), "[省略过长内容]");
             }
             return html;
         };
@@ -200,6 +202,7 @@ public class ZhipuAi : IDisposable
 
         if (!history.TryGetValue(id, out List<ZhipuMessage>? currentHistory))
         {
+            //if currentHistory is null, create a new one
             currentHistory = new List<ZhipuMessage>();
             history.Add(id, currentHistory);
             ZhipuMessage prompt;
@@ -235,6 +238,11 @@ public class ZhipuAi : IDisposable
             Content = $"[用户:{sender}]{content}"
         };
         currentHistory.Add(userQuery);
+        //if currentHistory is too long, remove the first message
+        while(currentHistory.Count>SlidingWindowContext)
+        {
+            currentHistory.RemoveAt(1);
+        }
         while (!done)
         {
             string response;
