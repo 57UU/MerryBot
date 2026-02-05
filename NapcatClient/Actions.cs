@@ -1,4 +1,5 @@
 ﻿using CommonLib;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -20,54 +21,66 @@ public class Actions
         Logger = logger;
         this.bot = bot;
     }
-    private static readonly SemaphoreSlim responseSemaphore = new SemaphoreSlim(0);
-    private ulong echoCount = 0;
+
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
+    private long _echoCounter = 0;
     public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey =null, TimeSpan? expiration = null)
     {
         return _SendAction(act.ToAct(), cacheKey, expiration);
     }
-    public async Task<ResponseRootObject> _SendAction(Act act, string? cacheKey =null, TimeSpan? expiration = null)
+    public async Task<ResponseRootObject> _SendAction(Act act, string? cacheKey = null, TimeSpan? expiration = null)
     {
         if (cacheKey != null && requestCaching.TryGetCache(cacheKey, out ResponseRootObject? cacheRes))
         {
             return cacheRes!;
         }
-        
-        var echo = $"{echoCount++}";
+
+        var echo = Interlocked.Increment(ref _echoCounter).ToString();
         act.Echo = echo;
-        var json = BotUtils.Serialize(act);
-        Logger.Info($"sending: {json}");
-        await Task.Run(() =>
+        
+        var tcs = new TaskCompletionSource<ResponseRootObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        
+        if (!_pendingResponses.TryAdd(echo, tcs))
         {
-            WebSocket.Send(json);
-        });
-        var res = await WaitForResponse(echo);
-        if (cacheKey != null)
-        {
-            requestCaching.SetCache(cacheKey, res, expiration);
+            throw new InvalidOperationException($"Duplicate echo: {echo}");
         }
-        return res!;
+
+        try
+        {
+            var json = BotUtils.Serialize(act);
+            Logger.Info($"sending: {json}");
+            
+            await Task.Run(() => WebSocket.Send(json));
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await using (cts.Token.Register(() => tcs.TrySetCanceled()))
+            {
+                var result = await tcs.Task;
+                
+                if (cacheKey != null)
+                {
+                    requestCaching.SetCache(cacheKey, result, expiration);
+                }
+                
+                return result;
+            }
+        }
+        finally
+        {
+            _pendingResponses.TryRemove(echo, out _);
+        }
     }
     internal void AddResponse(string echo, ResponseRootObject response)
     {
         Logger.Info($"return: {echo}");
-        responses.Add(echo, response);
-        responseSemaphore.Release();
-    }
-    private readonly Dictionary<string, ResponseRootObject> responses = new();
-    public async Task<ResponseRootObject> WaitForResponse(string echo)
-    {
-        await responseSemaphore.WaitAsync();
-        if (responses.TryGetValue(echo, out ResponseRootObject? res))
+        
+        if (_pendingResponses.TryRemove(echo, out var tcs))
         {
-            responses.Remove(echo);
-            return res;
+            tcs.TrySetResult(response);
         }
         else
         {
-            responseSemaphore.Release();
-            await Task.Yield();
-            return await WaitForResponse(echo);
+            Logger.Warn($"Received response for unknown echo: {echo}");
         }
     }
     /// <summary>
