@@ -336,6 +336,11 @@ public class AiMessage : Plugin
             }else if(item.MessageType == "image")
             {
                 sb.AppendLine("<image>");
+            }else if(item.MessageType =="face"){
+                if(int.TryParse(item.Data["id"],out int faceCode)){
+                    string faceName = QqFace.GetFace(faceCode);
+                    sb.AppendLine($" [表情:{faceName}]");
+                }
             }
         }
         if (referenceMessage != null) { 
