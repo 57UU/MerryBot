@@ -16,18 +16,20 @@ public class ModelPreset
     public readonly bool enableSearch;
     public readonly string url;
     public readonly string provider;
+    public readonly bool supportImageInput;
     public readonly ImmutableDictionary<string, object> extraBody;
     private static ImmutableDictionary<string, object> Empty = ImmutableDictionary<string, object>.Empty;
 
     private static readonly Dictionary<string, ModelPreset> modelsByName = new();
     public string CompletionUrl => $"{url}/chat/completions";
-    public ModelPreset(string model, string url, string provider, ImmutableDictionary<string, object>? extraBody = null, bool enableSearch=true)
+    public ModelPreset(string model, string url, string provider, ImmutableDictionary<string, object>? extraBody = null, bool enableSearch=true,bool supportImageInput=false)
     {
         this.model = model;
         this.url = url;
         this.provider = provider;
         this.extraBody = extraBody ?? Empty;
         this.enableSearch = enableSearch;
+        this.supportImageInput = supportImageInput;
         modelsByName[model] = this;
     }
     public ModelPreset With(
@@ -35,7 +37,8 @@ public class ModelPreset
         string? url = null,
         string? provider = null,
         ImmutableDictionary<string, object>? extraBody = null,
-        bool? enableSearch=null
+        bool? enableSearch=null,
+        bool? supportImageInput=null
         )
     {
         return new(
@@ -43,7 +46,8 @@ public class ModelPreset
              url ?? this.url,
              provider ?? this.provider,
              extraBody ?? this.extraBody,
-             enableSearch ?? this.enableSearch
+             enableSearch ?? this.enableSearch,
+             supportImageInput ?? this.supportImageInput
              );
 
     }
@@ -88,6 +92,7 @@ public class ModelPreset
             provider: "zhipu",
             extraBody: Empty.Add("thinking","enabled")
         );
+    public static readonly ModelPreset GLM_4_6V_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
     public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
     public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7",extraBody:Empty);
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(

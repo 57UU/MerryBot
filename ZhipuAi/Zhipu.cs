@@ -77,11 +77,11 @@ public class ZhipuAi : IDisposable
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
 
-        var weiboHot = new ToolDef();
-        weiboHot.Function.Name = "view_weibo_hot";
-        weiboHot.Function.Description = "查看微博热搜";
-        weiboHot.Function.FunctionCall = async (parameters) => await browser.GetWeiboHot();
-        RegisterTool(weiboHot);
+        // var weiboHot = new ToolDef();
+        // weiboHot.Function.Name = "view_weibo_hot";
+        // weiboHot.Function.Description = "查看微博热搜";
+        // weiboHot.Function.FunctionCall = async (parameters) => await browser.GetWeiboHot();
+        // RegisterTool(weiboHot);
 
         var browserDef = new ToolDef();
         browserDef.Function.Name = "view_web";
@@ -177,7 +177,7 @@ public class ZhipuAi : IDisposable
     /// <param name="sender">发送者</param>
     /// <param name="specialTag">一个tag，该tag会出现在function call的参数中</param>
     /// <returns>异步字符串迭代器，模型返回结果</returns>
-    public async IAsyncEnumerable<string> Ask(string content, long id, string sender, long specialTag = 0)
+    public async IAsyncEnumerable<string> Ask(string content, long id, string sender,long specialTag = 0)
     {
         var mutex = EnsureMutexExists(id);
         if (mutex.CurrentCount == 0)

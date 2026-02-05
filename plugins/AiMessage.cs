@@ -22,6 +22,8 @@ public class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
+    private readonly ImageInterpreter? imageInterpreter=null;
+    private readonly ModelPreset imageInterpreterModel=ModelPreset.GLM_4_6V_Free;
     public AiMessage(PluginInterop interop) : base(interop)
     {
         //display available model
@@ -39,6 +41,17 @@ public class AiMessage : Plugin
         var token_key= model.ApiTokenDictKey;
         var token = interop.GetVariable<string>(token_key) 
             ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
+        //image interpreter
+        {
+            var token_key_image=imageInterpreterModel.ApiTokenDictKey;
+            var token_image=interop.GetVariable<string>(token_key_image);
+            if (token_image == null)
+            {
+                Logger.Warn($"请在配置文件variable中设置{token_key_image}");
+            }else{
+                imageInterpreter = new ImageInterpreter(imageInterpreterModel, token_image);
+            }
+        }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
         aiClient = new ZhipuAi(token, prompt, model);
         aiClient.Logger = Logger;
@@ -251,7 +264,7 @@ public class AiMessage : Plugin
         }
         
     }
-    async Task<string> ExtractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false)
+    async Task<string> ExtractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false, int depth=0, bool interpretImage=false)
     {
         StringBuilder sb = new();
         string? referenceMessage=null;
@@ -278,7 +291,7 @@ public class AiMessage : Plugin
                 var referMessage=await Actions.GetMessageById(referMessageId);
                 if (referMessage != null)
                 {
-                    var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false);
+                    var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth+1, interpretImage:true);
                     referenceMessage = $"\n引用内容：\n{extractedMessage}";
                 }
             }else if (item.MessageType == "json")
@@ -319,7 +332,7 @@ public class AiMessage : Plugin
                     forwardString.AppendLine("---转发消息---");
                     foreach (var msg in referMessage.Messages)
                     {
-                        var extractedMessage = await ExtractMessage(msg.Message, groupId, false);
+                        var extractedMessage = await ExtractMessage(msg.Message, groupId, depth<3, depth+1);
                         forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
                     }
                     forwardString.AppendLine("------");
@@ -335,7 +348,18 @@ public class AiMessage : Plugin
             
             }else if(item.MessageType == "image")
             {
-                sb.AppendLine("<image>");
+                if(depth==0 || interpretImage){
+                    //解析图片内容
+                    if (imageInterpreter != null)
+                    {
+                        var imageUrl = item.Data["url"];
+                        var description = await imageInterpreter.Interpret(imageUrl);
+                        sb.AppendLine($"<image：{description}>");
+                    }
+                }else{
+                    sb.AppendLine("<image>");
+                }
+                
             }else if(item.MessageType =="face"){
                 if(int.TryParse(item.Data["id"],out int faceCode)){
                     string faceName = QqFace.GetFace(faceCode);
