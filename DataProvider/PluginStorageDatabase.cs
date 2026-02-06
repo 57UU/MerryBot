@@ -8,7 +8,7 @@ using Microsoft.Data.Sqlite;
 
 namespace DataProvider;
 
-public class PluginStorageDatabase : SQLiteDataProvider
+public partial class PluginStorageDatabase : SQLiteDataProvider
 {
     //sql
     private const string UPSERT_SQL = $"INSERT INTO {Str.PLUGIN_DATA_TABLE} ({Str.NAME}, {Str.VALUE}) VALUES (@PluginName, @Data) ON CONFLICT({Str.NAME}) DO UPDATE SET {Str.VALUE} = excluded.{Str.VALUE}";
@@ -16,7 +16,11 @@ public class PluginStorageDatabase : SQLiteDataProvider
     
     public PluginStorageDatabase(string databasePath="plugin_data.db") : base(databasePath)
     {
-        ExecuteSQLAsync(Str.Build_Table_SQL).Wait();
+        Task[] tasks=[
+            ExecuteSQLAsync(Str.Build_Table_SQL),
+            ExecuteSQLAsync(StrAiMessage.Build_Table_SQL)
+        ];
+        Task.WaitAll(tasks);
     }
     
     public async Task StorePluginData(string pluginName, string data)

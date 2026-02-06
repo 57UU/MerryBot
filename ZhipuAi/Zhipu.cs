@@ -41,11 +41,12 @@ public class ZhipuAi : IDisposable
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
     public int MaxWebContentLength { get; set; } = 5000;
     public int SlidingWindowContext { get; set; } = 100;
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset)
+    public HistoryRecorder? HistoryRecorder { get; set; } = null;
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset,HistoryRecorder? historyRecorder=null)
     {
         this.token = token;
         this.prompt = prompt;
-        
+        this.HistoryRecorder = historyRecorder;
         SystemPrompt = new ZhipuMessage()
         {
             Role = SYSTEM,
@@ -168,7 +169,8 @@ public class ZhipuAi : IDisposable
         history.Remove(id);
         mutex.Release();
     }
-    public TimeSpan AutoNewSpan = TimeSpan.FromHours(12);
+    public TimeSpan AutoNewSpan { get; set; } = TimeSpan.FromHours(12);
+
     /// <summary>
     /// 处理请求
     /// </summary>
@@ -179,6 +181,7 @@ public class ZhipuAi : IDisposable
     /// <returns>异步字符串迭代器，模型返回结果</returns>
     public async IAsyncEnumerable<string> Ask(string content, long id, string sender,long specialTag = 0)
     {
+        var recorder= (ZhipuMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
         var mutex = EnsureMutexExists(id);
         if (mutex.CurrentCount == 0)
         {
@@ -230,6 +233,7 @@ public class ZhipuAi : IDisposable
                 prompt = SystemPrompt;
             }
             history[id].Add(prompt);
+            recorder(prompt);
         }
 
         var userQuery = new ZhipuMessage()
@@ -238,6 +242,7 @@ public class ZhipuAi : IDisposable
             Content = $"[用户:{sender}]{content}"
         };
         currentHistory.Add(userQuery);
+        recorder(userQuery);
         //if currentHistory is too long, remove the first message
         int excessCount = currentHistory.Count - SlidingWindowContext;
         if (excessCount > 0)
@@ -269,6 +274,7 @@ public class ZhipuAi : IDisposable
                         });
                     }
                     currentHistory.Add(assistantMessage);
+                    HistoryRecorder?.Invoke(id, assistantMessage.Role, $"{assistantMessage.Content}:"+string.Join(",", assistantMessage.ToolCalls.Select(i=>$"{i.Function.Name}({i.Function.Arguments})")));
                     //tool call
                     List<Task<ToolMessage>> tasks = new();
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
@@ -279,16 +285,18 @@ public class ZhipuAi : IDisposable
                     foreach (var i in tasks)
                     {
                         currentHistory.Add(i.Result);
+                        recorder(i.Result);
                     }
                 }
                 else
                 {
-
-                    currentHistory.Add(new ZhipuMessage()
+                    var currentMessage=new ZhipuMessage()
                     {
                         Role = msg.Role,
                         Content = msg.Content
-                    });
+                    };
+                    currentHistory.Add(currentMessage);
+                    recorder(currentMessage);
                     done = true;
                 }
             }

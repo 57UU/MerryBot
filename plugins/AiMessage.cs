@@ -53,7 +53,7 @@ public class AiMessage : Plugin
             }
         }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        aiClient = new ZhipuAi(token, prompt, model);
+        aiClient = new ZhipuAi(token, prompt, model, interop.HistoryRecorder);
         aiClient.Logger = Logger;
         //add voice tool
         var voiceSender = new ToolDef();

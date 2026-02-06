@@ -71,7 +71,8 @@ public record PluginInterop(
     Action<int> Shutdown,
     long AuthorizedUser,
     string[] CommandLineArguments,
-    Func<Task> ConfigSaver
+    Func<Task> ConfigSaver,
+    ZhipuClient.HistoryRecorder HistoryRecorder
     )
 {
     /// <summary>

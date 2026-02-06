@@ -209,7 +209,8 @@ internal class Logic
                         Shutdown,
                         AuthorizedUser,
                         CommandLineArguments,
-                        Config.Save
+                        Config.Save,
+                        (groupId, messageType, content) => _= PluginStorageDatabase.RecordAiMessage(groupId, messageType, content)
                         );
 
                 Plugin pluginInstance;
