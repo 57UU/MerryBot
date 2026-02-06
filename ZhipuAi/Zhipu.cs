@@ -239,9 +239,11 @@ public class ZhipuAi : IDisposable
         };
         currentHistory.Add(userQuery);
         //if currentHistory is too long, remove the first message
-        while(currentHistory.Count>SlidingWindowContext)
+        int excessCount = currentHistory.Count - SlidingWindowContext;
+        if (excessCount > 0)
         {
-            currentHistory.RemoveAt(1);
+            // 保留第一个元素（系统提示），移除从索引1开始的excessCount个元素
+            currentHistory.RemoveRange(1, excessCount);
         }
         while (!done)
         {

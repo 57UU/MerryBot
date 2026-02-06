@@ -171,7 +171,7 @@ public class Actions
     /// <returns></returns>
     public Task<ResponseRootObject> SendLongMessage(string groupId, string text,string nickname)
     {
-        var fowardChain = GroupForwardChain.BuildDefault(bot.SelfId.ToString(),nickname,groupId);
+        var fowardChain =new GroupForwardChain.Builder(bot.SelfId.ToString(),nickname,groupId);
         var text_char = text.ToCharArray();
 
         for (int i = 0; i <= text_char.Length / PartLength; i++)
@@ -188,7 +188,7 @@ public class Actions
                 fowardChain.AddText(new string(text_char, start,text_char.Length-start));
             }
         }
-        Act act = new("send_group_forward_msg",fowardChain);
+        Act act = new("send_group_forward_msg",fowardChain.Build());
         return _SendAction(act);
 
     }

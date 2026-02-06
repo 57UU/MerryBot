@@ -40,7 +40,7 @@ public class PluginStorageDatabase : SQLiteDataProvider
         return "";
     }
 
-    private class Str
+    private static class Str
     {
         internal const string NAME = "Name";
         internal const string VALUE = "Value";

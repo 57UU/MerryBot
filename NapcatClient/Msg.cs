@@ -198,12 +198,6 @@ public class ReceivedGroupMessage
 
 public class GroupForwardChain
 {
-    [JsonIgnore]
-    public string Nickname { get; set; }
-    [JsonIgnore]
-    public string UserId { get; set; }
-
-
     [JsonPropertyName("group_id")]
     public string GroupId { get; set; }
 
@@ -221,27 +215,33 @@ public class GroupForwardChain
 
     [JsonPropertyName("source")]
     public string Source { get; set; }
-    public static GroupForwardChain BuildDefault(string selfId,string nickname,string groupId)
-    {
-        return new GroupForwardChain
+    public class Builder{
+        public readonly string userId;
+        public readonly string nickname;
+        private readonly GroupForwardChain chain=new();
+        public Builder(string selfId,string nickname,string groupId){
+            userId=selfId;
+            this.nickname=nickname;
+            chain.GroupId=groupId;
+            chain.Prompt="我喜欢你很久了，能不能做我男朋友";
+            chain.Summary="思考结果";
+            chain.Source="聊天记录";
+        }
+        public void AddText(string text)
         {
-            UserId = selfId,
-            Nickname = nickname,
-            GroupId = groupId,
-            Prompt = "我喜欢你很久了，能不能做我男朋友",
-            Summary = "思考结果",
-            Source = "聊天记录"
-        };
+            MessageItem messageItem = new();
+            chain.Messages.Add(messageItem);
+            messageItem.Data.NickName = nickname;
+            messageItem.Data.UserId = userId;
+            messageItem.Data.Content = Message.Text(text);
+            chain.News.Add(new Dictionary<string, object>() { {"text",$"{nickname}:{text}" } });
+        }
+        public GroupForwardChain Build()
+        {
+            return chain;
+        }
     }
-    public void AddText(string text)
-    {
-        MessageItem messageItem = new();
-        Messages.Add(messageItem);
-        messageItem.Data.NickName = Nickname;
-        messageItem.Data.UserId = UserId;
-        messageItem.Data.Content = Message.Text(text);
-        News.Add(new Dictionary<string, object>() { {"text",$"{Nickname}:{text}" } });
-    }
+
 }
 
 public class MessageItem
