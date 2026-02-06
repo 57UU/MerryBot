@@ -32,7 +32,7 @@ public partial class PluginStorageDatabase
                 $"Id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 $"{GroupId} INTEGER NOT NULL," +
                 $"{MessageType} TEXT NOT NULL," +
-                $"{Content} TEXT NOT NULL," +
+                $"{Content} TEXT NOT NULL" +
             $")";
     }
 }
