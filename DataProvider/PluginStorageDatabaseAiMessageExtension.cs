@@ -9,7 +9,7 @@ namespace DataProvider;
 public partial class PluginStorageDatabase
 {
     private const string AI_MESSAGE_UPSERT_SQL =
-        $"INSERT INTO {StrAiMessage.AiMessageDataTeble} ({StrAiMessage.GroupId}, {StrAiMessage.MessageType}, {StrAiMessage.Content}) VALUES (@GroupId, @MessageType, @Content)";
+        $"INSERT INTO {StrAiMessage.AiMessageDataTable} ({StrAiMessage.GroupId}, {StrAiMessage.MessageType}, {StrAiMessage.Content}) VALUES (@GroupId, @MessageType, @Content)";
 
     public async Task RecordAiMessage(long groupId, string messageType, string content)
     {
@@ -26,9 +26,9 @@ public partial class PluginStorageDatabase
         internal const string GroupId = "Group_Id";
         internal const string MessageType = "Message_Type";
         internal const string Content = "Content";
-        internal const string AiMessageDataTeble = "AI_Message_Data_Table";
+        internal const string AiMessageDataTable = "AI_Message_Data_Table";
         internal const string Build_Table_SQL =
-            $"CREATE TABLE IF NOT EXISTS {AiMessageDataTeble} (" +
+            $"CREATE TABLE IF NOT EXISTS {AiMessageDataTable} (" +
                 $"Id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 $"{GroupId} INTEGER NOT NULL," +
                 $"{MessageType} TEXT NOT NULL," +
