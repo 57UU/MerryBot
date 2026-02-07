@@ -3,7 +3,7 @@ using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
+using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 
 namespace MerryBot;
 

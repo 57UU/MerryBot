@@ -1,6 +1,7 @@
 ﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
-global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
+global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using CommonLib;
+using NapcatClient.MessageType;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -10,163 +11,8 @@ namespace NapcatClient;
 
 
 
-/// <summary>
-///  view https://napneko.github.io/onebot/sement for details
-/// </summary>
-public class Message
-{
-    [JsonPropertyName("type")]
-    public string MessageType {set; get; }
-    [JsonPropertyName("data")]
-    public Detail Data {set; get; } = new();
-    public Message(string messageType)
-    {
-        this.MessageType = messageType;
-    }
-#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
-    public Message()
-#pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
-    {
-        
-    }
-    public Message(string messageType, Dictionary<string, dynamic> data)
-    {
-        this.MessageType = messageType;
-        this.Data = data;
-    }
-    public override string ToString()
-    {
-        return ToPreviewText();
-    }
-    public string ToPreviewText()
-    {
-        string v = MessageType switch
-        {
-            Str.Text => (string)Data["text"],
-            Str.At => (string)Data["qq"],
-            Str.Image => (string)Data["file"],
-            Str.Reply => (string)Data["id"],
-            Str.Face => (string)Data["id"],
-            Str.Dice => (string)Data["result"],
-            Str.Rps => (string)Data["result"],
-            Str.Poker => $"{Data["type"]}->{Data["id"]}",
-            Str.Forward => Data["id"],
-            Str.File => Data["name"],
-            _ => Data.GetString(),
-        };
-        return $"{MessageType}:{v}";
-    }
-    /// <summary>
-    /// 将JsonElement解析为MessageChain
-    /// </summary>
-    /// <param name="messages"></param>
-    /// <returns></returns>
-    internal static List<Message> ParseMessageChain(JsonElement messages)
-    {
-        var chain = new List<Message>();
-        foreach (JsonElement i in messages.EnumerateArray())
-        {
-            string type = i.GetProperty("type")!.GetString()!;
-            var msg = new Message(type);
-            var data = i.GetProperty("data")!.Deserialize<Dictionary<string, dynamic>>()!;
-            foreach(var j in data)
-            {
-                msg.Data[j.Key]=JsonUtils.GetActualValue(j.Value);
-            }
-            chain.Add(msg);
-        }
-        return chain;
-    }
-    public override int GetHashCode()
-    {
-        return base.GetHashCode();
-    }
-    internal void ParseJsonDynamic()
-    {
-        //discard null
-        List<string> nullKeys = new();
-        foreach (var j in Data)
-        {
-            if(j.Value is null)
-            {
-                nullKeys.Add(j.Key);
-            }
-            else
-            {
-                Data[j.Key] = JsonUtils.GetActualValue(j.Value);
-            }  
-        }
-        foreach (var j in nullKeys)
-        {
-            Data.Remove(j);
-        }
-    }
-    public static Message Text(string text)
-    {
-        Message message = new Message("text");
-        message.Data["text"] = text;
-        return message;
-    }
-    public static Message At(string target)
-    {
-        Message message = new Message("at");
-        message.Data["qq"] = target;
-        return message;
-    }
-    public static Message Image(string base64, string? summary=null)
-    {
-        Message message = new Message("image");
-        message.Data["file"] = $"base64://{base64}";
-        if (summary != null)
-        {
-            message.Data["summary"]= summary;
-        }
-        return message;
-    }
-    public static Message Reply(long id)
-    {
-        Message message = new Message("reply");
-        message.Data["id"] = id;
-        return message;
-    }
-    public static class Str
-    {
-        public const string Image = "image";
-        public const string Text = "text";
-        public const string At = "at";
-        public const string Reply = "reply";
-        public const string Face = "face";
-        public const string Dice= "dice";
-        public const string Rps= "rps";//剪刀石头布
-        public const string Poker= "poke";
-        public const string Forward= "forward";
-        public const string File= "file";
 
-    }
-    public override bool Equals(object? obj)
-    {
-        var other= obj as Message;
-        if (other == null) return false;
-        if (other.MessageType == MessageType)
-        {
-            var keys=Data.Keys;
-            var otherKey=other.Data.Keys;
-            if (keys.Count != otherKey.Count) return false;
-            foreach (var key in keys)
-            {
-                if (!otherKey.Contains(key)) return false;
-                if (!Data[key].Equals(other.Data[key])) return false;
-            }
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-}
 
-#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 public class Sender
 {
     public long user_id { get; set; }
@@ -189,7 +35,7 @@ public class ReceivedGroupMessage
     public string raw_message { get; set; }
     public int font { get; set; }
     public string sub_type { get; set; }
-    public List<Message> message { get; set; } = new();
+    public List<TypedMessage> message { get; set; } = new();
     public string message_format { get; set; }
     public string post_type { get; set; }
     public long group_id { get; set; }
@@ -233,7 +79,7 @@ public class GroupForwardChain
             chain.Messages.Add(messageItem);
             messageItem.Data.NickName = nickname;
             messageItem.Data.UserId = userId;
-            messageItem.Data.Content = Message.Text(text);
+            messageItem.Data.Content = TextData.FromText(text);
             chain.News.Add(new Dictionary<string, object>() { {"text",$"{nickname}:{text}" } });
         }
         public GroupForwardChain Build()
@@ -262,7 +108,7 @@ public class MessageDataItem
     public string NickName { get; set; }
 
     [JsonPropertyName("content")]
-    public Message Content { get; set; }
+    public TypedMessage Content { get; set; }
 }
 
 public class ResponseRootObject
@@ -440,7 +286,7 @@ public class GroupMessage
     public string SubType { get; set; }
 
     [JsonPropertyName("message")]
-    public List<Message> Message { get; set; }
+    public List<TypedMessage> Message { get; set; }
 
     [JsonPropertyName("message_format")]
     public string MessageFormat { get; set; }

@@ -1,4 +1,5 @@
 ﻿using NapcatClient;
+using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -134,8 +135,8 @@ public class AiMessage : Plugin
                     return "该工具无法使用，请不要再使用本工具";
                 }
                 var chain = NapcatClient.Action.Actions.EmptyMessageChain;
-                chain.Add(NapcatClient.Message.At(qq.ToString()));
-                chain.Add(NapcatClient.Message.Text($" {parameters["question"]}"));
+                chain.Add(AtData.FromAt(qq.ToString()));
+                chain.Add(TextData.FromText($" {parameters["question"]}"));
                 await Actions.SendGroupMessage(parameters.SpecialTag, chain);
                 return "求助成功，你不用解决这个问题了";
             };
@@ -206,12 +207,12 @@ public class AiMessage : Plugin
         long selfId = BotUtils.GetSelfId(data);
         string nickname = data.sender.nickname;
         bool isTargeted = false;
-        List<NapcatClient.Message> messages = new();
+        List<TypedMessage> messages = new();
         foreach (var item in chain)
         {
-            if (item.MessageType == "at")
+            if (item is AtData atData)
             {
-                string target = item.Data["qq"];
+                string target = atData.Qq;
                 if (target == selfId.ToString())
                 {
                     isTargeted = true;
@@ -265,18 +266,18 @@ public class AiMessage : Plugin
         }
         
     }
-    async Task<string> ExtractMessage(IEnumerable<NapcatClient.Message> chain, long groupId, bool recursive=false, int depth=0, bool interpretImage=false)
+    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive=false, int depth=0, bool interpretImage=false)
     {
         StringBuilder sb = new();
         string? referenceMessage=null;
         foreach (var item in chain)
         {
-            if (item.MessageType == "text")
+            if (item is TextData textData)
             {
-                sb.Append(item.Data["text"].Trim());
-            } else if (item.MessageType == "at")
+                sb.Append(textData.Text.Trim());
+            } else if (item is AtData atData)
             {
-                string qq = item.Data["qq"].ToString();
+                string qq = atData.Qq;
                 var detail = await Actions.GetGroupMemberData(groupId.ToString(), qq);
                 if (detail != null) {
                     sb.Append($" @{detail.Nickname} ");
@@ -286,18 +287,18 @@ public class AiMessage : Plugin
                     sb.Append($" @unknown ");
                 }
                 
-            }else if (item.MessageType == "reply" && recursive)
+            }else if (item is ReplyData replyData && recursive)
             {
-                string referMessageId = item.Data["id"];
+                string referMessageId = replyData.Id;
                 var referMessage=await Actions.GetMessageById(referMessageId);
                 if (referMessage != null)
                 {
                     var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth+1, interpretImage:true);
                     referenceMessage = $"\n引用内容：\n{extractedMessage}";
                 }
-            }else if (item.MessageType == "json")
+            }else if (item is JsonData jsonData)
             {
-                JsonElement json = JsonSerializer.Deserialize<JsonElement>(item.Data["data"]);
+                JsonElement json = jsonData.Data;
                 if(json.TryGetProperty("meta",out var meta))
                 {
                     if(meta.TryGetProperty("news",out var news))
@@ -320,12 +321,12 @@ public class AiMessage : Plugin
                 }
                 else
                 {
-                    sb.AppendLine(item.Data["data"]);
+                    sb.AppendLine(json.ToString());
                 }
-            }else if(item.MessageType== "forward")
+            }else if(item is ForwardData forwardData)
             {
                 //转发消息
-                string msgId= item.Data["id"];
+                string msgId= forwardData.Id;
                 var referMessage=await Actions.GetForwardMessageById(msgId);
                 if (referMessage != null)
                 {
@@ -347,22 +348,20 @@ public class AiMessage : Plugin
                 }
 
             
-            }else if(item.MessageType == "image")
+            }else if(item is ImageData imageData)
             {
-                if(depth==0 || interpretImage){
+                if((depth==0 || interpretImage)&&imageInterpreter!=null && imageData.Url!=null){
                     //解析图片内容
-                    if (imageInterpreter != null)
-                    {
-                        var imageUrl = item.Data["url"];
-                        var description = await imageInterpreter.Interpret(imageUrl);
-                        sb.AppendLine($"<image：{description}>");
-                    }
+                    var imageUrl = imageData.Url;
+                    var description = await imageInterpreter.Interpret(imageUrl);
+                    sb.AppendLine($"<image：{description}>");
+                    
                 }else{
                     sb.AppendLine("<image>");
                 }
                 
-            }else if(item.MessageType =="face"){
-                if(int.TryParse(item.Data["id"],out int faceCode)){
+            }else if(item is FaceData faceData){
+                if(int.TryParse(faceData.Id,out int faceCode)){
                     string faceName = QqFace.GetFace(faceCode);
                     sb.AppendLine($" [表情:{faceName}]");
                 }
@@ -374,7 +373,7 @@ public class AiMessage : Plugin
         var text = sb.ToString();
         return text;
     }
-    async Task PreprocessMessage(IEnumerable<NapcatClient.Message> chain,long groupId,string nickname,ReceivedGroupMessage data)
+    async Task PreprocessMessage(IEnumerable<TypedMessage> chain,long groupId,string nickname,ReceivedGroupMessage data)
     {
         var messageId = data.message_id;
         //concat text

@@ -1,6 +1,7 @@
 ﻿using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
+using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -53,9 +54,9 @@ public abstract class Plugin : IDisposable
     /// <returns></returns>
     public static bool IsStartsWith(MessageChain chain, string prefix)
     {
-        if (chain.Length >= 1 && chain[0].MessageType == "text")
+        if (chain.Length >= 1 && chain[0] is TextData textData)
         {
-            string text = chain[0].Data["text"];
+            string text = textData.Text;
             text = text.Trim();
             if (text.StartsWith(prefix))
             {
@@ -70,12 +71,12 @@ public abstract class Plugin : IDisposable
     /// <param name="chain">消息链</param>
     /// <param name="prefix">前缀</param>
     /// <returns></returns>
-    public static bool IsStartsWith(IEnumerable<Message> chain, string prefix)
+    public static bool IsStartsWith(IEnumerable<TypedMessage> chain, string prefix)
     {
         var first= chain.FirstOrDefault();
-        if (first!=null && first.MessageType == "text")
+        if (first!=null && first is TextData textData)
         {
-            string text = first.Data["text"];
+            string text = textData.Text;
             text = text.Trim();
             if (text.StartsWith(prefix))
             {

@@ -1,5 +1,6 @@
 ﻿using HWT;
 using NapcatClient;
+using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -97,9 +98,9 @@ static class PluginUtils
         }
         return s;
     }
-    public static List<Message> MessageSpan2List(MessageChain span)
+    public static List<TypedMessage> MessageSpan2List(MessageChain span)
     {
-        List<Message> list = [.. span];
+        List<TypedMessage> list = [.. span];
         return list;
     }
 }

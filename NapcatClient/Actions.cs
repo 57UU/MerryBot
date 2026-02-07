@@ -1,4 +1,5 @@
 ﻿using CommonLib;
+using NapcatClient.MessageType;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -89,7 +90,7 @@ public class Actions
     /// <param name="groupId">qq群号</param>
     /// <param name="messageChain">消息链</param>
     /// <returns></returns>
-    public async Task<ResponseRootObject> SendGroupMessage(long groupId, IEnumerable<Message> messageChain)
+    public async Task<ResponseRootObject> SendGroupMessage(long groupId, IEnumerable<TypedMessage> messageChain)
     {
         Dictionary<string, dynamic> parameters = new();
         parameters["group_id"] = groupId;
@@ -103,7 +104,7 @@ public class Actions
     /// <summary>
     /// 获取空的消息链
     /// </summary>
-    public static List<Message> EmptyMessageChain => new List<Message>();
+    public static List<TypedMessage> EmptyMessageChain => new List<TypedMessage>();
     /// <summary>
     /// 在QQ群中发送文本消息
     /// </summary>
@@ -112,8 +113,8 @@ public class Actions
     /// <returns></returns>
     public async Task<ResponseRootObject> SendGroupMessage(long groupId, string text)
     {
-        List<Message> messages = new List<Message>();
-        messages.Add(Message.Text(text));
+        List<TypedMessage> messages = new List<TypedMessage>();
+        messages.Add(TextData.FromText(text));
         return await SendGroupMessage(groupId, messages);
     }
     /// <summary>
@@ -125,9 +126,9 @@ public class Actions
     /// <returns></returns>
     public async Task<ResponseRootObject> ReplyGroupMessage(long groupId,long messageId, string text)
     {
-        List<Message> messages = new List<Message>();
-        messages.Add(Message.Reply(messageId));
-        messages.Add(Message.Text(text));
+        List<TypedMessage> messages = new List<TypedMessage>();
+        messages.Add(ReplyData.FromReply(messageId.ToString()));
+        messages.Add(TextData.FromText(text));
         return await SendGroupMessage(groupId, messages);
     }
     public int PartLength { set; get; } = 500;
@@ -236,7 +237,7 @@ public class Actions
             );
         var result=await _SendAction(act, $"group_member_list_{groupId}");
         var data = result.Data;
-        return data.Deserialize<GroupMemberListData>()!;
+        return BotUtils.Deserialize<GroupMemberListData>(data)!;
     }
     /// <summary>
     /// 获取群成员信息
@@ -256,7 +257,7 @@ public class Actions
             return null;
         }
         var data = result.Data;
-        return data.Deserialize<GroupMemberInfo>();
+        return BotUtils.Deserialize<GroupMemberInfo>(data);
     }
     /// <summary>
     /// 通过消息ID获取消息
@@ -271,12 +272,11 @@ public class Actions
             );
         var result = await _SendAction(act, $"get_msg_{messageId}");
         var data = result.Data;
-        var deserilzed= data.Deserialize<GroupMessage>();
+        var deserilzed= BotUtils.Deserialize<GroupMessage>(data);
         if (deserilzed == null)
         {
             return null;
         }
-        BotUtils.ParseDynamicJsonValue(deserilzed.Message);
         return deserilzed;
     }
     public async Task<ForwardMessage?> GetForwardMessageById(string messageId)
@@ -287,14 +287,10 @@ public class Actions
             );
         var result = await _SendAction(act, $"get_forward_msg_{messageId}");
         var data = result.Data;
-        var deserilzed= data.Deserialize<ForwardMessage>();
+        var deserilzed= BotUtils.Deserialize<ForwardMessage>(data);
         if (deserilzed == null)
         {
             return null;
-        }
-        foreach(var msg in deserilzed.Messages)
-        {
-            BotUtils.ParseDynamicJsonValue(msg.Message);
         }
         return deserilzed;
         

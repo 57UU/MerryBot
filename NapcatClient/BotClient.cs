@@ -136,14 +136,9 @@ public class BotClient
 
             if (messageType == "group")
             {
-                ReceivedGroupMessage receivedGroupMessage = 
-                    JsonSerializer.Deserialize<ReceivedGroupMessage>(text)!;
+                ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
                 var groupId = receivedGroupMessage.group_id;
                 var rawChain = receivedGroupMessage.message!;
-                foreach (var item in rawChain)
-                {
-                    item.ParseJsonDynamic();
-                }
                 receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
                 OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
             }

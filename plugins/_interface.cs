@@ -1,8 +1,9 @@
 ﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
-global using MessageChain = System.ReadOnlySpan<NapcatClient.Message>;
+global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
+using NapcatClient.MessageType;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -205,6 +206,10 @@ public static class MessageUtils
             {
                 return false;
             }
+            if(o1.GetType() != o2.GetType())
+            {
+                return false;
+            }
             if (!o1.Equals(o2))
             {
                 return false;
@@ -212,7 +217,7 @@ public static class MessageUtils
         }
         return true;
     }
-    public static bool IsEqual(List<Message>? a, List<Message>? b)
+    public static bool IsEqual(List<TypedMessage>? a, List<TypedMessage>? b)
     {
         return IsEqual(
             CollectionsMarshal.AsSpan(a),

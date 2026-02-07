@@ -1,4 +1,5 @@
 ﻿using NapcatClient;
+using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -66,12 +67,12 @@ public class AutoIncrease : Plugin
 }
 internal class ChainWithSender
 {
-    public List<Message>? chain=null;
+    public List<TypedMessage>? chain=null;
     public long sender=0;
     public int repeatTime = 1;
     public bool used = false;
     public ChainWithSender() { }
-    public void Renew(List<Message> chain,long sender)
+    public void Renew(List<TypedMessage> chain,long sender)
     {
         this.chain = chain;
         repeatTime = 1;

@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
+    <ProjectReference Include="..\GroupHistoryRecorder\GroupHistoryRecorder.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
     <ProjectReference Include="..\ZhipuAi\ZhipuAi.csproj" />
   </ItemGroup>

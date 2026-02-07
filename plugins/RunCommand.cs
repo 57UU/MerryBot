@@ -1,5 +1,6 @@
 ﻿using CommonLib;
 using NapcatClient;
+using NapcatClient.MessageType;
 using OpenQA.Selenium;
 using OpenQA.Selenium.BiDi.Input;
 using System;
@@ -41,7 +42,7 @@ public class RunCommand : Plugin
         }
         if (IsStartsWith(chain, "/sh"))
         {
-            var text = (chain[0].Data["text"] as string)!.Trim();
+            var text = (chain[0] as TextData)!.Text.Trim();
             //rm first /sh
             var first = text.IndexOf(' ');
             if (first == -1)

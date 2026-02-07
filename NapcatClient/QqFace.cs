@@ -7,7 +7,7 @@ public static class QqFace
     {
         mapper.TryGetValue(code, out var face);
         if(face is null){
-            return "unknown";
+            return $"unknown({code})";
         }
         return face;
     }
@@ -121,13 +121,18 @@ public static class QqFace
         { 305, "右亲亲" },
         { 306, "牛气冲天" },
         { 307, "喵喵" },
+        { 311, "打call"},
+        { 312, "变形"},
         { 314, "仔细分析" },
         { 315, "加油" },
+        { 317, "菜汪"},
         { 318, "崇拜" },
         { 319, "比心" },
         { 320, "庆祝" },
         { 322, "拒绝" },
         { 324, "吃糖" },
-        { 326, "生气" }
+        { 326, "生气" },
+        { 337, "花朵脸"},
+        { 344, "大冤种"}
     };
 }

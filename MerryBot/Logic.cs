@@ -2,6 +2,7 @@
 using CommonLib;
 using DataProvider;
 using NapcatClient;
+using NapcatClient.MessageType;
 using OpenQA.Selenium.BiDi.Network;
 using System;
 using System.Collections.Generic;
@@ -43,9 +44,9 @@ internal class Logic
         var chain = data.message;
         var selfId = data.self_id;
         bool isTargeted = false;
-        if (chain[0].MessageType == "at")
+        if (chain[0] is AtData atData)
         {
-            string target = chain[0].Data["qq"];
+            string target = atData.Qq;
             if (target == selfId.ToString())
             {
                 isTargeted = true;
@@ -53,7 +54,7 @@ internal class Logic
         }
         return isTargeted;
     }
-    public void MainPluginInvokeNotInGroup(long groupId, List<Message> chain, ReceivedGroupMessage data)
+    public void MainPluginInvokeNotInGroup(long groupId, List<TypedMessage> chain, ReceivedGroupMessage data)
     {
         if (mainPlugin == null)
         {
@@ -66,7 +67,7 @@ internal class Logic
         }
     }
 
-    public void OnGroupMessageReceived(long groupId,List<Message> chain, ReceivedGroupMessage data)
+    public void OnGroupMessageReceived(long groupId,List<TypedMessage> chain, ReceivedGroupMessage data)
     {
         if (chain.Count == 0)
         {
@@ -77,7 +78,7 @@ internal class Logic
             MainPluginInvokeNotInGroup(groupId, chain, data);
             return;
         }
-        ReadOnlySpan<Message> span=CollectionsMarshal.AsSpan(chain);
+        ReadOnlySpan<TypedMessage> span=CollectionsMarshal.AsSpan(chain);
         bool isTargeted = false;
         long selfId = BotUtils.GetSelfId(data);
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
@@ -112,7 +113,7 @@ internal class Logic
         }
         OnGroupMessage(groupId, span, data);
     }
-    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
+    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
     {
         foreach(var i in plugins)
         {
@@ -131,7 +132,7 @@ internal class Logic
             
         }
     }
-    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
+    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
     {
         foreach (var i in plugins)
         {
@@ -150,7 +151,7 @@ internal class Logic
             }
         }
     }
-    private void OnGroupMessage(long groupId, ReadOnlySpan<Message> chain, ReceivedGroupMessage data)
+    private void OnGroupMessage(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
     {
         foreach (var i in plugins)
         {
