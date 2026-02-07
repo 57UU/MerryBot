@@ -344,7 +344,7 @@ public class AiMessage : Plugin
                 }
                 else
                 {
-                    sb.AppendLine("<转发消息>");
+                    sb.AppendLine("<转发消息/>");
                 }
 
             
@@ -354,16 +354,16 @@ public class AiMessage : Plugin
                     //解析图片内容
                     var imageUrl = imageData.Url;
                     var description = await imageInterpreter.Interpret(imageUrl);
-                    sb.AppendLine($"<image：{description}>");
+                    sb.AppendLine($"<image：{description}/>");
                     
                 }else{
-                    sb.AppendLine("<image>");
+                    sb.AppendLine("<image/>");
                 }
                 
             }else if(item is FaceData faceData){
                 if(int.TryParse(faceData.Id,out int faceCode)){
                     string faceName = QqFace.GetFace(faceCode);
-                    sb.AppendLine($" [表情:{faceName}]");
+                    sb.AppendLine($" <表情:{faceName}/>");
                 }
             }
         }

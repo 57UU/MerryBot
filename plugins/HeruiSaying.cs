@@ -54,18 +54,12 @@ public class HeruiSaying :Plugin
         sayings=new List<string>(strings);
     }
     
-    private readonly HttpClient _httpClient = new HttpClient();
     public async Task<string?> HttpGetAsync(string url)
     {
         try
         {
-            // 发送GET请求
-            HttpResponseMessage response = await _httpClient.GetAsync(url);
-            // 确保HTTP响应状态为成功
-            response.EnsureSuccessStatusCode();
-            // 读取响应内容
-            string responseBody = await response.Content.ReadAsStringAsync();
-            return responseBody;
+            var text = await Actions.HttpGetText(url);
+            return text;
         }
         catch (Exception e)
         {

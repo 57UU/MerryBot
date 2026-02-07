@@ -15,6 +15,7 @@ public class Actions
     }
     private readonly ISimpleLogger Logger;
     private readonly BotClient bot;
+    private static readonly HttpClient _httpClient = new HttpClient();
     private readonly RequestCaching requestCaching = new(TimeSpan.FromMinutes(1));
 
     public Actions(ISimpleLogger logger, BotClient bot)
@@ -25,6 +26,32 @@ public class Actions
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
     private long _echoCounter = 0;
+    public async Task<byte[]> HttpGetBinary(string url)
+    {
+        var cacheKey = $"http-bin-{url}";
+        if(requestCaching.TryGetCache(cacheKey, out byte[]? cacheRes))
+        {
+            return cacheRes!;
+        }
+        HttpResponseMessage response = await _httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        byte[] responseBody = await response.Content.ReadAsByteArrayAsync();
+        requestCaching.SetCache(cacheKey, responseBody);
+        return responseBody;
+    }
+    public async Task<string> HttpGetText(string url)
+    {
+        var cacheKey = $"http-text-{url}";
+        if(requestCaching.TryGetCache(cacheKey, out string? cacheRes))
+        {
+            return cacheRes!;
+        }
+        HttpResponseMessage response = await _httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        string responseBody = await response.Content.ReadAsStringAsync();
+        requestCaching.SetCache(cacheKey, responseBody);
+        return responseBody;
+    }
     public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey =null, TimeSpan? expiration = null)
     {
         return _SendAction(act.ToAct(), cacheKey, expiration);

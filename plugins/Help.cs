@@ -35,7 +35,7 @@ public class Help : Plugin
 
         foreach (var i in pluginTags)
         {
-            if (!i.Instance.IsEnable)
+            if (!i.Instance.IsEnable && i.PluginTag.Type == PluginType.Interactive)
             {
                 sb.Append("[已停用]");
             }

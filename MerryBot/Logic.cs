@@ -211,7 +211,8 @@ internal class Logic
                         AuthorizedUser,
                         CommandLineArguments,
                         Config.Save,
-                        (groupId, messageType, content) => _= PluginStorageDatabase.RecordAiMessage(groupId, messageType, content)
+                        (groupId, messageType, content) => _= PluginStorageDatabase.RecordAiMessage(groupId, messageType, content),
+                        botClient.PathPrefix
                         );
 
                 Plugin pluginInstance;

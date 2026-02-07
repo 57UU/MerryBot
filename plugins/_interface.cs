@@ -73,7 +73,8 @@ public record PluginInterop(
     long AuthorizedUser,
     string[] CommandLineArguments,
     Func<Task> ConfigSaver,
-    ZhipuClient.HistoryRecorder HistoryRecorder
+    ZhipuClient.HistoryRecorder HistoryRecorder,
+    string PathPrefix
     )
 {
     /// <summary>
@@ -150,32 +151,36 @@ public record PluginInterop(
         await ConfigSaver.Invoke();
     }
 }
-
+public enum PluginType{
+    Interactive,Background
+}
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class PluginTag : Attribute
 {
-    public string Name { get; private set; }
-    public string Description {  get; private set; }
+    public readonly string Name ;
+    public readonly string Description ;
     /// <summary>
     /// 当为真时，加载插件时将会忽略这个插件。
     /// </summary>
-    public bool IsIgnore { get; private set; }
+    public readonly bool IsIgnore;
     /// <summary>
     /// 插件的优先级，决定加载顺序。值越小，优先级越高
     /// </summary>
     public readonly int Priority;
+    public readonly PluginType Type;
     /// <summary>
     /// 插件的tag，用于标记插件
     /// </summary>
     /// <param name="name">名称</param>
     /// <param name="description">描述</param>
     /// <param name="isIgnore">加载插件时是否忽略这个插件</param>
-    public PluginTag(string name, string description, bool isIgnore=false, int priority=0)
+    public PluginTag(string name, string description, bool isIgnore=false, int priority=0,PluginType type=PluginType.Interactive)
     {
         Name = name;
         Description = description;
         IsIgnore = isIgnore;
         Priority = priority;
+        Type = type;
     }
 }
 /// <summary>

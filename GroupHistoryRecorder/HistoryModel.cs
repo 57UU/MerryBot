@@ -14,7 +14,7 @@ public record GroupMessage(
     string SenderGroupRole,
     [BsonId] long MessageId,
     List<NapcatClient.MessageType.TypedMessage> Messages,
-    DateTime time
+    DateTime Time
     )
 {
     public static GroupMessage FromReceivedGroupMessage(ReceivedGroupMessage receivedGroupMessage)
@@ -32,12 +32,12 @@ public record GroupMessage(
             );
     }
 }
-public record ImageBed(
-        [BsonId]string url,
-        byte[] data
+public record ImageEntry(
+        [BsonId]string Url,
+        byte[] Data
     );
 
-public record FileBed(
-        [BsonId] string url,
-        byte[] data
+public record FileEntry(
+        [BsonId] string Url,
+        byte[] Data
     );

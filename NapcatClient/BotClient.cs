@@ -19,10 +19,11 @@ public class BotClient
     private const int MessageTimeoutSeconds = 15; // 消息超时15秒
 
     private readonly Uri _uri;
-    public BotClient(string address, string token, ISimpleLogger logger)
+    public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
     {
         _uri = new($"{address}?access_token={token}");
         this.Logger = logger;
+        PathPrefix = pathPrefix;
 
         WebSocket = new(_uri);
         SetupWebSocketClient(WebSocket);
@@ -83,6 +84,7 @@ public class BotClient
     
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
+    public string PathPrefix { get; private set; } = "data";
     public async Task Initialize()
     {
         await Task.Delay(100);
@@ -91,9 +93,9 @@ public class BotClient
         SelfId = result.userId;
         Nickname = result.nickname;
     }
-    public BotClient(string address, string token) : this(address, token, ConsoleLogger.Instance)
+    public BotClient(string address, string token, string pathPrefix) : this(address, token, ConsoleLogger.Instance, pathPrefix)
     {
-
+        PathPrefix = pathPrefix;
     }
     public void Close()
     {

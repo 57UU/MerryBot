@@ -38,7 +38,7 @@ if (config.AuthorizedUser < 0)
     currentLogger.Warn("'authorized-user' is not valid");
 }
 
-var botClient = new BotClient(config.NapcatServer, config.NapcatToken);
+var botClient = new BotClient(config.NapcatServer, config.NapcatToken,dataPath);
 botClient.Logger = new NLogAdapter();
 
 

@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace BotPlugin;
 
-[PluginTag("自动+1", "如果有刷屏消息，将会自动+1",priority:-1)]
+[PluginTag("自动+1", "如果有刷屏消息，将会自动+1",priority:-1,type:PluginType.Background)]
 public class AutoIncrease : Plugin
 {
     const int REPEAT_TIME = 3;
