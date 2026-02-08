@@ -22,7 +22,8 @@ public class Help : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        if (pluginTags == null) {
+        if (pluginTags == null)
+        {
             _ = Actions.SendGroupMessage(groupId, "尚未完成加载");
             return;
         }
@@ -35,12 +36,14 @@ public class Help : Plugin
 
         foreach (var i in pluginTags)
         {
-            if (!i.Instance.IsEnable && i.PluginTag.Type == PluginType.Interactive)
+            if (i.PluginTag.Type == PluginType.Interactive)
             {
-                sb.Append("[已停用]");
+                if (!i.Instance.IsEnable)
+                {
+                    sb.Append("[已停用]");
+                }
+                sb.AppendLine($"{count++}. {i.PluginTag.Name} : {i.PluginTag.Description}");
             }
-            sb.AppendLine($"{count++}. {i.PluginTag.Name} : {i.PluginTag.Description}");
-
         }
         var help = $"已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
         _ = Actions.SendGroupMessage(groupId, help);

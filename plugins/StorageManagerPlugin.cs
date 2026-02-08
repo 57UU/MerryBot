@@ -44,6 +44,7 @@ public class StorageManagerPlugin : Plugin
         {
             machineCode = _machineCode.Value.GetInt32();
         }
+        HistoryWebApi.Program.Launch().Wait();
 
     }
     
@@ -53,7 +54,7 @@ public class StorageManagerPlugin : Plugin
 
         historyRecorder?.Dispose();
         aiMessageStorage?.Dispose();
-        Logger.Info("StorageManagerPlugin 已释放所有资源");
+        Logger.Info("StorageManagerPlugin released");
         base.Dispose();
         GC.SuppressFinalize(this);
     }
