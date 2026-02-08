@@ -10,9 +10,6 @@
   <ItemGroup>
     <PackageReference Include="ConsoleTables" Version="2.7.0" />
     <PackageReference Include="HashedWheelTimer" Version="1.0.3" />
-    <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.3.9" />
-    <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.3.9" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.3.9" />
   </ItemGroup>
 
   <ItemGroup>
