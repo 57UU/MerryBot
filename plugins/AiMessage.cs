@@ -1,7 +1,8 @@
-﻿using NapcatClient;
+using NapcatClient;
 using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -12,6 +13,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
 using ZhipuClient;
+using DataService;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BotPlugin;
@@ -23,6 +25,7 @@ public class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
+    private AiMessageRecorder aiMessageStorage;
     private readonly ImageInterpreter? imageInterpreter=null;
     private readonly ModelPreset imageInterpreterModel=ModelPreset.GLM_4_6V_Free;
     public AiMessage(PluginInterop interop) : base(interop)
@@ -54,7 +57,13 @@ public class AiMessage : Plugin
             }
         }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        aiClient = new ZhipuAi(token, prompt, model, interop.HistoryRecorder);
+        
+        // 创建自定义的 HistoryRecorder 委托，使用 AiMessageStorage
+        ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) => {
+            await aiMessageStorage.RecordAiMessage(groupId, messageType, content);
+        };
+        
+        aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
         aiClient.Logger = Logger;
         //add voice tool
         var voiceSender = new ToolDef();
@@ -77,7 +86,7 @@ public class AiMessage : Plugin
             {
                 return $"发送失败:{e.Message}";
             }
-            return "发送成功。你不必回复‘已发送’,也不必重复发送的信息";
+            return "发送成功。你不必回复'已发送',也不必重复发送的信息";
         };
         aiClient.RegisterTool(voiceSender);
         if (useFunctionCallToReply)
@@ -115,6 +124,7 @@ public class AiMessage : Plugin
         //AddBotForHelp();
 
     }
+    
     private void AddBotForHelp()
     {
         try
@@ -164,6 +174,16 @@ public class AiMessage : Plugin
     }
     public async override Task OnLoaded()
     {
+        // 从StorageManagerPlugin获取AiMessageStorage实例
+        var storageManager = Interop.FindPlugin<StorageManagerPlugin>();
+        if (storageManager == null)
+        {
+            throw new PluginNotUsableException("StorageManagerPlugin未找到，AiMessage需要StorageManagerPlugin初始化");
+        }
+        
+        aiMessageStorage = storageManager.AiMessageStorage;
+        Logger.Info("AiMessage 初始化完成，使用StorageManagerPlugin提供的AiMessageStorage");
+        
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var terminal = new Terminal();
@@ -423,8 +443,10 @@ public class AiMessage : Plugin
     public override void Dispose()
     {
         aiClient.Dispose();
+        
+        // AiMessageStorage 由 StorageManagerPlugin 负责释放
+        
         GC.SuppressFinalize(this);
     }
     
 }
-

@@ -7,8 +7,9 @@ namespace NapcatClient.MessageType;
 /// 消息类型基类
 /// view https://napneko.github.io/onebot/sement for details
 /// </summary>
-public class TypedMessage
+public abstract class TypedMessage
 {
+    public abstract TypedMessage Clone();
 }
 
 /// <summary>
@@ -24,6 +25,11 @@ public class TextData : TypedMessage
     public string Text { get; set; }
 
     public static TextData FromText(string text) => new TextData { Text = text };
+
+    public override TypedMessage Clone()
+    {
+        return new TextData { Text = Text };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -58,6 +64,11 @@ public class AtData : TypedMessage
 
     public static AtData FromAt(string qq) => new AtData { Qq = qq };
 
+    public override TypedMessage Clone()
+    {
+        return new AtData { Qq = Qq };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -90,6 +101,11 @@ public class ReplyData : TypedMessage
     public string Id { get; set; }
 
     public static ReplyData FromReply(string id) => new ReplyData { Id = id };
+
+    public override TypedMessage Clone()
+    {
+        return new ReplyData { Id = Id };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -139,6 +155,11 @@ public class FaceData : TypedMessage
     /// </summary>
     [JsonPropertyName("chainCount")]
     public int? ChainCount { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new FaceData { Id = Id, Raw = Raw, ResultId = ResultId, ChainCount = ChainCount };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -192,6 +213,11 @@ public class MfaceData : TypedMessage
     [JsonPropertyName("summary")]
     public string? Summary { get; set; }
 
+    public override TypedMessage Clone()
+    {
+        return new MfaceData { EmojiId = EmojiId, EmojiPackageId = EmojiPackageId, Key = Key, Summary = Summary };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -223,6 +249,11 @@ public class DiceData : TypedMessage
     [JsonPropertyName("result")]
     public string Result { get; set; }
 
+    public override TypedMessage Clone()
+    {
+        return new DiceData { Result = Result };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -253,6 +284,11 @@ public class RpsData : TypedMessage
     /// </summary>
     [JsonPropertyName("result")]
     public string Result { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new RpsData { Result = Result };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -290,6 +326,11 @@ public class PokeData : TypedMessage
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new PokeData { Type = Type, Id = Id };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -371,6 +412,11 @@ public class ImageData : TypedMessage
     [JsonPropertyName("emoji_package_id")]
     public string? EmojiPackageId { get; set; }
 
+    public override TypedMessage Clone()
+    {
+        return new ImageData { File = File, Url = Url, Summary = Summary, SubType = SubType, FileSize = FileSize, Key = Key, EmojiId = EmojiId, EmojiPackageId = EmojiPackageId };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -420,6 +466,11 @@ public class RecordData : TypedMessage
     /// </summary>
     [JsonPropertyName("path")]
     public string? Path { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new RecordData { File = File, FileSize = FileSize, Path = Path };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -477,6 +528,11 @@ public class VideoData : TypedMessage
     [JsonPropertyName("thumb")]
     public string? Thumb { get; set; }
 
+    public override TypedMessage Clone()
+    {
+        return new VideoData { File = File, Url = Url, FileSize = FileSize, Thumb = Thumb };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -533,6 +589,11 @@ public class FileData : TypedMessage
         set => FileSize = value != null ? long.Parse(value) : default;
     }
 
+    public override TypedMessage Clone()
+    {
+        return new FileData { File = File, Name = Name, FileId = FileId, FileSize = FileSize };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -563,6 +624,11 @@ public class JsonData : TypedMessage
     /// </summary>
     [JsonPropertyName("data")]
     public JsonElement Data { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new JsonData { Data = Data };
+    }
 
     public override bool Equals(object? obj)
     {
@@ -631,6 +697,11 @@ public class MusicData : TypedMessage
     [JsonPropertyName("content")]
     public string? Content { get; set; }
 
+    public override TypedMessage Clone()
+    {
+        return new MusicData { Type = Type, Id = Id, Url = Url, Image = Image, Singer = Singer, Title = Title, Content = Content };
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is null || GetType() != obj.GetType())
@@ -667,6 +738,11 @@ public class ForwardData : TypedMessage
     /// </summary>
     [JsonPropertyName("content")]
     public JsonElement? Content { get; set; }
+
+    public override TypedMessage Clone()
+    {
+        return new ForwardData { Id = Id, Content = Content };
+    }
 
     public override bool Equals(object? obj)
     {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,8 +17,7 @@ public partial class PluginStorageDatabase : SQLiteDataProvider
     public PluginStorageDatabase(string databasePath="plugin_data.db") : base(databasePath)
     {
         Task[] tasks=[
-            ExecuteSQLAsync(Str.Build_Table_SQL),
-            ExecuteSQLAsync(StrAiMessage.Build_Table_SQL)
+            ExecuteSQLAsync(Str.Build_Table_SQL)
         ];
         Task.WaitAll(tasks);
     }

@@ -1,6 +1,7 @@
-﻿using CommonLib;
+using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
+using NapcatClient.EventType;
 using NapcatClient.MessageType;
 using System;
 using System.Collections.Generic;
@@ -103,6 +104,142 @@ public abstract class Plugin : IDisposable
     {
 
     }
+    
+    /// <summary>
+    /// 当收到通知事件时调用
+    /// </summary>
+    /// <param name="eventData">通知事件数据</param>
+    public virtual void OnNoticeEvent(NoticeEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群文件上传事件时调用
+    /// </summary>
+    /// <param name="eventData">群文件上传事件数据</param>
+    public virtual void OnGroupUploadEvent(GroupUploadEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群管理员变动事件时调用
+    /// </summary>
+    /// <param name="eventData">群管理员变动事件数据</param>
+    public virtual void OnGroupAdminEvent(GroupAdminEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群成员减少事件时调用
+    /// </summary>
+    /// <param name="eventData">群成员减少事件数据</param>
+    public virtual void OnGroupDecreaseEvent(GroupDecreaseEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群成员增加事件时调用
+    /// </summary>
+    /// <param name="eventData">群成员增加事件数据</param>
+    public virtual void OnGroupIncreaseEvent(GroupIncreaseEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群禁言事件时调用
+    /// </summary>
+    /// <param name="eventData">群禁言事件数据</param>
+    public virtual void OnGroupBanEvent(GroupBanEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到新添加好友事件时调用
+    /// </summary>
+    /// <param name="eventData">新添加好友事件数据</param>
+    public virtual void OnFriendAddEvent(FriendAddEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群消息撤回事件时调用
+    /// </summary>
+    /// <param name="eventData">群消息撤回事件数据</param>
+    public virtual void OnGroupRecallEvent(GroupRecallEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到好友消息撤回事件时调用
+    /// </summary>
+    /// <param name="eventData">好友消息撤回事件数据</param>
+    public virtual void OnFriendRecallEvent(FriendRecallEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到戳一戳事件时调用
+    /// </summary>
+    /// <param name="eventData">戳一戳事件数据</param>
+    public virtual void OnPokeEvent(PokeEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到运气王事件时调用
+    /// </summary>
+    /// <param name="eventData">运气王事件数据</param>
+    public virtual void OnLuckyKingEvent(LuckyKingEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到荣誉变更事件时调用
+    /// </summary>
+    /// <param name="eventData">荣誉变更事件数据</param>
+    public virtual void OnHonorEvent(HonorEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群表情回应事件时调用
+    /// </summary>
+    /// <param name="eventData">群表情回应事件数据</param>
+    public virtual void OnGroupMsgEmojiLikeEvent(GroupMsgEmojiLikeEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群精华事件时调用
+    /// </summary>
+    /// <param name="eventData">群精华事件数据</param>
+    public virtual void OnEssenceEvent(EssenceEvent eventData)
+    {
+
+    }
+    
+    /// <summary>
+    /// 当收到群名片变更事件时调用
+    /// </summary>
+    /// <param name="eventData">群名片变更事件数据</param>
+    public virtual void OnGroupCardEvent(GroupCardEvent eventData)
+    {
+
+    }
+    
     public virtual Task OnLoaded()
     {
         return Task.CompletedTask;
