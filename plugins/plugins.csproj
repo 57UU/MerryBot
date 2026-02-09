@@ -15,7 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\DataService\DataService.csproj" />
-    <ProjectReference Include="..\HistoryWebApi\HistoryWebApi.csproj" />
+    <ProjectReference Include="..\HistoryWebFrontend\HistoryWebFrontend.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
     <ProjectReference Include="..\ZhipuAi\ZhipuAi.csproj" />
   </ItemGroup>

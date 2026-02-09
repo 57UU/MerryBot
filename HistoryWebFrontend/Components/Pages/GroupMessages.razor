@@ -1,0 +1,275 @@
+@page "/groupmessages"
+@rendermode InteractiveServer
+@using DataService
+@inject HistoryRecorder HistoryRecorder
+
+<PageTitle>群聊消息</PageTitle>
+
+<div class="container-custom" style="height: 100%;">
+
+	<div class="row-layout" style="height: 100%;">
+		<!-- 左侧群聊列表 -->
+		<div class="col-left">
+			<div class="card-full-height">
+				<div class="card-header-custom">
+					群聊列表
+				</div>
+				<div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
+					<ul class="list-group-custom">
+						@foreach (var groupId in GroupIds)
+						{
+							<li class="list-group-item-custom @(SelectedGroupId == groupId ? "active-custom" : "")" @onclick="async () => await SelectGroup(groupId)">
+								@groupId
+							</li>
+						}
+					</ul>
+				</div>
+			</div>
+		</div>
+
+		<!-- 右侧消息展示 -->
+		<div class="col-right" style="height: 100%;">
+			<div class="card-full-height">
+				<div class="card-header-custom">
+					@(SelectedGroupId > 0 ? $"群聊 {SelectedGroupId} 的消息" : "请选择一个群聊")
+				</div>
+				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+					@if (SelectedGroupId > 0)
+					{
+						@if (IsLoading)
+						{
+							<div class="text-center-custom text-muted-custom py-2-custom">
+								加载中...
+							</div>
+						}
+
+						@if (GroupMessageList.Any())
+						{
+							<div class="message-container-custom">
+								@foreach (var message in GroupMessageList.OrderBy(x => x.Time))
+								{
+									@* sender *@
+									<div class="message-item-custom mb-3-custom">
+										<div class="message-header-custom">
+
+											<p>
+												<strong>@message.SenderNickname</strong>
+												  @message.SenderId
+												  @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
+												
+											</p>
+
+											<span class="text-muted-custom float-end-custom">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
+										</div>
+										@* content *@
+										<div class="message-content-custom">
+											@foreach (var msg in message.Messages)
+											{
+												@RenderMessage(msg)
+											}
+										</div>
+									</div>
+								}
+							</div>
+						}
+						else if (!IsLoading)
+						{
+							<div class="text-center-custom text-muted-custom mt-5-custom">
+								暂无消息
+							</div>
+						}
+					}
+					else
+					{
+						<div class="text-center-custom text-muted-custom mt-5-custom">
+							请从左侧选择一个群聊
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+@code {
+	private List<long> GroupIds { get; set; } = new List<long>();
+	private long SelectedGroupId { get; set; } = 0;
+	private List<GroupMessage> GroupMessageList { get; set; } = new List<GroupMessage>();
+	private bool IsLoading { get; set; } = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		// 初始化数据
+		await LoadGroupIds();
+
+		// 默认选择第一个群聊
+		if (GroupIds.Any())
+		{
+			SelectedGroupId = GroupIds[0];
+			await LoadGroupMessages(SelectedGroupId);
+		}
+	}
+
+	private async Task LoadGroupIds()
+	{
+		try
+		{
+			GroupIds = HistoryRecorder.GetAllGroupIds();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading group IDs: {ex.Message}");
+			GroupIds = new List<long> { 0 };
+		}
+	}
+
+	private async Task LoadGroupMessages(long groupId)
+	{
+		IsLoading = true;
+		try
+		{
+			GroupMessageList = HistoryRecorder.GetMessagesByGroupId(groupId, 100);
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading group messages: {ex.Message}");
+			GroupMessageList = new List<GroupMessage>();
+		}
+		finally
+		{
+			IsLoading = false;
+		}
+	}
+
+	private async Task SelectGroup(long groupId)
+	{
+		SelectedGroupId = groupId;
+		await LoadGroupMessages(groupId);
+	}
+
+	private RenderFragment RenderMessage(object msg)
+	{
+		return __builder =>
+		{
+			try
+			{
+				// 直接根据消息对象的类型进行处理
+				if (msg is NapcatClient.MessageType.TextData textData)
+				{
+					<span>@textData.Text</span>
+				}
+				else if (msg is NapcatClient.MessageType.AtData atData)
+				{
+					<span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
+				}
+				else if (msg is NapcatClient.MessageType.FaceData faceData)
+				{
+					<span class="text-muted-custom">[表情: @faceData.Id]</span>
+				}
+				else if (msg is NapcatClient.MessageType.ImageData imageData)
+				{
+					<div class="mt-1-custom">
+						<div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
+						<img src="/api/image/@imageData.Url" alt="@imageData.Summary" class="img-fluid-custom rounded-custom" style="max-height: 300px;" />
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.FileData fileData)
+				{
+					<div class="mt-1-custom">
+						<a href="/api/file/@fileData.FileId" download="@fileData.Name" class="text-primary-custom" title="点击下载文件">
+							[文件] @fileData.Name (@FormatFileSize(fileData.FileSize?.ToString() ?? "0"))
+						</a>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.RecordData recordData)
+				{
+					<div class="mt-1-custom">
+						<a href="/api/file/@recordData.File" target="_blank" class="text-primary-custom" title="点击播放语音">
+							[语音] @(recordData.Path ?? "语音消息")
+						</a>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.VideoData videoData)
+				{
+					<div class="mt-1-custom">
+						<a href="/api/file/@videoData.File" target="_blank" class="text-primary-custom" title="点击播放视频">
+							[视频] @(videoData.File ?? "视频消息")
+						</a>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.ForwardData forwardData)
+				{
+					<div class="mt-1-custom">
+						<span class="text-muted-custom">[转发消息] ID: @forwardData.Id</span>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.ReplyData replyData)
+				{
+					<div class="mt-1-custom text-muted-custom">
+						[回复] 消息 ID: @replyData.Id
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.JsonData jsonData)
+				{
+					<div class="mt-1-custom text-muted-custom">
+						[卡片消息]
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.MusicData musicData)
+				{
+					<div class="mt-1-custom">
+						<span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.DiceData diceData)
+				{
+					<div class="mt-1-custom">
+						<span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.RpsData rpsData)
+				{
+					<div class="mt-1-custom">
+						<span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.PokeData pokeData)
+				{
+					<div class="mt-1-custom text-muted-custom">
+						[戳一戳] @pokeData.Type
+					</div>
+				}
+				else if (msg is NapcatClient.MessageType.MfaceData mfaceData)
+				{
+					<div class="mt-1-custom text-muted-custom">
+						[商城表情] @mfaceData.Summary
+					</div>
+				}
+				else
+				{
+					<span class="text-muted-custom">[未知消息类型: @msg.GetType().Name]</span>
+				}
+			}
+			catch (Exception ex)
+			{
+				<span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
+			}
+		};
+	}
+
+	private string FormatFileSize(string sizeStr)
+	{
+		if (long.TryParse(sizeStr, out var size))
+		{
+			if (size < 1024)
+				return $"{size} B";
+			else if (size < 1024 * 1024)
+				return $"{size / 1024:F2} KB";
+			else if (size < 1024 * 1024 * 1024)
+				return $"{size / (1024 * 1024):F2} MB";
+			else
+				return $"{size / (1024 * 1024 * 1024):F2} GB";
+		}
+		return sizeStr;
+	}
+}

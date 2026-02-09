@@ -1,0 +1,139 @@
+@page "/aimessages"
+@using DataService
+@rendermode InteractiveServer
+@inject HistoryRecorder HistoryRecorder
+@inject AiMessageRecorder AiMessageRecorder
+
+<PageTitle>AI消息</PageTitle>
+
+<div class="container-custom h-100-custom" style="height: 100%;">
+    
+    <div class="row-layout">
+        <!-- 左侧群聊列表 -->
+        <div class="col-left">
+            <div class="card-full-height">
+                <div class="card-header-custom">
+                    群聊列表
+                </div>
+                <div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
+                    <ul class="list-group-custom">
+                        @foreach (var groupId in GroupIds)
+                        {
+                            <li class="list-group-item-custom @(SelectedAiGroupId == groupId ? "active-custom" : "")" @onclick="async () => await SelectAiGroup(groupId)">
+                                群聊 @groupId
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧消息展示 -->
+        <div class="col-right">
+            <div class="card-full-height">
+                <div class="card-header-custom">
+                    @(SelectedAiGroupId > 0 ? $"群聊 {SelectedAiGroupId} 的 AI 消息" : "请选择一个群聊")
+                </div>
+                <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+                    @if (SelectedAiGroupId > 0)
+                    {
+                        @if (IsAiLoading)
+                        {
+                            <div class="text-center-custom text-muted-custom py-2-custom">
+                                加载中...
+                            </div>
+                        }
+                        
+                        @if (AiMessageList.Any())
+                        {
+                            <div class="message-container-custom">
+                                @foreach (var message in AiMessageList)
+                                {
+                                    <div class="message-item-custom mb-3-custom">
+                                        <div class="message-header-custom">
+                                            <strong>AI</strong>
+                                            <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
+                                        </div>
+                                        <div class="message-content-custom">
+                                            <div>@message.MessageType</div>
+                                            <div>@message.Content</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (!IsAiLoading)
+                        {
+                            <div class="text-center-custom text-muted-custom mt-5-custom">
+                                暂无 AI 消息
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center-custom text-muted-custom mt-5-custom">
+                            请从左侧选择一个群聊
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<long> GroupIds { get; set; } = new List<long>();
+    private long SelectedAiGroupId { get; set; } = 0;
+    private List<(long Id, long GroupId, string MessageType, string Content, long Time)> AiMessageList { get; set; } = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
+    private bool IsAiLoading { get; set; } = false;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // 初始化数据
+        await LoadGroupIds();
+        
+        // 默认选择第一个群聊
+        if (GroupIds.Any())
+        {
+            SelectedAiGroupId = GroupIds[0];
+            await LoadAiMessages(SelectedAiGroupId);
+        }
+    }
+    
+    private async Task LoadGroupIds()
+    {
+        try
+        {
+            GroupIds = HistoryRecorder.GetAllGroupIds();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading group IDs: {ex.Message}");
+            GroupIds = new List<long> { 123456, 789012 };
+        }
+    }
+    
+    private async Task LoadAiMessages(long groupId)
+    {
+        IsAiLoading = true;
+        try
+        {
+            AiMessageList = await AiMessageRecorder.GetAiMessagesByGroupId(groupId, 1, 100);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading AI messages: {ex.Message}");
+            AiMessageList = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
+        }
+        finally
+        {
+            IsAiLoading = false;
+        }
+    }
+    
+    private async Task SelectAiGroup(long groupId)
+    {
+        SelectedAiGroupId = groupId;
+        await LoadAiMessages(groupId);
+    }
+}

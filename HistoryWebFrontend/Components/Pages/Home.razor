@@ -1,0 +1,96 @@
+@page "/"
+@using DataService
+@inject HistoryRecorder HistoryRecorder
+@inject AiMessageRecorder AiMessageRecorder
+
+<PageTitle>Home (统计数据)</PageTitle>
+<h1 style="margin-top: 1rem; margin-bottom: 1rem;">历史记录统计</h1>
+<h2>统计数据</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+	<StatCard Title="活跃群聊" Value="@GroupCount" />
+	<StatCard Title="群聊消息数" Value="@MessageCount" />
+	<StatCard Title="AI 消息数" Value="@AiMessageCount" />
+	<StatCard Title="图片数量" Value="@ImageCount" />
+	<StatCard Title="文件/视频/语音数量" Value="@FileCount" />
+</div>
+<br />
+<h2>文件大小</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+	<StatCard Title="AI 消息库" Value="@AiMessageDbSize" />
+	<StatCard Title="群聊历史库" Value="@GroupHistoryDbSize" />
+</div>
+
+@code {
+	private List<long> GroupIds { get; set; } = new List<long>();
+	private int GroupCount { get; set; } = 0;
+	private int MessageCount { get; set; } = 0;
+	private int AiMessageCount { get; set; } = 0;
+	private int ImageCount { get; set; } = 0;
+	private int FileCount { get; set; } = 0;
+	private string AiMessageDbSize { get; set; } = "Unavaliable";
+	private string GroupHistoryDbSize { get; set; } = "Unavaliable";
+
+	protected override async Task OnInitializedAsync()
+	{
+		LoadGroupIds();
+		await LoadStatistics();
+		LoadDbSizes();
+	}
+
+	private async Task LoadGroupIds()
+	{
+		try
+		{
+			GroupIds = HistoryRecorder.GetAllGroupIds();
+			GroupCount = GroupIds.Count;
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading group IDs: {ex.Message}");
+			GroupIds = new List<long> { 0 };
+			GroupCount = GroupIds.Count;
+		}
+	}
+
+	private async Task LoadStatistics()
+	{
+		try
+		{
+			MessageCount = 0;
+			foreach (var gid in GroupIds)
+			{
+				var messages = HistoryRecorder.GetMessagesByGroupId(gid, 1000);
+				MessageCount += messages.Count;
+			}
+
+			AiMessageCount = 0;
+			foreach (var gid in GroupIds)
+			{
+				var count = await AiMessageRecorder.GetAiMessageCountByGroupId(gid);
+				AiMessageCount += count;
+			}
+
+			ImageCount = HistoryRecorder.GetImageCount();
+			FileCount = HistoryRecorder.GetFileCount();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading statistics: {ex.Message}");
+			MessageCount = 100;
+			AiMessageCount = 50;
+		}
+	}
+
+	private void LoadDbSizes()
+	{
+		try
+		{
+			AiMessageDbSize = AiMessageRecorder.GetDatabaseSize();
+			GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading database sizes: {ex.Message}");
+		}
+	}
+}

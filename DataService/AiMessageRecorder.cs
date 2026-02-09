@@ -13,9 +13,11 @@ public class AiMessageRecorder : IDisposable
     private const string AI_MESSAGE_UPSERT_SQL = 
         "INSERT INTO AI_Message_Data_Table (Id, Group_Id, Message_Type, Content, Time) VALUES (@Id, @GroupId, @MessageType, @Content, @Time)";
     private readonly IdGen.IdGenerator idGenerator;
+    private readonly string _dbPath;
     
     public AiMessageRecorder(string databasePath = "ai_message.db",int machineCode=0)
     {
+        _dbPath = databasePath;
         dbConn = new SqliteConnection($"Data Source={databasePath}");
         dbConn.Open();
         idGenerator = new IdGen.IdGenerator(machineCode,IdGenConfig.idGeneratorOptions);
@@ -85,6 +87,36 @@ public class AiMessageRecorder : IDisposable
         
         var result = await command.ExecuteScalarAsync();
         return Convert.ToInt32(result);
+    }
+    
+    public string GetDatabaseSize()
+    {
+        try
+        {
+            if (File.Exists(_dbPath))
+            {
+                var fileInfo = new FileInfo(_dbPath);
+                return FormatFileSize(fileInfo.Length);
+            }
+            return "0 B";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+    
+    private static string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
     }
     
     private SqliteCommand PrepareStatement(string sql)

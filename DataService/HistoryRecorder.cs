@@ -16,9 +16,11 @@ public class HistoryRecorder : IDisposable
     ILiteCollection<FileEntry> fileBedCollection;
     ILiteCollection<GroupEvent> eventsCollection;
     private IdGen.IdGenerator idGenerator;
+    private readonly string _dbPath;
     
     public HistoryRecorder(string dbPath,int machineCode=0)
     {
+        _dbPath = dbPath;
         database = new LiteDatabase(dbPath);
         messagesCollection = database.GetCollection<GroupMessage>("messages");
         imageBedCollection = database.GetCollection<ImageEntry>("images");
@@ -184,5 +186,45 @@ public class HistoryRecorder : IDisposable
         var messageGroupIds = messagesCollection.FindAll().Select(x => x.GroupId).Distinct();
         var eventGroupIds = eventsCollection.FindAll().Select(x => x.GroupId).Distinct();
         return messageGroupIds.Concat(eventGroupIds).Distinct().OrderBy(x => x).ToList();
+    }
+    
+    public int GetImageCount()
+    {
+        return imageBedCollection.Count();
+    }
+    
+    public int GetFileCount()
+    {
+        return fileBedCollection.Count();
+    }
+    
+    public string GetDatabaseSize()
+    {
+        try
+        {
+            if (File.Exists(_dbPath))
+            {
+                var fileInfo = new FileInfo(_dbPath);
+                return FormatFileSize(fileInfo.Length);
+            }
+            return "0 B";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+    
+    private static string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
     }
 }
