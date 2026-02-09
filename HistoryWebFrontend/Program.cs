@@ -52,6 +52,8 @@ namespace HistoryWebFrontend
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
+            app.Urls.Add("http://0.0.0.0:5000");
+
             // 图片API
             app.MapGet("/api/image/{id}", (long id, HistoryRecorder historyRecorder) =>
             {
