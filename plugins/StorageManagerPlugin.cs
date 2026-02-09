@@ -44,7 +44,7 @@ public class StorageManagerPlugin : Plugin
         {
             machineCode = _machineCode.Value.GetInt32();
         }
-        HistoryWebApi.Program.Launch().Wait();
+        
 
     }
     
