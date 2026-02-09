@@ -1,5 +1,6 @@
 using DataService;
 using HistoryWebFrontend.Components;
+using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 
 namespace HistoryWebFrontend
 {
@@ -16,7 +17,11 @@ namespace HistoryWebFrontend
         }
         public static WebApplication CreateApp(AiMessageRecorder aiMessageRecorder, HistoryRecorder historyRecorder)
         {
-            var builder = WebApplication.CreateBuilder();
+            var webAssembly = typeof(Program).Assembly;
+
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions() { 
+                ApplicationName=webAssembly.GetName().Name,
+            });
 
             // Add services to the container.
             builder.Services.AddRazorComponents()
@@ -36,7 +41,14 @@ namespace HistoryWebFrontend
             app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
             app.UseAntiforgery();
 
+            
+#if DEBUG
             app.MapStaticAssets();
+#else
+            app.UseStaticFiles();
+#endif
+            StaticWebAssetsLoader.UseStaticWebAssets(app.Environment, app.Configuration);
+
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 

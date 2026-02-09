@@ -5,6 +5,8 @@ using System.Text.Json;
 using ZhipuClient;
 
 
+HistoryWebFrontend.Program.Main();
+
 //test shell
 //Terminal terminal=new();
 //while (true)

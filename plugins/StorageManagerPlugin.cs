@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using DataService;
+using Microsoft.AspNetCore.Builder;
 
 namespace BotPlugin;
 
@@ -15,6 +16,7 @@ public class StorageManagerPlugin : Plugin
     private string dbPath;
     private string aiDbPath;
     private int machineCode;
+    WebApplication webApplication;
     
     public HistoryRecorder GroupHistoryRecorder => historyRecorder;
     public AiMessageRecorder AiMessageStorage => aiMessageStorage;
@@ -44,7 +46,8 @@ public class StorageManagerPlugin : Plugin
         {
             machineCode = _machineCode.Value.GetInt32();
         }
-        
+        webApplication = HistoryWebFrontend.Program.CreateApp(aiMessageStorage, historyRecorder);
+        _=webApplication.RunAsync();
 
     }
     
@@ -54,6 +57,7 @@ public class StorageManagerPlugin : Plugin
 
         historyRecorder?.Dispose();
         aiMessageStorage?.Dispose();
+        webApplication.DisposeAsync().AsTask().Wait();
         Logger.Info("StorageManagerPlugin released");
         base.Dispose();
         GC.SuppressFinalize(this);

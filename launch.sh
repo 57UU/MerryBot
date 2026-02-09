@@ -7,8 +7,25 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # 主循环
 while true; do
+    # 先发布 HistoryWebFrontend 以生成 wwwroot 资源
+    echo "开始发布 HistoryWebFrontend..."
+    if ! dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
+        -r $runtime \
+        --self-contained false \
+        -p:PublishTrimmed=false \
+        -p:TrimMode=link \
+        -p:PublishSingleFile=false \
+        -p:EnableCompressionInSingleFile=false \
+        -p:PublishReadyToRun=false \
+        -p:PublishAot=false \
+        -p:DebugType=None \
+        -p:DebugSymbols=false; then
+        echo "dotnet publish HistoryWebFrontend 失败，退出脚本"
+        exit 1
+    fi
+
     # 发布优化版本
-    echo "开始发布优化版本..."
+    echo "开始发布MerryBot优化版本..."
     if ! dotnet publish MerryBot/MerryBot.csproj -c Release \
         -r $runtime \
         --self-contained false \
@@ -22,6 +39,13 @@ while true; do
         -p:DebugType=None \
         -p:DebugSymbols=true; then
         echo "dotnet publish 失败，退出脚本"
+        exit 1
+    fi
+
+    # 复制 wwwroot 资源到 MerryBot 的 publish 目录
+    echo "复制 wwwroot 资源..."
+    if ! cp -r HistoryWebFrontend/bin/Release/net10.0/$runtime/publish/wwwroot MerryBot/bin/Release/net10.0/$runtime/publish/; then
+        echo "复制 wwwroot 失败，退出脚本"
         exit 1
     fi
 
