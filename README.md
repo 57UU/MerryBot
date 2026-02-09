@@ -31,6 +31,9 @@ note: `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
 2. 配置文件
 3. 插件存储
 
+# 整体架构
+![Architecture](arch.svg)
+
 # 主要内置插件
 
 ## AI机器人
