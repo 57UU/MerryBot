@@ -45,7 +45,7 @@ public class Help : Plugin
                 sb.AppendLine($"{count++}. {i.PluginTag.Name} : {i.PluginTag.Description}");
             }
         }
-        var help = $"已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
+        var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
         _ = Actions.SendGroupMessage(groupId, help);
     }
 }
