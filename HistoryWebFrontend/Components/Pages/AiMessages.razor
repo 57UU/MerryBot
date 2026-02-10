@@ -211,7 +211,7 @@
     
     private async Task ScrollToBottom()
     {
-        await JSRuntime.InvokeVoidAsync("scrollToElementBottom('ai-message-container')");
+        await JSRuntime.InvokeVoidAsync("scrollToElementBottom", "ai-message-container");
     }
     
     private async Task SelectAiGroup(long groupId)
