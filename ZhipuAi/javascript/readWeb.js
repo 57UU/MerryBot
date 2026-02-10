@@ -145,6 +145,9 @@ function removeInvisibleElements(doc) {
   // 移除display为none的元素
   doc.querySelectorAll('[style*="display:none"], [hidden]').forEach(el => el.remove());
 
+  // 移除含有data-nosnippet属性的元素
+  doc.querySelectorAll('[data-nosnippet]').forEach(el => el.remove());
+
   // 移除只有一个子元素的元素
   removeSingleChildElements(doc);
 

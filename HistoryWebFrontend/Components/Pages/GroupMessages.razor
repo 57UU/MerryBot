@@ -1,7 +1,10 @@
 @page "/groupmessages"
-@rendermode InteractiveServer
 @using DataService
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components
+@rendermode InteractiveServer
 @inject HistoryRecorder HistoryRecorder
+@inject IJSRuntime JSRuntime
 
 <PageTitle>群聊消息</PageTitle>
 
@@ -33,10 +36,10 @@
 				<div class="card-header-custom">
 					@(SelectedGroupId > 0 ? $"群聊 {SelectedGroupId} 的消息" : "请选择一个群聊")
 				</div>
-				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" @onscroll="HandleScroll" id="group-message-container">
 					@if (SelectedGroupId > 0)
 					{
-						@if (IsLoading)
+						@if (IsLoading && CurrentPage == 1)
 						{
 							<div class="text-center-custom text-muted-custom py-2-custom">
 								加载中...
@@ -45,8 +48,14 @@
 
 						@if (GroupMessageList.Any())
 						{
-							<div class="message-container-custom">
-								@foreach (var message in GroupMessageList.OrderBy(x => x.Time))
+							<div class="message-container-custom" id="group-message-list">
+								@if (IsLoadingMore)
+								{
+									<div class="text-center-custom text-muted-custom py-2-custom">
+										加载更多消息...
+									</div>
+								}
+								@foreach (var message in GroupMessageList.AsEnumerable().Reverse())
 								{
 									@* sender *@
 									<div class="message-item-custom mb-3-custom">
@@ -91,11 +100,31 @@
 	</div>
 </div>
 
+<script>
+    function scrollToElementBottom(elementId) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.scrollTop = element.scrollHeight;
+        }
+    }
+    
+    function checkScrollPosition(elementId, dotNetRef) {
+        const element = document.getElementById(elementId);
+        if (element && element.scrollTop <= 50) {
+            dotNetRef.invokeMethodAsync('LoadMoreMessages');
+        }
+    }
+</script>
+
 @code {
 	private List<long> GroupIds { get; set; } = new List<long>();
 	private long SelectedGroupId { get; set; } = 0;
 	private List<GroupMessage> GroupMessageList { get; set; } = new List<GroupMessage>();
 	private bool IsLoading { get; set; } = false;
+	private bool IsLoadingMore { get; set; } = false;
+	private int CurrentPage { get; set; } = 1;
+	private int PageSize { get; set; } = 50;
+	private bool HasMoreMessages { get; set; } = true;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -125,10 +154,14 @@
 
 	private async Task LoadGroupMessages(long groupId)
 	{
+		CurrentPage = 1;
+		HasMoreMessages = true;
 		IsLoading = true;
 		try
 		{
-			GroupMessageList = HistoryRecorder.GetMessagesByGroupId(groupId, 100);
+			GroupMessageList = HistoryRecorder.GetMessagesByGroupId(groupId, CurrentPage, PageSize);
+			await Task.Delay(100);
+			await ScrollToBottom();
 		}
 		catch (Exception ex)
 		{
@@ -139,6 +172,56 @@
 		{
 			IsLoading = false;
 		}
+	}
+
+	private async Task LoadMoreGroupMessages()
+	{
+		if (IsLoadingMore || !HasMoreMessages)
+			return;
+		
+		IsLoadingMore = true;
+		CurrentPage++;
+		
+		try
+		{
+			var moreMessages = HistoryRecorder.GetMessagesByGroupId(SelectedGroupId, CurrentPage, PageSize);
+			if (moreMessages.Any())
+			{
+				GroupMessageList.AddRange(moreMessages);
+			}
+			else
+			{
+				HasMoreMessages = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading more group messages: {ex.Message}");
+		}
+		finally
+		{
+			IsLoadingMore = false;
+		}
+	}
+
+	private async Task HandleScroll(EventArgs e)
+	{
+		// 使用 JavaScript 互操作来检查滚动位置
+		await JSRuntime.InvokeVoidAsync("checkScrollPosition", "group-message-container", DotNetObjectReference.Create(this));
+	}
+	
+	[JSInvokable]
+	public async Task LoadMoreMessages()
+	{
+		if (HasMoreMessages && !IsLoadingMore)
+		{
+			await LoadMoreGroupMessages();
+		}
+	}
+
+	private async Task ScrollToBottom()
+	{
+		await JSRuntime.InvokeVoidAsync("scrollToElementBottom", "group-message-container");
 	}
 
 	private async Task SelectGroup(long groupId)
@@ -271,5 +354,11 @@
 				return $"{size / (1024 * 1024 * 1024):F2} GB";
 		}
 		return sizeStr;
+	}
+
+	// JavaScript interop for scrolling
+	public class HTMLElement
+	{
+		public double ScrollTop { get; set; }
 	}
 }

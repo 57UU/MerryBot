@@ -90,6 +90,12 @@ public class HistoryRecorder : IDisposable
         return messagesCollection.Find(x => x.GroupId == groupId, limit: limit).OrderByDescending(x => x.Time).ToList();
     }
     
+    public List<GroupMessage> GetMessagesByGroupId(long groupId, int page, int pageSize)
+    {
+        var skip = (page - 1) * pageSize;
+        return messagesCollection.Find(x => x.GroupId == groupId, skip: skip, limit: pageSize).OrderByDescending(x => x.Time).ToList();
+    }
+    
     public List<GroupMessage> GetMessagesBySenderId(long senderId, int limit = 100)
     {
         return messagesCollection.Find(x => x.SenderId == senderId, limit: limit).OrderByDescending(x => x.Time).ToList();

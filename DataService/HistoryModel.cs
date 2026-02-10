@@ -37,7 +37,7 @@ public record GroupMessage(
     {
         var time = DateTimeOffset.FromUnixTimeSeconds(napcatGroupMessage.Time).UtcDateTime;
         return new GroupMessage(
-            napcatGroupMessage.GroupId,
+            -1,//indicate forward message, it not belong to any group
             napcatGroupMessage.UserId,
             napcatGroupMessage.SenderInfo.nickname,
             napcatGroupMessage.SenderInfo.card,
