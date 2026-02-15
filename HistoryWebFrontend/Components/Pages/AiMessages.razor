@@ -177,9 +177,17 @@
             var moreMessages = await AiMessageRecorder.GetAiMessagesByGroupId(SelectedAiGroupId, CurrentPage, PageSize);
             if (moreMessages.Any())
             {
-                // 将新加载的消息添加到列表开头，因为它们是更旧的消息
-                // 这样在反转后，消息会按正确的时间顺序（从旧到新）显示
-                AiMessageList.InsertRange(0, moreMessages);
+                var oldScrollHeight = await GetScrollHeight();
+                var oldScrollTop = await GetScrollTop();
+                
+                AiMessageList.AddRange(moreMessages);
+                
+                await Task.Delay(50);
+                
+                var newScrollHeight = await GetScrollHeight();
+                var scrollPosition = oldScrollTop + (newScrollHeight - oldScrollHeight);
+                
+                await SetScrollTop(scrollPosition);
             }
             else
             {
@@ -214,6 +222,21 @@
     private async Task ScrollToBottom()
     {
         await JSRuntime.InvokeVoidAsync("scrollToElementBottom", "ai-message-container");
+    }
+    
+    private async Task<double> GetScrollHeight()
+    {
+        return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('ai-message-container').scrollHeight");
+    }
+    
+    private async Task<double> GetScrollTop()
+    {
+        return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('ai-message-container').scrollTop");
+    }
+    
+    private async Task SetScrollTop(double scrollTop)
+    {
+        await JSRuntime.InvokeVoidAsync("eval", $"document.getElementById('ai-message-container').scrollTop = {scrollTop}");
     }
     
     private async Task SelectAiGroup(long groupId)
