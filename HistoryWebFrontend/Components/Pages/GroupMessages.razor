@@ -187,7 +187,9 @@
 			var moreMessages = HistoryRecorder.GetMessagesByGroupId(SelectedGroupId, CurrentPage, PageSize);
 			if (moreMessages.Any())
 			{
-				GroupMessageList.AddRange(moreMessages);
+				// 将新加载的消息添加到列表开头，因为它们是更旧的消息
+				// 这样在反转后，消息会按正确的时间顺序（从旧到新）显示
+				GroupMessageList.InsertRange(0, moreMessages);
 			}
 			else
 			{
