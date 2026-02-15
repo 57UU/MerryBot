@@ -74,3 +74,10 @@ public record GroupEvent(
     DateTime Time,
     [BsonId] ObjectId Id = default
     );
+
+public record ForwardMessageEntry(
+    [BsonId] string ForwardId,
+    long SourceGroupId,
+    List<GroupMessage> Messages,
+    DateTime Time
+    );

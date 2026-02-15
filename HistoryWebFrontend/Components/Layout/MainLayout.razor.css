@@ -96,3 +96,13 @@ main {
         right: 0.75rem;
         top: 0.5rem;
     }
+
+.embed-mode {
+    width: 100%;
+    height: 100vh;
+}
+
+.embed-mode .content {
+    height: 100%;
+    padding: 0 !important;
+}

@@ -15,6 +15,7 @@ public class HistoryRecorder : IDisposable
     ILiteCollection<ImageEntry> imageBedCollection;
     ILiteCollection<FileEntry> fileBedCollection;
     ILiteCollection<GroupEvent> eventsCollection;
+    ILiteCollection<ForwardMessageEntry> forwardMessagesCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     
@@ -26,6 +27,7 @@ public class HistoryRecorder : IDisposable
         imageBedCollection = database.GetCollection<ImageEntry>("images");
         fileBedCollection = database.GetCollection<FileEntry>("files");
         eventsCollection = database.GetCollection<GroupEvent>("events");
+        forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
         
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
         
@@ -37,6 +39,7 @@ public class HistoryRecorder : IDisposable
         eventsCollection.EnsureIndex(x => x.GroupId);
         eventsCollection.EnsureIndex(x => x.EventType);
         eventsCollection.EnsureIndex(x => x.Time);
+        forwardMessagesCollection.EnsureIndex(x => x.SourceGroupId);
     }
     
     private long GenerateId()
@@ -229,6 +232,27 @@ public class HistoryRecorder : IDisposable
         var messageGroupIds = messagesCollection.FindAll().Select(x => x.GroupId).Distinct();
         var eventGroupIds = eventsCollection.FindAll().Select(x => x.GroupId).Distinct();
         return messageGroupIds.Concat(eventGroupIds).Distinct().OrderBy(x => x).ToList();
+    }
+    
+    public bool RecordForwardMessage(ForwardMessageEntry forwardEntry)
+    {
+        if (forwardMessagesCollection.Exists(x => x.ForwardId == forwardEntry.ForwardId))
+        {
+            return false;
+        }
+        
+        forwardMessagesCollection.Insert(forwardEntry);
+        return true;
+    }
+    
+    public ForwardMessageEntry? GetForwardMessageById(string forwardId)
+    {
+        return forwardMessagesCollection.FindOne(x => x.ForwardId == forwardId);
+    }
+    
+    public bool ForwardMessageExists(string forwardId)
+    {
+        return forwardMessagesCollection.Exists(x => x.ForwardId == forwardId);
     }
     
     public int GetImageCount()

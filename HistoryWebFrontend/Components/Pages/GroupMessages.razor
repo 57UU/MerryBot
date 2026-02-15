@@ -100,6 +100,16 @@
 	</div>
 </div>
 
+<div id="forward-modal" class="modal-overlay" style="display: none;">
+	<div class="modal-content">
+		<div class="modal-header">
+			<span id="forward-modal-title">转发消息</span>
+			<button class="modal-close-btn" onclick="closeForwardModal()">×</button>
+		</div>
+		<iframe id="forward-iframe" class="modal-iframe"></iframe>
+	</div>
+</div>
+
 <script>
     let scrollTimeout = null;
     
@@ -124,6 +134,22 @@
         scrollTimeout = setTimeout(() => {
             checkScrollPosition(elementId, dotNetRef);
         }, 200);
+    }
+    
+    function openForwardModal(forwardId) {
+        const modal = document.getElementById('forward-modal');
+        const iframe = document.getElementById('forward-iframe');
+        iframe.src = '/forwardedmessage?id=' + forwardId + '&embed=1';
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeForwardModal() {
+        const modal = document.getElementById('forward-modal');
+        const iframe = document.getElementById('forward-iframe');
+        modal.style.display = 'none';
+        iframe.src = '';
+        document.body.style.overflow = '';
     }
 </script>
 
@@ -270,6 +296,11 @@
 		}
 	}
 	
+	private void OpenForwardModal(string forwardId)
+	{
+		JSRuntime.InvokeVoidAsync("openForwardModal", forwardId);
+	}
+	
 	[JSInvokable]
 	public async Task LoadMoreMessages()
 	{
@@ -343,7 +374,9 @@
 				else if (msg is NapcatClient.MessageType.ForwardData forwardData)
 				{
 					<div class="mt-1-custom">
-						<span class="text-muted-custom">[转发消息] ID: @forwardData.Id</span>
+						<a href="javascript:void(0)" class="text-primary-custom" @onclick="() => OpenForwardModal(forwardData.Id)">
+							[转发消息] 点击查看详情
+						</a>
 					</div>
 				}
 				else if (msg is NapcatClient.MessageType.ReplyData replyData)

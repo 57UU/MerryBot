@@ -280,24 +280,34 @@ public class MessageRecorderPlugin : Plugin
     {
         try
         {
-            // 获取转发消息内容
-            var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
-            if (forwardMessage != null)
+            if (historyRecorder.ForwardMessageExists(forwardData.Id))
             {
+                Logger.Trace($"转发消息已存在: {forwardData.Id}");
+                return;
+            }
+            
+            var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
+            if (forwardMessage != null && forwardMessage.Messages.Any())
+            {
+                var messages = new List<DataService.GroupMessage>();
                 foreach (var msg in forwardMessage.Messages)
                 {
-                    // 检查消息是否已存在，避免重复存储
-                    if (!historyRecorder.MessageExists(msg.MessageId))
-                    {
-                        // 转换并保存转发消息内容
-                        var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(msg);
-                        historyRecorder.RecordMessage(groupMessage);
-                        Logger.Trace($"保存转发消息: {msg.MessageId}");
-                    }
-
-                    // 递归处理转发消息中的资源
+                    var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(msg);
+                    messages.Add(groupMessage);
+                    
                     await ProcessMessageResources(msg.Message, groupId, depth);
                 }
+                
+                var time = DateTimeOffset.FromUnixTimeSeconds(forwardMessage.Messages.First().Time).UtcDateTime;
+                var entry = new DataService.ForwardMessageEntry(
+                    forwardData.Id,
+                    groupId,
+                    messages,
+                    time
+                );
+                
+                historyRecorder.RecordForwardMessage(entry);
+                Logger.Debug($"保存转发消息: {forwardData.Id}, 包含 {messages.Count} 条消息");
             }
         }
         catch (Exception ex)

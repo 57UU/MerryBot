@@ -1,0 +1,242 @@
+@page "/forwardedmessage"
+@using DataService
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@rendermode InteractiveServer
+@inject HistoryRecorder HistoryRecorder
+@inject IJSRuntime JSRuntime
+
+<PageTitle>转发消息</PageTitle>
+
+<div class="container-custom" style="height: 100%;">
+    <div class="card-full-height">
+        <div class="card-header-custom">
+            @if (IsEmbed)
+            {
+                <button class="modal-close-btn-embed" @onclick="CloseModal">×</button>
+            }
+            else
+            {
+                <a href="javascript:history.back()" class="text-primary-custom" style="text-decoration: none; margin-right: 1rem;">← 返回</a>
+            }
+            @(ForwardEntry != null ? $"转发消息详情 ({ForwardEntry.Messages.Count} 条)" : "转发消息")
+        </div>
+        <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+            @if (string.IsNullOrEmpty(ForwardId))
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    未指定转发消息ID
+                </div>
+            }
+            else if (IsLoading)
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    加载中...
+                </div>
+            }
+            else if (ForwardEntry == null)
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    未找到转发消息
+                </div>
+            }
+            else
+            {
+                <div class="message-container-custom">
+                    @foreach (var message in ForwardEntry.Messages.OrderBy(m => m.Time))
+                    {
+                        <div class="message-item-custom mb-3-custom">
+                            <div class="message-header-custom">
+                                <p>
+                                    <strong>@message.SenderNickname</strong>
+                                    @message.SenderId
+                                    @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
+                                </p>
+                                <span class="text-muted-custom float-end-custom">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="message-content-custom">
+                                @foreach (var msg in message.Messages)
+                                {
+                                    @RenderMessage(msg)
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Id { get; set; }
+    
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Embed { get; set; }
+    
+    private string? ForwardId => Id;
+    private bool IsEmbed => Embed == "1";
+    private ForwardMessageEntry? ForwardEntry { get; set; }
+    private bool IsLoading { get; set; } = true;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadForwardMessage();
+    }
+    
+    private async Task LoadForwardMessage()
+    {
+        IsLoading = true;
+        
+        try
+        {
+            if (!string.IsNullOrEmpty(ForwardId))
+            {
+                ForwardEntry = HistoryRecorder.GetForwardMessageById(ForwardId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading forward message: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+    
+    private void CloseModal()
+    {
+        JSRuntime.InvokeVoidAsync("parent.closeForwardModal");
+    }
+    
+    private RenderFragment RenderMessage(object msg)
+    {
+        return __builder =>
+        {
+            try
+            {
+                if (msg is NapcatClient.MessageType.TextData textData)
+                {
+                    <span>@textData.Text</span>
+                }
+                else if (msg is NapcatClient.MessageType.AtData atData)
+                {
+                    <span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
+                }
+                else if (msg is NapcatClient.MessageType.FaceData faceData)
+                {
+                    <span class="text-muted-custom">[表情: @faceData.ToChinese()]</span>
+                }
+                else if (msg is NapcatClient.MessageType.ImageData imageData)
+                {
+                    <div class="mt-1-custom">
+                        <div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
+                        <img src="/api/image/@imageData.Url" alt="@imageData.Summary" class="img-fluid-custom rounded-custom" style="max-height: 300px;" />
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.FileData fileData)
+                {
+                    <div class="mt-1-custom">
+                        <a href="/api/file/@fileData.Url?name=@fileData.File" download="@fileData.File" class="text-primary-custom" title="点击下载文件">
+                            [文件] @fileData.File (@FormatFileSize(fileData.FileSize?.ToString() ?? "0"))
+                        </a>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.RecordData recordData)
+                {
+                    <div class="mt-1-custom">
+                        <a href="/api/file/@recordData.File" target="_blank" class="text-primary-custom" title="点击播放语音">
+                            [语音] @(recordData.Path ?? "语音消息")
+                        </a>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.VideoData videoData)
+                {
+                    <div class="mt-1-custom">
+                        <a href="/api/file/@videoData.File" target="_blank" class="text-primary-custom" title="点击播放视频">
+                            [视频] @(videoData.File ?? "视频消息")
+                        </a>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.ForwardData forwardData)
+                {
+                    <div class="mt-1-custom">
+                        <a href="/forwardedmessage?id=@forwardData.Id&embed=1" class="text-primary-custom">
+                            [转发消息] 点击查看详情
+                        </a>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.ReplyData replyData)
+                {
+                    <div class="mt-1-custom text-muted-custom">
+                        [回复] 消息 ID: @replyData.Id
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.JsonData)
+                {
+                    <div class="mt-1-custom text-muted-custom">
+                        [卡片消息]
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.MusicData musicData)
+                {
+                    <div class="mt-1-custom">
+                        <span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.DiceData diceData)
+                {
+                    <div class="mt-1-custom">
+                        <span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.RpsData rpsData)
+                {
+                    <div class="mt-1-custom">
+                        <span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.PokeData pokeData)
+                {
+                    <div class="mt-1-custom text-muted-custom">
+                        [戳一戳] @pokeData.Type
+                    </div>
+                }
+                else if (msg is NapcatClient.MessageType.MfaceData mfaceData)
+                {
+                    <div class="mt-1-custom text-muted-custom">
+                        [商城表情] @mfaceData.Summary
+                    </div>
+                }
+                else
+                {
+                    <span class="text-muted-custom">[未知消息类型: @msg.GetType().Name]</span>
+                }
+            }
+            catch (Exception ex)
+            {
+                <span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
+            }
+        };
+    }
+    
+    private string FormatFileSize(string sizeStr)
+    {
+        if (long.TryParse(sizeStr, out var size))
+        {
+            if (size < 1024)
+                return $"{size} B";
+            else if (size < 1024 * 1024)
+                return $"{size / 1024:F2} KB";
+            else if (size < 1024 * 1024 * 1024)
+                return $"{size / (1024 * 1024):F2} MB";
+            else
+                return $"{size / (1024 * 1024 * 1024):F2} GB";
+        }
+        return sizeStr;
+    }
+}
