@@ -112,6 +112,7 @@ internal class Logic
                 if (interceptor(data))
                 {
                     isIntercepted = true;
+                    break;
                 }
             }
         }

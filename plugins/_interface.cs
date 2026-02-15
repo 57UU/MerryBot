@@ -152,7 +152,7 @@ public record PluginInterop(
     }
 }
 public enum PluginType{
-    Interactive,Background
+    Interactive,Background,Admin
 }
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class PluginTag : Attribute

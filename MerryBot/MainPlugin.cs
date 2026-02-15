@@ -7,7 +7,7 @@ using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 
 namespace MerryBot;
 
-[PluginTag("MainPlugin", "特权插件，用于管理bot",priority:1919810)]
+[PluginTag("MainPlugin", "特权插件，用于管理bot",priority:1919810,type:PluginType.Admin)]
 internal class MainPlugin : Plugin
 {
     private Logic logic;
