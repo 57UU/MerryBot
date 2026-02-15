@@ -8,6 +8,29 @@
 
 <PageTitle>群聊消息</PageTitle>
 
+<script src="/js/BenzAMRRecorder.min.js"></script>
+<script>
+	window.amrPlayers = {};
+	window.playAmrAudio = function(url) {
+		if (window.amrPlayers[url]) {
+			var player = window.amrPlayers[url];
+			if (player.isPlaying()) {
+				player.stop();
+			} else {
+				player.play();
+			}
+			return;
+		}
+		var amr = new BenzAMRRecorder();
+		window.amrPlayers[url] = amr;
+		amr.initWithUrl(url).then(function() {
+			amr.play();
+		});
+		amr.onEnded(function() {
+		});
+	};
+</script>
+
 <div class="container-custom" style="height: 100%;">
 
 	<div class="row-layout" style="height: 100%;">
@@ -357,18 +380,17 @@
 				}
 				else if (msg is NapcatClient.MessageType.RecordData recordData)
 				{
-					<div class="mt-1-custom">
-						<a href="/api/file/@recordData.File" target="_blank" class="text-primary-custom" title="点击播放语音">
-							[语音] @(recordData.Path ?? "语音消息")
-						</a>
+					<div class="mt-1-custom d-flex align-items-center gap-2">
+						<button type="button" style="background: none; border: none; color: #0d6efd; cursor: pointer; padding: 0; font-size: 1rem;" @onclick='() => PlayAmr($"/api/file/{recordData.Url}")' title="点击播放语音">
+							▶
+						</button>
+						<span class="text-primary-custom">@(recordData.Path ?? "语音消息")</span>
 					</div>
 				}
 				else if (msg is NapcatClient.MessageType.VideoData videoData)
 				{
 					<div class="mt-1-custom">
-						<a href="/api/file/@videoData.File" target="_blank" class="text-primary-custom" title="点击播放视频">
-							[视频] @(videoData.File ?? "视频消息")
-						</a>
+						<video src="/api/file/@videoData.Url" controls preload="metadata" style="max-height: 400px; border-radius: 8px;"></video>
 					</div>
 				}
 				else if (msg is NapcatClient.MessageType.ForwardData forwardData)
@@ -447,5 +469,10 @@
 				return $"{size / (1024 * 1024 * 1024):F2} GB";
 		}
 		return sizeStr;
+	}
+
+	private async Task PlayAmr(string url)
+	{
+		await JSRuntime.InvokeVoidAsync("playAmrAudio", url);
 	}
 }

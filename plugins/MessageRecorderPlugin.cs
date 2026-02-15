@@ -14,7 +14,7 @@ public class MessageRecorderPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
-    
+
     public MessageRecorderPlugin(PluginInterop interop) : base(interop)
     {
         interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
@@ -23,7 +23,7 @@ public class MessageRecorderPlugin : Plugin
     {
         _ = HandleGroupMessageAsync(data.group_id, data);
     }
-    
+
     public override async Task OnLoaded()
     {
         // 从StorageManagerPlugin获取HistoryRecorder实例
@@ -32,7 +32,7 @@ public class MessageRecorderPlugin : Plugin
         {
             throw new PluginNotUsableException("StorageManagerPlugin未找到，MessageRecorderPlugin需要StorageManagerPlugin初始化");
         }
-        
+
         historyRecorder = storageManager.GroupHistoryRecorder;
         Logger.Info("MessageRecorderPlugin 初始化完成，使用StorageManagerPlugin提供的HistoryRecorder");
     }
@@ -47,7 +47,7 @@ public class MessageRecorderPlugin : Plugin
         //use raw data
         //_ = HandleGroupMessageAsync(groupId, data);
     }
-    
+
     private async Task HandleGroupMessageAsync(long groupId, ReceivedGroupMessage data)
     {
         await DelayRandomTime();
@@ -55,7 +55,7 @@ public class MessageRecorderPlugin : Plugin
         {
             // 克隆消息以避免修改原始数据
             var clonedMessage = CloneReceivedGroupMessage(data);
-            
+
             // 处理消息中的资源并替换URL为内部ID（包括转发消息和回复消息的内容）
             await ProcessMessageResources(clonedMessage.message, groupId);
 
@@ -79,7 +79,7 @@ public class MessageRecorderPlugin : Plugin
             Logger.Error($"记录消息失败: {ex.Message}");
         }
     }
-    
+
     private ReceivedGroupMessage CloneReceivedGroupMessage(ReceivedGroupMessage original)
     {
         // 克隆消息数据
@@ -92,13 +92,13 @@ public class MessageRecorderPlugin : Plugin
             sender = original.sender,
             message = new List<NapcatClient.MessageType.TypedMessage>()
         };
-        
+
         // 克隆消息链
         foreach (var msg in original.message)
         {
             cloned.message.Add(msg.Clone());
         }
-        
+
         return cloned;
     }
 
@@ -162,7 +162,7 @@ public class MessageRecorderPlugin : Plugin
 
                 // 存储图片并获取内部ID
                 var imageEntry = historyRecorder.RecordImage(imageData.Url, imageDataBytes);
-                
+
                 // 替换URL为内部ID（字符串形式）
                 imageData.Url = imageEntry.Id.ToString();
                 if (!string.IsNullOrEmpty(imageData.File))
@@ -185,7 +185,8 @@ public class MessageRecorderPlugin : Plugin
         {
             try
             {
-                if (fileData.FileSize > FileSizeLimit) {
+                if (fileData.FileSize > FileSizeLimit)
+                {
                     Logger.Trace($"文件过大，跳过存储: {fileData.File}, 大小: {fileData.FileSize} bytes");
                     return;
                 }
@@ -201,7 +202,7 @@ public class MessageRecorderPlugin : Plugin
 
                 // 存储文件并获取内部ID
                 var fileEntry = historyRecorder.RecordFile(fileData.Url, fileDataBytes);
-                
+
                 // 替换URL为内部ID（字符串形式）
                 fileData.Url = fileEntry.Id.ToString();
 
@@ -220,8 +221,13 @@ public class MessageRecorderPlugin : Plugin
         {
             try
             {
+                if (videoData.FileSize > FileSizeLimit)
+                {
+                    Logger.Trace($"视频文件过大，跳过存储: {videoData.File}, 大小: {videoData.FileSize} bytes");
+                    return;
+                }
                 // 下载视频，使用 Actions 提供的 HTTP 接口
-                var videoDataBytes = await Actions.HttpGetBinary(videoData.File);
+                var videoDataBytes = await Actions.HttpGetBinary(videoData.Url);
 
                 // 检查文件大小
                 if (videoDataBytes.Length > FileSizeLimit)
@@ -231,10 +237,10 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储视频并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(videoData.File, videoDataBytes);
-                
+                var fileEntry = historyRecorder.RecordFile(videoData.Url, videoDataBytes);
+
                 // 替换URL为内部ID（字符串形式）
-                videoData.File = fileEntry.Id.ToString();
+                videoData.Url = fileEntry.Id.ToString();
 
                 Logger.Trace($"已存储视频: {fileEntry.OriginalUrl} -> 内部ID: {fileEntry.Id}");
             }
@@ -251,8 +257,13 @@ public class MessageRecorderPlugin : Plugin
         {
             try
             {
+                if (recordData.FileSize > FileSizeLimit)
+                {
+                    Logger.Trace($"语音文件过大，跳过存储: {recordData.File}, 大小: {recordData.FileSize} bytes");
+                    return;
+                }
                 // 下载语音，使用 Actions 提供的 HTTP 接口
-                var recordDataBytes = await Actions.HttpGetBinary(recordData.File);
+                var recordDataBytes = await Actions.HttpGetBinary(recordData.Url);
 
                 // 检查文件大小
                 if (recordDataBytes.Length > FileSizeLimit)
@@ -262,10 +273,10 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储语音并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(recordData.File, recordDataBytes);
-                
+                var fileEntry = historyRecorder.RecordFile(recordData.Url, recordDataBytes);
+
                 // 替换URL为内部ID（字符串形式）
-                recordData.File = fileEntry.Id.ToString();
+                recordData.Url = fileEntry.Id.ToString();
 
                 Logger.Trace($"已存储语音: {fileEntry.OriginalUrl} -> 内部ID: {fileEntry.Id}");
             }
@@ -285,7 +296,7 @@ public class MessageRecorderPlugin : Plugin
                 Logger.Trace($"转发消息已存在: {forwardData.Id}");
                 return;
             }
-            
+
             var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
             if (forwardMessage != null && forwardMessage.Messages.Any())
             {
@@ -294,10 +305,10 @@ public class MessageRecorderPlugin : Plugin
                 {
                     var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(msg);
                     messages.Add(groupMessage);
-                    
+
                     await ProcessMessageResources(msg.Message, groupId, depth);
                 }
-                
+
                 var time = DateTimeOffset.FromUnixTimeSeconds(forwardMessage.Messages.First().Time).UtcDateTime;
                 var entry = new DataService.ForwardMessageEntry(
                     forwardData.Id,
@@ -305,7 +316,7 @@ public class MessageRecorderPlugin : Plugin
                     messages,
                     time
                 );
-                
+
                 historyRecorder.RecordForwardMessage(entry);
                 Logger.Debug($"保存转发消息: {forwardData.Id}, 包含 {messages.Count} 条消息");
             }

@@ -443,10 +443,16 @@ public class ImageData : TypedMessage
 public class RecordData : TypedMessage
 {
     /// <summary>
-    /// 语音文件路径、URL 或 Base64 编码
+    /// 语音文件名
     /// </summary>
     [JsonPropertyName("file")]
     public string File { get; set; }
+
+    /// <summary>
+    /// 语音 URL
+    /// </summary>
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
 
     /// <summary>
     /// 文件大小(字节)
@@ -469,7 +475,7 @@ public class RecordData : TypedMessage
 
     public override TypedMessage Clone()
     {
-        return new RecordData { File = File, FileSize = FileSize, Path = Path };
+        return new RecordData { File = File, Url = Url, FileSize = FileSize, Path = Path };
     }
 
     public override bool Equals(object? obj)
