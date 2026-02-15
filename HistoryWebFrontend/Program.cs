@@ -1,6 +1,7 @@
 using DataService;
 using HistoryWebFrontend.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HistoryWebFrontend;
 
@@ -68,7 +69,7 @@ public class Program
         });
 
         // 文件API
-        app.MapGet("/api/file/{id}", (long id, HistoryRecorder historyRecorder) =>
+        app.MapGet("/api/file/{id}", (long id,[FromQuery] string? name,HistoryRecorder historyRecorder) =>
         {
             var file = historyRecorder.GetFileById(id);
             if (file == null)
@@ -77,7 +78,7 @@ public class Program
             }
 
             var contentType = GetFileContentType(file.OriginalUrl);
-            var fileName = GetFileName(file.OriginalUrl);
+            var fileName = name?? id.ToString();
             return Results.File(file.Data, contentType, fileName);
         });
 

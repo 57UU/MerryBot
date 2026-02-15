@@ -185,8 +185,12 @@ public class MessageRecorderPlugin : Plugin
         {
             try
             {
+                if (fileData.FileSize > FileSizeLimit) {
+                    Logger.Trace($"文件过大，跳过存储: {fileData.File}, 大小: {fileData.FileSize} bytes");
+                    return;
+                }
                 // 下载文件，使用 Actions 提供的 HTTP 接口
-                var fileDataBytes = await Actions.HttpGetBinary(fileData.File);
+                var fileDataBytes = await Actions.HttpGetBinary(fileData.Url);
 
                 // 检查文件大小
                 if (fileDataBytes.Length > FileSizeLimit)
@@ -196,10 +200,10 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储文件并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(fileData.File, fileDataBytes);
+                var fileEntry = historyRecorder.RecordFile(fileData.Url, fileDataBytes);
                 
                 // 替换URL为内部ID（字符串形式）
-                fileData.File = fileEntry.Id.ToString();
+                fileData.Url = fileEntry.Id.ToString();
 
                 Logger.Trace($"已存储文件: {fileEntry.OriginalUrl} -> 内部ID: {fileEntry.Id}");
             }

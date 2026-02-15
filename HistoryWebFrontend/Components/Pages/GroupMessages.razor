@@ -319,8 +319,8 @@
 				else if (msg is NapcatClient.MessageType.FileData fileData)
 				{
 					<div class="mt-1-custom">
-						<a href="/api/file/@fileData.FileId" download="@fileData.Name" class="text-primary-custom" title="点击下载文件">
-							[文件] @fileData.Name (@FormatFileSize(fileData.FileSize?.ToString() ?? "0"))
+						<a href="/api/file/@fileData.Url?name=@fileData.File" download="@fileData.File" class="text-primary-custom" title="点击下载文件">
+							[文件] @fileData.File (@FormatFileSize(fileData.FileSize?.ToString() ?? "0"))
 						</a>
 					</div>
 				}

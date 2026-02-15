@@ -559,16 +559,16 @@ public class VideoData : TypedMessage
 public class FileData : TypedMessage
 {
     /// <summary>
-    /// 文件路径、URL 或 Base64 编码
+    /// 文件名
     /// </summary>
     [JsonPropertyName("file")]
     public string File { get; set; }
-
     /// <summary>
-    /// 文件名
+    /// url
     /// </summary>
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
 
     /// <summary>
     /// 文件 ID
@@ -591,7 +591,7 @@ public class FileData : TypedMessage
 
     public override TypedMessage Clone()
     {
-        return new FileData { File = File, Name = Name, FileId = FileId, FileSize = FileSize };
+        return new FileData { File = File, Url = Url, FileId = FileId, FileSize = FileSize };
     }
 
     public override bool Equals(object? obj)
@@ -605,7 +605,7 @@ public class FileData : TypedMessage
             return true;
         }
         var other = (FileData)obj;
-        return File == other.File && Name == other.Name && FileId == other.FileId && FileSize == other.FileSize;
+        return File == other.File && Url == other.Url && FileId == other.FileId && FileSize == other.FileSize;
     }
     public override string ToString()
     {
