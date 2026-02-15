@@ -87,33 +87,58 @@ public class HistoryRecorder : IDisposable
     
     public List<GroupMessage> GetMessagesByGroupId(long groupId, int limit = 100)
     {
-        return messagesCollection.Find(x => x.GroupId == groupId, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.GroupId == groupId)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupMessage> GetMessagesByGroupId(long groupId, int page, int pageSize)
     {
         var skip = (page - 1) * pageSize;
-        return messagesCollection.Find(x => x.GroupId == groupId, skip: skip, limit: pageSize).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.GroupId == groupId)
+            .OrderByDescending(x => x.Time)
+            .Skip(skip)
+            .Limit(pageSize)
+            .ToList();
     }
     
     public List<GroupMessage> GetMessagesBySenderId(long senderId, int limit = 100)
     {
-        return messagesCollection.Find(x => x.SenderId == senderId, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.SenderId == senderId)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupMessage> GetMessagesByGroupAndSender(long groupId, long senderId, int limit = 100)
     {
-        return messagesCollection.Find(x => x.GroupId == groupId && x.SenderId == senderId, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.GroupId == groupId && x.SenderId == senderId)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupMessage> GetMessagesByTimeRange(DateTime startTime, DateTime endTime, int limit = 100)
     {
-        return messagesCollection.Find(x => x.Time >= startTime && x.Time <= endTime, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.Time >= startTime && x.Time <= endTime)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupMessage> GetMessagesByGroupAndTimeRange(long groupId, DateTime startTime, DateTime endTime, int limit = 100)
     {
-        return messagesCollection.Find(x => x.GroupId == groupId && x.Time >= startTime && x.Time <= endTime, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return messagesCollection.Query()
+            .Where(x => x.GroupId == groupId && x.Time >= startTime && x.Time <= endTime)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public ImageEntry RecordImage(string originalUrl, byte[] data)
@@ -174,17 +199,29 @@ public class HistoryRecorder : IDisposable
     
     public List<GroupEvent> GetEventsByGroupId(long groupId, int limit = 100)
     {
-        return eventsCollection.Find(x => x.GroupId == groupId, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return eventsCollection.Query()
+            .Where(x => x.GroupId == groupId)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupEvent> GetEventsByType(string eventType, int limit = 100)
     {
-        return eventsCollection.Find(x => x.EventType == eventType, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return eventsCollection.Query()
+            .Where(x => x.EventType == eventType)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<GroupEvent> GetEventsByGroupAndType(long groupId, string eventType, int limit = 100)
     {
-        return eventsCollection.Find(x => x.GroupId == groupId && x.EventType == eventType, limit: limit).OrderByDescending(x => x.Time).ToList();
+        return eventsCollection.Query()
+            .Where(x => x.GroupId == groupId && x.EventType == eventType)
+            .OrderByDescending(x => x.Time)
+            .Limit(limit)
+            .ToList();
     }
     
     public List<long> GetAllGroupIds()

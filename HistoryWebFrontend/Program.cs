@@ -2,129 +2,128 @@ using DataService;
 using HistoryWebFrontend.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 
-namespace HistoryWebFrontend
+namespace HistoryWebFrontend;
+
+public class Program
 {
-    public class Program
+    public static void Main()
     {
-        public static void Main()
+        string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
+        var app=CreateApp(
+            new AiMessageRecorder($"{dataPath}/ai_messages.db"), 
+            new HistoryRecorder($"{dataPath}/group_history.db")
+            );
+        app.Run();
+    }
+    public static WebApplication CreateApp(AiMessageRecorder aiMessageRecorder, HistoryRecorder historyRecorder)
+    {
+        var webAssembly = typeof(Program).Assembly;
+
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions() { 
+            ApplicationName=webAssembly.GetName().Name,
+        });
+
+        // Add services to the container.
+        builder.Services.AddRazorComponents()
+            .AddInteractiveServerComponents();
+        // data
+        builder.Services.AddSingleton(aiMessageRecorder);
+        builder.Services.AddSingleton(historyRecorder);
+
+        var app = builder.Build();
+
+        // Configure the HTTP request pipeline.
+        if (!app.Environment.IsDevelopment())
         {
-            string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-            var app=CreateApp(
-                new AiMessageRecorder($"{dataPath}/ai_message.db"), 
-                new HistoryRecorder($"{dataPath}/group_history.db")
-                );
-            app.Run();
+            app.UseExceptionHandler("/Error");
         }
-        public static WebApplication CreateApp(AiMessageRecorder aiMessageRecorder, HistoryRecorder historyRecorder)
+
+        app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+        app.UseAntiforgery();
+
+        
+#if DEBUG
+        app.MapStaticAssets();
+#else
+        app.UseStaticFiles();
+#endif
+        StaticWebAssetsLoader.UseStaticWebAssets(app.Environment, app.Configuration);
+
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode();
+
+        app.Urls.Add("http://0.0.0.0:5000");
+
+        // 图片API
+        app.MapGet("/api/image/{id}", (long id, HistoryRecorder historyRecorder) =>
         {
-            var webAssembly = typeof(Program).Assembly;
-
-            var builder = WebApplication.CreateBuilder(new WebApplicationOptions() { 
-                ApplicationName=webAssembly.GetName().Name,
-            });
-
-            // Add services to the container.
-            builder.Services.AddRazorComponents()
-                .AddInteractiveServerComponents();
-            // data
-            builder.Services.AddSingleton(aiMessageRecorder);
-            builder.Services.AddSingleton(historyRecorder);
-
-            var app = builder.Build();
-
-            // Configure the HTTP request pipeline.
-            if (!app.Environment.IsDevelopment())
+            var image = historyRecorder.GetImageById(id);
+            if (image == null)
             {
-                app.UseExceptionHandler("/Error");
+                return Results.NotFound();
             }
 
-            app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-            app.UseAntiforgery();
+            var contentType = GetImageContentType(image.OriginalUrl);
+            return Results.File(image.Data, contentType);
+        });
 
-            
-#if DEBUG
-            app.MapStaticAssets();
-#else
-            app.UseStaticFiles();
-#endif
-            StaticWebAssetsLoader.UseStaticWebAssets(app.Environment, app.Configuration);
-
-            app.MapRazorComponents<App>()
-                .AddInteractiveServerRenderMode();
-
-            app.Urls.Add("http://0.0.0.0:5000");
-
-            // 图片API
-            app.MapGet("/api/image/{id}", (long id, HistoryRecorder historyRecorder) =>
-            {
-                var image = historyRecorder.GetImageById(id);
-                if (image == null)
-                {
-                    return Results.NotFound();
-                }
-
-                var contentType = GetImageContentType(image.OriginalUrl);
-                return Results.File(image.Data, contentType);
-            });
-
-            // 文件API
-            app.MapGet("/api/file/{id}", (long id, HistoryRecorder historyRecorder) =>
-            {
-                var file = historyRecorder.GetFileById(id);
-                if (file == null)
-                {
-                    return Results.NotFound();
-                }
-
-                var contentType = GetFileContentType(file.OriginalUrl);
-                var fileName = GetFileName(file.OriginalUrl);
-                return Results.File(file.Data, contentType, fileName);
-            });
-
-            return app;
-        }
-
-        private static string GetImageContentType(string url)
+        // 文件API
+        app.MapGet("/api/file/{id}", (long id, HistoryRecorder historyRecorder) =>
         {
-            var extension = Path.GetExtension(url).ToLower();
-            return extension switch
+            var file = historyRecorder.GetFileById(id);
+            if (file == null)
             {
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                ".webp" => "image/webp",
-                ".bmp" => "image/bmp",
-                _ => "image/jpeg"
-            };
-        }
+                return Results.NotFound();
+            }
 
-        private static string GetFileContentType(string url)
-        {
-            var extension = Path.GetExtension(url).ToLower();
-            return extension switch
-            {
-                ".pdf" => "application/pdf",
-                ".doc" or ".docx" => "application/msword",
-                ".xls" or ".xlsx" => "application/vnd.ms-excel",
-                ".ppt" or ".pptx" => "application/vnd.ms-powerpoint",
-                ".zip" => "application/zip",
-                ".rar" => "application/x-rar-compressed",
-                ".7z" => "application/x-7z-compressed",
-                ".txt" => "text/plain",
-                ".mp3" => "audio/mpeg",
-                ".wav" => "audio/wav",
-                ".mp4" => "video/mp4",
-                ".avi" => "video/x-msvideo",
-                ".mkv" => "video/x-matroska",
-                _ => "application/octet-stream"
-            };
-        }
+            var contentType = GetFileContentType(file.OriginalUrl);
+            var fileName = GetFileName(file.OriginalUrl);
+            return Results.File(file.Data, contentType, fileName);
+        });
 
-        private static string GetFileName(string url)
+        return app;
+    }
+
+    private static string GetImageContentType(string url)
+    {
+        var extension = Path.GetExtension(url).ToLower();
+        return extension switch
         {
-            var uri = new Uri(url);
-            var fileName = Path.GetFileName(uri.LocalPath);
-            return string.IsNullOrEmpty(fileName) ? "download" : fileName;
-        }
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            _ => "image/jpeg"
+        };
+    }
+
+    private static string GetFileContentType(string url)
+    {
+        var extension = Path.GetExtension(url).ToLower();
+        return extension switch
+        {
+            ".pdf" => "application/pdf",
+            ".doc" or ".docx" => "application/msword",
+            ".xls" or ".xlsx" => "application/vnd.ms-excel",
+            ".ppt" or ".pptx" => "application/vnd.ms-powerpoint",
+            ".zip" => "application/zip",
+            ".rar" => "application/x-rar-compressed",
+            ".7z" => "application/x-7z-compressed",
+            ".txt" => "text/plain",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".mp4" => "video/mp4",
+            ".avi" => "video/x-msvideo",
+            ".mkv" => "video/x-matroska",
+            _ => "application/octet-stream"
+        };
+    }
+
+    private static string GetFileName(string url)
+    {
+        var uri = new Uri(url);
+        var fileName = Path.GetFileName(uri.LocalPath);
+        return string.IsNullOrEmpty(fileName) ? "download" : fileName;
     }
 }
