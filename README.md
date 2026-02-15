@@ -110,6 +110,29 @@ Merry Bot
 |`OnGroupMessageNotMentioned`|当收到新消息时bot未被@，此函数会被调用|
 | `OnLoaded` 函数 | 当插件全部被加载完后会执行的函数，可以放一些互操作性的初始化代码。 |
 
+### 原始消息事件
+`OnRawGroupMessageReceived` 事件允许插件在消息被其他插件处理之前访问原始消息数据。
+
+**注册方式**：
+```csharp
+
+public MyPlugin(PluginInterop interop) : base(interop)
+{
+    interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
+}
+
+private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
+{
+    // 在这里处理原始消息
+    // 此回调在其他插件的 OnGroupMessage 等方法之前被调用
+}
+
+```
+
+**使用场景**：
+- 需要在消息被其他插件修改或拦截前记录原始数据
+- 需要获取未经插件系统处理的消息
+
 
 
 ## API/属性

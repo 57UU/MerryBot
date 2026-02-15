@@ -86,6 +86,7 @@ internal class Logic
             mainPlugin.OnMessageMentionedNotInGroup(groupId, CollectionsMarshal.AsSpan(chain)[1..], data);
         }
     }
+    public event Action<ReceivedGroupMessage>? OnRawGroupMessageReceived;
 
     public void OnGroupMessageReceived(long groupId,List<TypedMessage> chain, ReceivedGroupMessage data)
     {
@@ -104,6 +105,9 @@ internal class Logic
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
 
         long senderId= data.sender.user_id;
+
+        OnRawGroupMessageReceived?.Invoke(data);
+
         bool isIntercepted = false;
         foreach(var plugInfo in plugins)
         {
@@ -233,7 +237,8 @@ internal class Logic
                         CommandLineArguments,
                         Config.Save,
                         (groupId, messageType, content) => { }, // AiMessage 插件现在使用独立的 AiMessageStorage
-                        botClient.PathPrefix
+                        botClient.PathPrefix,
+                        f=>OnRawGroupMessageReceived+=f
                         );
 
                 Plugin pluginInstance;

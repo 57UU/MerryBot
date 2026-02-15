@@ -17,6 +17,11 @@ public class MessageRecorderPlugin : Plugin
     
     public MessageRecorderPlugin(PluginInterop interop) : base(interop)
     {
+        interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
+    }
+    private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
+    {
+        _ = HandleGroupMessageAsync(data.group_id, data);
     }
     
     public override async Task OnLoaded()
@@ -39,7 +44,8 @@ public class MessageRecorderPlugin : Plugin
 
     public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        _ = HandleGroupMessageAsync(groupId, data);
+        //use raw data
+        //_ = HandleGroupMessageAsync(groupId, data);
     }
     
     private async Task HandleGroupMessageAsync(long groupId, ReceivedGroupMessage data)
