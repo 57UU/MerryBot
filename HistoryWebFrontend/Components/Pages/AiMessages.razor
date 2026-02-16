@@ -60,11 +60,10 @@
                                 {
                                     <div class="message-item-custom mb-3-custom">
                                         <div class="message-header-custom">
-                                            <strong>AI</strong>
+                                            <strong>@message.MessageType</strong>
                                             <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
                                         </div>
                                         <div class="message-content-custom">
-                                            <div>@message.MessageType</div>
                                             <div>@message.Content</div>
                                         </div>
                                     </div>
