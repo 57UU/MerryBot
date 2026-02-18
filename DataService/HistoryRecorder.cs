@@ -83,8 +83,8 @@ public class HistoryRecorder : IDisposable
             return false;
         }
         
-        var updatedMessage = message with { IsDeleted = true };
-        messagesCollection.Update(updatedMessage);
+        message.IsDeleted = true;
+        messagesCollection.Update(message);
         return true;
     }
     

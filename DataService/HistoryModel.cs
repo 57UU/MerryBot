@@ -6,18 +6,49 @@ using System.Text;
 
 namespace DataService;
 
-public record GroupMessage(
-    long GroupId,
-    long SenderId,
-    string SenderNickname,
-    string SenderGroupNickname,
-    string SenderGroupRole,
-    [BsonId] long MessageId,
-    List<NapcatClient.MessageType.TypedMessage> Messages,
-    DateTime Time,
-    bool IsDeleted = false
-    )
+public class GroupMessage
 {
+    public long MessageId { get; set; }
+    public long GroupId { get; set; }
+    public long SenderId { get; set; }
+    public string SenderNickname { get; set; }
+    public string SenderGroupNickname { get; set; }
+    public string SenderGroupRole { get; set; }
+    public List<NapcatClient.MessageType.TypedMessage> Messages { get; set; }
+    public DateTime Time { get; set; }
+    public bool IsDeleted { get; set; }
+
+    public GroupMessage()
+    {
+        SenderNickname = string.Empty;
+        SenderGroupNickname = string.Empty;
+        SenderGroupRole = string.Empty;
+        Messages = new List<NapcatClient.MessageType.TypedMessage>();
+        IsDeleted = false;
+    }
+
+    public GroupMessage(
+        long groupId,
+        long senderId,
+        string senderNickname,
+        string senderGroupNickname,
+        string senderGroupRole,
+        long messageId,
+        List<NapcatClient.MessageType.TypedMessage> messages,
+        DateTime time,
+        bool isDeleted = false)
+    {
+        GroupId = groupId;
+        SenderId = senderId;
+        SenderNickname = senderNickname;
+        SenderGroupNickname = senderGroupNickname;
+        SenderGroupRole = senderGroupRole;
+        MessageId = messageId;
+        Messages = messages;
+        Time = time;
+        IsDeleted = isDeleted;
+    }
+
     public static GroupMessage FromReceivedGroupMessage(ReceivedGroupMessage receivedGroupMessage)
     {
         var time = DateTimeOffset.FromUnixTimeSeconds(receivedGroupMessage.time).UtcDateTime;
@@ -30,7 +61,7 @@ public record GroupMessage(
             receivedGroupMessage.message_id,
             receivedGroupMessage.message,
             time
-            );
+        );
     }
 
     public static GroupMessage FromNapcatGroupMessage(NapcatClient.GroupMessage napcatGroupMessage)
@@ -45,39 +76,122 @@ public record GroupMessage(
             napcatGroupMessage.MessageId,
             napcatGroupMessage.Message,
             time
-            );
+        );
     }
 }
-public record ImageEntry(
-        [BsonId] long Id,
-        string OriginalUrl,
-        string Hash,
-        byte[] Data
-    );
 
-public record FileEntry(
-        [BsonId] long Id,
-        string OriginalUrl,
-        string Hash,
-        byte[] Data
-    );
+public class ImageEntry
+{
+    public long Id { get; set; }
+    public string OriginalUrl { get; set; }
+    public string Hash { get; set; }
+    public byte[] Data { get; set; }
 
-public record GroupEvent(
-    long GroupId,
-    string EventType,
-    string SubType,
-    long UserId,
-    long OperatorId,
-    long? MessageId,
-    long? Duration,
-    string? Extra,
-    DateTime Time,
-    [BsonId] ObjectId Id = default
-    );
+    public ImageEntry()
+    {
+        OriginalUrl = string.Empty;
+        Hash = string.Empty;
+        Data = Array.Empty<byte>();
+    }
 
-public record ForwardMessageEntry(
-    [BsonId] string ForwardId,
-    long SourceGroupId,
-    List<GroupMessage> Messages,
-    DateTime Time
-    );
+    public ImageEntry(long id, string originalUrl, string hash, byte[] data)
+    {
+        Id = id;
+        OriginalUrl = originalUrl;
+        Hash = hash;
+        Data = data;
+    }
+}
+
+public class FileEntry
+{
+    
+    public long Id { get; set; }
+    public string OriginalUrl { get; set; }
+    public string Hash { get; set; }
+    public byte[] Data { get; set; }
+
+    public FileEntry()
+    {
+        OriginalUrl = string.Empty;
+        Hash = string.Empty;
+        Data = Array.Empty<byte>();
+    }
+
+    public FileEntry(long id, string originalUrl, string hash, byte[] data)
+    {
+        Id = id;
+        OriginalUrl = originalUrl;
+        Hash = hash;
+        Data = data;
+    }
+}
+
+public class GroupEvent
+{
+    
+    public ObjectId Id { get; set; }
+    public long GroupId { get; set; }
+    public string EventType { get; set; }
+    public string SubType { get; set; }
+    public long UserId { get; set; }
+    public long OperatorId { get; set; }
+    public long? MessageId { get; set; }
+    public long? Duration { get; set; }
+    public string? Extra { get; set; }
+    public DateTime Time { get; set; }
+
+    public GroupEvent()
+    {
+        Id = ObjectId.NewObjectId();
+        EventType = string.Empty;
+        SubType = string.Empty;
+    }
+
+    public GroupEvent(
+        long groupId,
+        string eventType,
+        string subType,
+        long userId,
+        long operatorId,
+        long? messageId,
+        long? duration,
+        string? extra,
+        DateTime time,
+        ObjectId id = default)
+    {
+        GroupId = groupId;
+        EventType = eventType;
+        SubType = subType;
+        UserId = userId;
+        OperatorId = operatorId;
+        MessageId = messageId;
+        Duration = duration;
+        Extra = extra;
+        Time = time;
+        Id = id == default ? ObjectId.NewObjectId() : id;
+    }
+}
+
+public class ForwardMessageEntry
+{
+    
+    public string ForwardId { get; set; }
+    public long SourceGroupId { get; set; }
+    public List<GroupMessage> Messages { get; set; }
+    public DateTime Time { get; set; }
+
+    public ForwardMessageEntry()
+    {
+        ForwardId = string.Empty;
+        Messages = new List<GroupMessage>();
+    }
+
+    public ForwardMessageEntry(string forwardId, long sourceGroupId, List<GroupMessage> messages, DateTime time)
+    {
+        ForwardId = forwardId;
+        SourceGroupId = sourceGroupId;
+        Messages = messages;
+        Time = time;
+    }
+}
