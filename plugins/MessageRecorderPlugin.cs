@@ -50,7 +50,7 @@ public class MessageRecorderPlugin : Plugin
 
     private async Task HandleGroupMessageAsync(long groupId, ReceivedGroupMessage data)
     {
-        await DelayRandomTime();
+        //await DelayRandomTime();
         try
         {
             // 克隆消息以避免修改原始数据

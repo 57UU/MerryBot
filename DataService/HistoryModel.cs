@@ -8,6 +8,8 @@ namespace DataService;
 
 public class GroupMessage
 {
+    [BsonId]
+    public ObjectId Id { get; set; }
     public long MessageId { get; set; }
     public long GroupId { get; set; }
     public long SenderId { get; set; }
@@ -175,7 +177,8 @@ public class GroupEvent
 
 public class ForwardMessageEntry
 {
-    
+    [BsonId]
+    public ObjectId Id { get; set; }
     public string ForwardId { get; set; }
     public long SourceGroupId { get; set; }
     public List<GroupMessage> Messages { get; set; }
@@ -183,12 +186,14 @@ public class ForwardMessageEntry
 
     public ForwardMessageEntry()
     {
+        Id = ObjectId.NewObjectId();
         ForwardId = string.Empty;
         Messages = new List<GroupMessage>();
     }
 
     public ForwardMessageEntry(string forwardId, long sourceGroupId, List<GroupMessage> messages, DateTime time)
     {
+        Id = ObjectId.NewObjectId();
         ForwardId = forwardId;
         SourceGroupId = sourceGroupId;
         Messages = messages;
