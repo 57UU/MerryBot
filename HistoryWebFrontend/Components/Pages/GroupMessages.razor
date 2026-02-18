@@ -81,7 +81,7 @@
 								@foreach (var message in ReversedMessages)
 								{
 									@* sender *@
-									<div class="message-item-custom mb-3-custom">
+									<div class="@(message.IsDeleted ? "message-item-deleted-custom" : "message-item-custom") mb-3-custom">
 										<div class="message-header-custom">
 
 											<p>
@@ -95,6 +95,10 @@
 										</div>
 										@* content *@
 										<div class="message-content-custom">
+											@if (message.IsDeleted)
+											{
+												<span class="message-deleted-text-custom">已撤回</span>
+											}
 											@foreach (var msg in message.Messages)
 											{
 												@RenderMessage(msg)

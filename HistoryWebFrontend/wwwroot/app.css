@@ -278,6 +278,18 @@ h1:focus {
     margin-top: 0.5rem;
 }
 
+.message-item-deleted-custom {
+    padding: 1rem;
+    border: 1px solid #f5c6cb;
+    border-radius: 0.375rem;
+    background-color: #f8d7da;
+}
+
+.message-deleted-text-custom {
+    font-size: 0.75rem;
+    color: #721c24;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .col-left {
