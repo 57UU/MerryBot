@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using DataService;
+using CommonLib;
 
 namespace BotPlugin;
 
@@ -16,6 +17,7 @@ public class MessageRecorderPlugin : Plugin
     private HistoryRecorder historyRecorder=null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
+    private readonly RequestCaching _groupNameCheckCache = new(TimeSpan.FromHours(24));
 
     public MessageRecorderPlugin(PluginInterop interop) : base(interop)
     {
@@ -84,11 +86,17 @@ public class MessageRecorderPlugin : Plugin
             Logger.Error($"记录消息失败: {ex.Message}");
         }
     }
-
     private async Task CheckAndUpdateGroupNameAsync(long groupId)
     {
         try
         {
+            // 检查内存缓存，24小时内不重复检查同一个群
+            var cacheKey = $"group_name_check_{groupId}";
+            if (_groupNameCheckCache.TryGetCache<bool>(cacheKey, out _))
+            {
+                return;
+            }
+
             var existingEntry = historyRecorder.GetGroupNameById(groupId);
             var now = DateTime.Now;
 
@@ -111,6 +119,9 @@ public class MessageRecorderPlugin : Plugin
                     Logger.Debug($"更新群信息: 群 {groupId}, 名称 {groupInfo.GroupName}, 成员 {groupInfo.MemberCount}/{groupInfo.MaxMemberCount}");
                 }
             }
+
+            // 设置缓存，24小时内不再检查
+            _groupNameCheckCache.SetCache(cacheKey, true);
         }
         catch (Exception ex)
         {

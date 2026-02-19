@@ -1,3 +1,4 @@
+using CommonLib;
 using LiteDB;
 using NapcatClient;
 using System;
@@ -187,15 +188,29 @@ public class HistoryRecorder : IDisposable
     {
         return fileBedCollection.FindOne(x => x.Id == id);
     }
-    
+    private readonly RequestCaching requestCaching = new(TimeSpan.FromHours(24));
     public ImageEntry? GetImageByHash(string hash)
     {
-        return imageBedCollection.FindOne(x => x.Hash == hash);
+        var cacheKey = $"img_hash_{hash}";
+        if (requestCaching.TryGetCache<ImageEntry?>(cacheKey, out var cachedImage))
+        {
+            return cachedImage;
+        }
+        var image = imageBedCollection.FindOne(x => x.Hash == hash);
+        requestCaching.SetCache(cacheKey, image);
+        return image;
     }
-    
+
     public FileEntry? GetFileByHash(string hash)
     {
-        return fileBedCollection.FindOne(x => x.Hash == hash);
+        var cacheKey = $"file_hash_{hash}";
+        if (requestCaching.TryGetCache<FileEntry?>(cacheKey, out var cachedFile))
+        {
+            return cachedFile;
+        }
+        var file = fileBedCollection.FindOne(x => x.Hash == hash);
+        requestCaching.SetCache(cacheKey, file);
+        return file;
     }
     
     public bool RecordGroupEvent(GroupEvent groupEvent)

@@ -3,9 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NapcatClient;
+namespace CommonLib;
 
-internal class RequestCaching
+public class RequestCaching
 {
     private readonly MemoryCache _cache;
     private readonly TimeSpan _defaultExpiration;
