@@ -46,6 +46,12 @@ public class TextData : TypedMessage
         var other = (TextData)obj;
         return Text == other.Text;
     }
+
+    public override int GetHashCode()
+    {
+        return Text?.GetHashCode() ?? 0;
+    }
+
     public override string ToString()
     {
         return Text;
@@ -84,6 +90,12 @@ public class AtData : TypedMessage
         var other = (AtData)obj;
         return Qq == other.Qq;
     }
+
+    public override int GetHashCode()
+    {
+        return Qq?.GetHashCode() ?? 0;
+    }
+
     public override string ToString()
     {
         return $"@{Qq}";
@@ -122,6 +134,12 @@ public class ReplyData : TypedMessage
         var other = (ReplyData)obj;
         return Id == other.Id;
     }
+
+    public override int GetHashCode()
+    {
+        return Id?.GetHashCode() ?? 0;
+    }
+
     public override string ToString()
     {
         return $"reply {Id}";
@@ -176,6 +194,12 @@ public class FaceData : TypedMessage
         var other = (FaceData)obj;
         return Id == other.Id && ResultId == other.ResultId && ChainCount == other.ChainCount && object.Equals(Raw, other.Raw);
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Id, ResultId, ChainCount, Raw);
+    }
+
     public override string ToString()
     {
         return $"face {ToChinese()}";
@@ -233,6 +257,12 @@ public class MfaceData : TypedMessage
         var other = (MfaceData)obj;
         return EmojiId == other.EmojiId && EmojiPackageId == other.EmojiPackageId && Key == other.Key && Summary == other.Summary;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(EmojiId, EmojiPackageId, Key, Summary);
+    }
+
     public override string ToString()
     {
         return $"mface {EmojiId}";
@@ -269,6 +299,12 @@ public class DiceData : TypedMessage
         var other = (DiceData)obj;
         return Result == other.Result;
     }
+
+    public override int GetHashCode()
+    {
+        return Result?.GetHashCode() ?? 0;
+    }
+
     public override string ToString()
     {
         return $"dice {Result}";
@@ -305,6 +341,12 @@ public class RpsData : TypedMessage
         var other = (RpsData)obj;
         return Result == other.Result;
     }
+
+    public override int GetHashCode()
+    {
+        return Result?.GetHashCode() ?? 0;
+    }
+
     public override string ToString()
     {
         return $"rps {Result}";
@@ -347,6 +389,12 @@ public class PokeData : TypedMessage
         var other = (PokeData)obj;
         return Type == other.Type && Id == other.Id;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Type, Id);
+    }
+
     public override string ToString()
     {
         return $"poke {Type} {Id}";
@@ -432,6 +480,12 @@ public class ImageData : TypedMessage
         var other = (ImageData)obj;
         return File == other.File && Url == other.Url && Summary == other.Summary && SubType == other.SubType && FileSize == other.FileSize && Key == other.Key && EmojiId == other.EmojiId && EmojiPackageId == other.EmojiPackageId;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(File, Url, Summary, SubType, FileSize, Key, EmojiId, EmojiPackageId);
+    }
+
     public override string ToString()
     {
         return $"image {File}";
@@ -493,6 +547,12 @@ public class RecordData : TypedMessage
         var other = (RecordData)obj;
         return File == other.File && FileSize == other.FileSize && Path == other.Path;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(File, FileSize, Path);
+    }
+
     public override string ToString()
     {
         return $"record {File}";
@@ -554,6 +614,12 @@ public class VideoData : TypedMessage
         var other = (VideoData)obj;
         return File == other.File && Url == other.Url && FileSize == other.FileSize && Thumb == other.Thumb;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(File, Url, FileSize, Thumb);
+    }
+
     public override string ToString()
     {
         return $"video {File}";
@@ -615,6 +681,12 @@ public class FileData : TypedMessage
         var other = (FileData)obj;
         return File == other.File && Url == other.Url && FileId == other.FileId && FileSize == other.FileSize;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(File, Url, FileId, FileSize);
+    }
+
     public override string ToString()
     {
         return $"file {File}";
@@ -651,6 +723,12 @@ public class JsonData : TypedMessage
         var other = (JsonData)obj;
         return object.Equals(Data, other.Data);
     }
+
+    public override int GetHashCode()
+    {
+        return Data.GetHashCode();
+    }
+
     public override string ToString()
     {
         return $"json {Data}";
@@ -723,6 +801,12 @@ public class MusicData : TypedMessage
         var other = (MusicData)obj;
         return Type == other.Type && Id == other.Id && Url == other.Url && Image == other.Image && Singer == other.Singer && Title == other.Title && Content == other.Content;
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Type, Id, Url, Image, Singer, Title, Content);
+    }
+
     public override string ToString()
     {
         return $"music {Type} {Id}";
@@ -765,6 +849,12 @@ public class ForwardData : TypedMessage
         var other = (ForwardData)obj;
         return Id == other.Id && object.Equals(Content, other.Content);
     }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Id, Content);
+    }
+
     public override string ToString()
     {
         return $"forward {Id}";
