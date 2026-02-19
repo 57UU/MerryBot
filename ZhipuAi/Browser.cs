@@ -126,7 +126,8 @@ public partial class Browser : IDisposable
                     var rootElement = d.FindElement(By.Id("root"));
                     if (rootElement == null) return false;
                     var innerHTML = ((IJavaScriptExecutor)d).ExecuteScript("return arguments[0].innerHTML", rootElement);
-                    return innerHTML != null && !string.IsNullOrEmpty(innerHTML.ToString()) && innerHTML.ToString().Trim().Length > 0;
+                    var innerHtmlStr = innerHTML?.ToString();
+                    return innerHTML != null && !string.IsNullOrEmpty(innerHtmlStr) && innerHtmlStr.Trim().Length > 0;
                 });
             }
         });

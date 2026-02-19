@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace NapcatClient.EventType;
 
+#pragma warning disable CS8618
+
 /// <summary>
 /// 事件类型基类
 /// </summary>
@@ -464,3 +466,5 @@ public class GroupCardEvent : NoticeEvent
     [JsonPropertyName("card_old")]
     public string CardOld { get; set; }
 }
+
+#pragma warning restore CS8618

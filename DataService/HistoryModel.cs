@@ -6,6 +6,8 @@ using System.Text;
 
 namespace DataService;
 
+#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
+
 public class GroupMessage
 {
     [BsonId]
@@ -160,7 +162,7 @@ public class GroupEvent
         long? duration,
         string? extra,
         DateTime time,
-        ObjectId id = default)
+        ObjectId? id=default)
     {
         GroupId = groupId;
         EventType = eventType;
@@ -210,3 +212,5 @@ public class GroupNameEntry{
     public int MaxMemberCount { get; set; }
     public DateTime UpdatedTime { get; set; }
 }
+
+#pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。

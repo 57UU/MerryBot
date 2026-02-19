@@ -12,7 +12,9 @@ namespace BotPlugin;
 [PluginTag("MessageRecorder", "自动记录所有群聊消息到 LiteDB 数据库", priority: 1000, type: PluginType.Background)]
 public class MessageRecorderPlugin : Plugin
 {
-    private HistoryRecorder historyRecorder;
+#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    private HistoryRecorder historyRecorder=null;
+#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
 
     public MessageRecorderPlugin(PluginInterop interop) : base(interop)
@@ -253,7 +255,7 @@ public class MessageRecorderPlugin : Plugin
 
     private async Task ProcessVideoMessage(NapcatClient.MessageType.VideoData videoData)
     {
-        if (!string.IsNullOrEmpty(videoData.File))
+        if (!string.IsNullOrEmpty(videoData.Url))
         {
             try
             {

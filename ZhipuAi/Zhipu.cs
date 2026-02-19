@@ -20,7 +20,9 @@ namespace ZhipuClient;
 public class ZhipuAi : IDisposable
 {
     string token;
-    public ModelPreset ModelPreset {  get; private set; }
+#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    public ModelPreset ModelPreset { get; private set; } = null;
+#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
 
     public const string SYSTEM = "system";
     public const string USER = "user";

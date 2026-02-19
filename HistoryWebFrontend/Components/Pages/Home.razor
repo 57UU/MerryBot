@@ -32,7 +32,7 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		LoadGroupIds();
+		await LoadGroupIds();
 		await LoadStatistics();
 		LoadDbSizes();
 	}

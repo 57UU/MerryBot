@@ -19,7 +19,7 @@ class TypedJsonConverter : JsonConverter<TypedMessage>
                 throw new JsonException("Missing 'type' property");
             }
             
-            string type = typeElement.GetString();
+            string type = typeElement.GetString() ?? throw new JsonException("can't read 'type' as string");
             
             // 检查是否有 data 属性
             if (root.TryGetProperty("data", out var dataElement))

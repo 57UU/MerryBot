@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace NapcatClient.MessageType;
 
+#pragma warning disable CS8618
+
 /// <summary>
 /// 消息类型基类
 /// view https://napneko.github.io/onebot/sement for details
@@ -768,3 +770,5 @@ public class ForwardData : TypedMessage
         return $"forward {Id}";
     }
 }
+
+#pragma warning restore CS8618

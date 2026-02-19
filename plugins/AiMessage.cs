@@ -25,7 +25,9 @@ public class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
-    private AiMessageRecorder aiMessageStorage;
+#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    private AiMessageRecorder aiMessageStorage=null;
+#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     private readonly ImageInterpreter? imageInterpreter=null;
     private readonly ModelPreset imageInterpreterModel=ModelPreset.GLM_4_6V_Free;
     public AiMessage(PluginInterop interop) : base(interop)
@@ -60,7 +62,7 @@ public class AiMessage : Plugin
         
         // 创建自定义的 HistoryRecorder 委托，使用 AiMessageStorage
         ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) => {
-            await aiMessageStorage.RecordAiMessage(groupId, messageType, content);
+            await aiMessageStorage!.RecordAiMessage(groupId, messageType, content);
         };
         
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
