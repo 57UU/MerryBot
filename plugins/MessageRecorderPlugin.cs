@@ -53,6 +53,9 @@ public class MessageRecorderPlugin : Plugin
         //await DelayRandomTime();
         try
         {
+            // 检查并更新群名称信息
+            _ = CheckAndUpdateGroupNameAsync(groupId);
+
             // 克隆消息以避免修改原始数据
             var clonedMessage = CloneReceivedGroupMessage(data);
 
@@ -77,6 +80,39 @@ public class MessageRecorderPlugin : Plugin
         catch (Exception ex)
         {
             Logger.Error($"记录消息失败: {ex.Message}");
+        }
+    }
+
+    private async Task CheckAndUpdateGroupNameAsync(long groupId)
+    {
+        try
+        {
+            var existingEntry = historyRecorder.GetGroupNameById(groupId);
+            var now = DateTime.Now;
+
+            // 如果不存在，或者更新时间超过1天，则更新
+            if (existingEntry == null || (now - existingEntry.UpdatedTime).TotalDays >= 1)
+            {
+                var groupInfo = await Actions.GetGroupInfo(groupId.ToString());
+                if (groupInfo != null)
+                {
+                    var groupNameEntry = new GroupNameEntry
+                    {
+                        GroupId = groupId,
+                        Name = groupInfo.GroupName,
+                        MemberCount = groupInfo.MemberCount,
+                        MaxMemberCount = groupInfo.MaxMemberCount,
+                        UpdatedTime = now
+                    };
+
+                    historyRecorder.RecordOrUpdateGroupName(groupNameEntry);
+                    Logger.Debug($"更新群信息: 群 {groupId}, 名称 {groupInfo.GroupName}, 成员 {groupInfo.MemberCount}/{groupInfo.MaxMemberCount}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"检查并更新群名称失败: {ex.Message}");
         }
     }
 

@@ -310,4 +310,24 @@ public class ForwardMessage
     public List<GroupMessage> Messages { get; set; } = new();
 }
 
+public class GroupInfo{
+    [JsonPropertyName("group_all_shut")]
+    public int GroupAllShut { get; set; }
+
+    [JsonPropertyName("group_remark")]
+    public string GroupRemark { get; set; }
+
+    [JsonPropertyName("group_id")]
+    public long GroupId { get; set; }
+
+    [JsonPropertyName("group_name")]
+    public string GroupName { get; set; }
+
+    [JsonPropertyName("member_count")]
+    public int MemberCount { get; set; }
+
+    [JsonPropertyName("max_member_count")]
+    public int MaxMemberCount { get; set; }
+}
+
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。

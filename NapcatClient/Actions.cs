@@ -256,6 +256,16 @@ public class Actions
         string nickname=data.GetProperty("nickname").GetString()!;
         return (userId,nickname);
     }
+    public async Task<GroupInfo> GetGroupInfo(string groupId)
+    {
+        Act act = new(
+            action: "get_group_info",
+            parameters: new { group_id = groupId }
+            );
+        var result=await _SendAction(act, $"group_info_{groupId}");
+        var data = result.Data;
+        return BotUtils.Deserialize<GroupInfo>(data)!;
+    }
     public async Task<GroupMemberListData> GetGroupMemberListData(string groupId)
     {
         Act act = new(

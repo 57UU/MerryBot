@@ -200,3 +200,13 @@ public class ForwardMessageEntry
         Time = time;
     }
 }
+
+
+public class GroupNameEntry{
+    [BsonId]
+    public long GroupId { get; set; }
+    public string Name { get; set; }
+    public int MemberCount { get; set; }
+    public int MaxMemberCount { get; set; }
+    public DateTime UpdatedTime { get; set; }
+}

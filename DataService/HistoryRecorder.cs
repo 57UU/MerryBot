@@ -16,6 +16,7 @@ public class HistoryRecorder : IDisposable
     ILiteCollection<FileEntry> fileBedCollection;
     ILiteCollection<GroupEvent> eventsCollection;
     ILiteCollection<ForwardMessageEntry> forwardMessagesCollection;
+    ILiteCollection<GroupNameEntry> groupNameCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     
@@ -28,11 +29,13 @@ public class HistoryRecorder : IDisposable
         fileBedCollection = database.GetCollection<FileEntry>("files");
         eventsCollection = database.GetCollection<GroupEvent>("events");
         forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
+        groupNameCollection = database.GetCollection<GroupNameEntry>("group_names");
         
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
         
         messagesCollection.EnsureIndex(x => x.GroupId);
         messagesCollection.EnsureIndex(x => x.SenderId);
+        messagesCollection.EnsureIndex(x => x.MessageId);
         messagesCollection.EnsureIndex(x => x.Time);
         imageBedCollection.EnsureIndex(x => x.Hash);
         fileBedCollection.EnsureIndex(x => x.Hash);
@@ -40,6 +43,7 @@ public class HistoryRecorder : IDisposable
         eventsCollection.EnsureIndex(x => x.EventType);
         eventsCollection.EnsureIndex(x => x.Time);
         forwardMessagesCollection.EnsureIndex(x => x.SourceGroupId);
+        groupNameCollection.EnsureIndex(x => x.UpdatedTime);
     }
     
     private long GenerateId()
@@ -255,6 +259,39 @@ public class HistoryRecorder : IDisposable
         return forwardMessagesCollection.Exists(x => x.ForwardId == forwardId);
     }
     
+    public bool RecordOrUpdateGroupName(GroupNameEntry groupNameEntry)
+    {
+        var existingEntry = groupNameCollection.FindOne(x => x.GroupId == groupNameEntry.GroupId);
+        if (existingEntry != null)
+        {
+            existingEntry.Name = groupNameEntry.Name;
+            existingEntry.MemberCount = groupNameEntry.MemberCount;
+            existingEntry.MaxMemberCount = groupNameEntry.MaxMemberCount;
+            existingEntry.UpdatedTime = groupNameEntry.UpdatedTime;
+            return groupNameCollection.Update(existingEntry);
+        }
+        else
+        {
+            groupNameCollection.Insert(groupNameEntry);
+            return true;
+        }
+    }
+    
+    public GroupNameEntry? GetGroupNameById(long groupId)
+    {
+        return groupNameCollection.FindOne(x => x.GroupId == groupId);
+    }
+    
+    public List<GroupNameEntry> GetAllGroupNames()
+    {
+        return groupNameCollection.FindAll().ToList();
+    }
+    
+    public bool DeleteGroupName(long groupId)
+    {
+        return groupNameCollection.Delete(groupId);
+    }
+    
     public int GetImageCount()
     {
         return imageBedCollection.Count();
@@ -284,7 +321,7 @@ public class HistoryRecorder : IDisposable
     
     private static string FormatFileSize(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        string[] sizes = ["B", "KB", "MB", "GB", "TB"];
         double len = bytes;
         int order = 0;
         while (len >= 1024 && order < sizes.Length - 1)

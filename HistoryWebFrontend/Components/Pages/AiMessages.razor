@@ -23,7 +23,14 @@
                         @foreach (var groupId in GroupIds)
                         {
                             <li class="list-group-item-custom @(SelectedAiGroupId == groupId ? "active-custom" : "")" @onclick="async () => await SelectAiGroup(groupId)">
-                                @groupId
+                                @if (GroupNameCache.TryGetValue(groupId, out var groupNameEntry) && !string.IsNullOrEmpty(groupNameEntry.Name))
+                                {
+                                    <span>@groupNameEntry.Name (@groupId)</span>
+                                }
+                                else
+                                {
+                                    <span>@groupId</span>
+                                }
                             </li>
                         }
                     </ul>
@@ -107,6 +114,7 @@
 
 @code {
     private List<long> GroupIds { get; set; } = new List<long>();
+    private Dictionary<long, GroupNameEntry> GroupNameCache { get; set; } = new Dictionary<long, GroupNameEntry>();
     private long SelectedAiGroupId { get; set; } = 0;
     private List<(long Id, long GroupId, string MessageType, string Content, long Time)> AiMessageList { get; set; } = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
     private bool IsAiLoading { get; set; } = false;
@@ -133,11 +141,14 @@
         try
         {
             GroupIds = HistoryRecorder.GetAllGroupIds();
+            // 加载群名称缓存
+            var allGroupNames = HistoryRecorder.GetAllGroupNames();
+            GroupNameCache = allGroupNames.ToDictionary(g => g.GroupId, g => g);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading group IDs: {ex.Message}");
-            GroupIds = new List<long> { 123456, 789012 };
+            GroupIds = new List<long> { 0};
         }
     }
     
