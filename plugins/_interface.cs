@@ -73,7 +73,6 @@ public record PluginInterop(
     long AuthorizedUser,
     string[] CommandLineArguments,
     Func<Task> ConfigSaver,
-    ZhipuClient.HistoryRecorder HistoryRecorder,
     string PathPrefix,
     Action<Action<ReceivedGroupMessage>> OnRawGroupMessageReceivedRegister
     )

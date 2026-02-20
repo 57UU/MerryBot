@@ -236,7 +236,6 @@ internal class Logic
                         AuthorizedUser,
                         CommandLineArguments,
                         Config.Save,
-                        (groupId, messageType, content) => { }, // AiMessage 插件现在使用独立的 AiMessageStorage
                         botClient.PathPrefix,
                         f=>OnRawGroupMessageReceived+=f
                         );
