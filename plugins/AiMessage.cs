@@ -14,7 +14,6 @@ using System.Threading.Tasks;
 using System.Timers;
 using ZhipuClient;
 using DataService;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BotPlugin;
 
@@ -25,13 +24,12 @@ public class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
-#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
-    private AiMessageRecorder aiMessageStorage=null;
-#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    private AiMessageRecorder aiMessageStorage;
     private readonly ImageInterpreter? imageInterpreter=null;
     private readonly ModelPreset imageInterpreterModel=ModelPreset.GLM_4_6V_Free;
-    public AiMessage(PluginInterop interop) : base(interop)
+    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
+        this.aiMessageStorage = storageManager.AiMessageStorage;
         //display available model
         ModelPreset.DisplayAllModels();
         var model = ModelPreset.GetModelByName(
@@ -62,7 +60,7 @@ public class AiMessage : Plugin
         
         // 创建自定义的 HistoryRecorder 委托，使用 AiMessageStorage
         ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) => {
-            await aiMessageStorage!.RecordAiMessage(groupId, messageType, content);
+            await aiMessageStorage.RecordAiMessage(groupId, messageType, content);
         };
         
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
@@ -176,15 +174,6 @@ public class AiMessage : Plugin
     }
     public async override Task OnLoaded()
     {
-        // 从StorageManagerPlugin获取AiMessageStorage实例
-        var storageManager = Interop.FindPlugin<StorageManagerPlugin>();
-        if (storageManager == null)
-        {
-            throw new PluginNotUsableException("StorageManagerPlugin未找到，AiMessage需要StorageManagerPlugin初始化");
-        }
-        
-        aiMessageStorage = storageManager.AiMessageStorage;
-        Logger.Info("AiMessage 初始化完成，使用StorageManagerPlugin提供的AiMessageStorage");
         
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {

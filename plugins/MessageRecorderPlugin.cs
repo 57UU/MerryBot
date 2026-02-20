@@ -13,14 +13,13 @@ namespace BotPlugin;
 [PluginTag("MessageRecorder", "自动记录所有群聊消息到 LiteDB 数据库", priority: 1000, type: PluginType.Background)]
 public class MessageRecorderPlugin : Plugin
 {
-#pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
-    private HistoryRecorder historyRecorder=null;
-#pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
+    private HistoryRecorder historyRecorder;
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
     private readonly RequestCaching _groupNameCheckCache = new(TimeSpan.FromHours(24));
 
-    public MessageRecorderPlugin(PluginInterop interop) : base(interop)
+    public MessageRecorderPlugin(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
+        this.historyRecorder = storageManager.GroupHistoryRecorder;
         interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
     }
     private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
@@ -30,15 +29,7 @@ public class MessageRecorderPlugin : Plugin
 
     public override async Task OnLoaded()
     {
-        // 从StorageManagerPlugin获取HistoryRecorder实例
-        var storageManager = Interop.FindPlugin<StorageManagerPlugin>();
-        if (storageManager == null)
-        {
-            throw new PluginNotUsableException("StorageManagerPlugin未找到，MessageRecorderPlugin需要StorageManagerPlugin初始化");
-        }
 
-        historyRecorder = storageManager.GroupHistoryRecorder;
-        Logger.Info("MessageRecorderPlugin 初始化完成，使用StorageManagerPlugin提供的HistoryRecorder");
     }
     private readonly ThreadLocal<Random> _randomWrapper = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
     private Task DelayRandomTime()

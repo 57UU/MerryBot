@@ -11,14 +11,15 @@ namespace BotPlugin;
 [PluginTag("AiDialog", "使用 /dialog 来查看AI历史")]
 public class ViewDialog : Plugin
 {
-    public ViewDialog(PluginInterop interop) : base(interop)
+    public ViewDialog(PluginInterop interop, AiMessage aiMessage) : base(interop)
     {
+        this.aiMessage=aiMessage;
         Logger.Info("ViewDialog plugin start");
     }
-    AiMessage? aiMessage;
+    readonly AiMessage aiMessage;
     public async override Task OnLoaded()
     {
-        aiMessage=Interop.FindPlugin<AiMessage>()!;
+
     }
     const int lengthConstraint = 30;
     static string ConstraintLength(string? s)
@@ -32,11 +33,6 @@ public class ViewDialog : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        if (aiMessage == null)
-        {
-            Logger.Error("AiMessage plugin not found");
-            return;
-        }
         if (IsStartsWith(chain, "/dialog"))
         {
             var history=aiMessage.aiClient.GetDialogHistory(groupId);

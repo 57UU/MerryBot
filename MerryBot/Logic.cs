@@ -216,7 +216,8 @@ internal class Logic
         allPlugins.Sort((a, b) => {
             return a.attribute.Priority.CompareTo(b.attribute.Priority);
         });
-        Type[] constructorParameterTypes = [typeof(PluginInterop)];
+        PluginInitializer<Plugin> pluginInitializer = new();
+        Dictionary<Type, PluginInterop> pluginInteropMap = new();
         foreach (var (type,attribute) in allPlugins) {
             try
             {
@@ -239,53 +240,47 @@ internal class Logic
                         botClient.PathPrefix,
                         f=>OnRawGroupMessageReceived+=f
                         );
-
-                Plugin pluginInstance;
+                pluginInteropMap.Add(type, interop);
                 if (type == typeof(MainPlugin))
                 {
-                    mainPlugin = new MainPlugin(interop,this);
-                    pluginInstance= mainPlugin;
+                    pluginInitializer.AddDependency(type,new List<object> {this, interop});
                 }
                 else
                 {
-                    ConstructorInfo constructorInfo = type.GetConstructor(constructorParameterTypes)
-                        ?? throw new PluginNotUsableException("can not find specific constructor");
-                    // 创建构造函数参数数组
-                    object[] constructorParameters = [interop];
-                    // 使用构造函数创建对象
-                    pluginInstance = (Plugin)constructorInfo!.Invoke(constructorParameters);
+                    pluginInitializer.AddDependency(type,new List<object> {interop});
                 }
-                    
-                plugins.Add(
-                    new PluginInfo(
-                        pluginInstance,
-                        attribute,
-                        interop
-                        )
-                    );
 
-            }
-            catch (PluginNotUsableException ex)
-            {
-                logger.Warn($"the plugin {attribute.Name} can not be loaded, {ex.Message}");
-            }
-            catch (TargetInvocationException ex)
-            {
-                var inner = ex.InnerException;
-                if (inner is PluginNotUsableException)
-                {
-                    logger.Warn($"the plugin {attribute.Name} can not be loaded: {inner.Message}");
-                }
-                else
-                {
-                    logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
-                }
             }
             catch (Exception ex)
             {
                 logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
             }
         }
+        //initialize
+        try
+        {
+            pluginInitializer.InitializeAll();
+        }catch(Exception e)
+        {
+            logger.Fatal(e);
+        }
+        IEnumerable<(Plugin? pluginInstance, PluginTag attribute)> allPluginInstance 
+            = allPlugins.Select(p => (pluginInitializer.GetInstance(p.type), p.attribute));
+        foreach(var i in allPluginInstance)
+        {
+            if (i.pluginInstance != null)
+            {
+                plugins.Add(
+                    new PluginInfo(
+                    i.pluginInstance,
+                    i.attribute,
+                    pluginInteropMap[i.pluginInstance.GetType()]
+                    )
+                );
+            }
+
+        }
+        mainPlugin=pluginInitializer.GetInstance<MainPlugin>();
 
         //加载插件的OnLoaded函数
         foreach (var i in plugins)
