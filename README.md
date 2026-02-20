@@ -66,12 +66,13 @@ note: `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
 # 插件开发
 1. 一个插件应当放在`plugins`项目的一个文件中
 2. 应当继承于`Plugin`抽象类
-3. 至少存在一个构造函数，参数与抽象类构造函数相同`public Plugin(PluginConfig config)`
+3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数，可通过依赖注入接收其他插件实例
 4. 在类前面使用属性`PluginTag(string name,string descption,[bool isIgnore=false])`
 
 主程序会通过反射加载`plugins`项目下的所有插件类，因此需要满足上述条件。
 
 ## 示例
+插件通过构造函数接收 `PluginInterop` 和其他插件实例，主程序会自动解析依赖顺序（确保能够拓扑排序）并初始化：
 ```csharp
 [PluginTag("About","使用 /about 来查看关于")]
 public class About : Plugin
@@ -87,8 +88,11 @@ Merry Bot
 访问Github仓库 https://github.com/57UU/MerryBot 以获取更多信息
 """;
 
-    public About(PluginInterop interop) : base(interop)
+    private readonly StorageManagerPlugin _storage;
+
+    public About(PluginInterop interop, StorageManagerPlugin storage) : base(interop)
     {
+        _storage = storage;
         Logger.Info("about plugin start");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
@@ -100,6 +104,7 @@ Merry Bot
     } 
 }
 ```
+
 更多示例请查看`plugins`目录下的文件。
 
 ## 事件
@@ -153,7 +158,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 
 |API/属性|Description|
 |:---:|:---|
-|T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性 [示例](https://github.com/57UU/MerryBot/blob/master/plugins/ViewDialog.cs)|
+|T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性(其实笔者更推荐直接在构造函数中直接注入其他插件实例)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
