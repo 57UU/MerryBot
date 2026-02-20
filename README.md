@@ -198,13 +198,18 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### PluginTag类属性标签
 
-构造函数为`(string name, string description, bool isIgnore=false, int priority=0)`
+构造函数为`(string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
 
-分别对应插件名称，插件描述，是否忽略，插件优先级。
+分别对应插件名称，插件描述，是否忽略，插件优先级，插件类型。
 
 当`isIgnore==true`时，插件不会被加载
 
 插件的优先级，决定加载顺序。值越小，优先级越高。
+
+`PluginType` 可选值：
+- `Interactive` - 交互式插件（默认）
+- `Background` - 后台插件
+- `Admin` - 管理员插件
 
 ###  Note
 
