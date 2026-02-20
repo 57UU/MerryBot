@@ -12,7 +12,7 @@
     <PackageReference Include="OpenAI" Version="2.8.0" />
     <PackageReference Include="Selenium.Support" Version="4.40.0" />
     <PackageReference Include="Selenium.WebDriver" Version="4.40.0" />
-    <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="144.0.7559.13300" />
+    <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="145.0.7632.7700" />
     <PackageReference Include="SeleniumStealth.NET" Version="1.0.0" />
   </ItemGroup>
 
