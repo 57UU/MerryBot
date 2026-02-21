@@ -87,8 +87,8 @@ public class ZhipuAi : IDisposable
         // RegisterTool(weiboHot);
 
         var browserDef = new ToolDef();
-        browserDef.Function.Name = "view_web";
-        browserDef.Function.Description = "查看网页主要内容";
+        browserDef.Function.Name = "browse";
+        browserDef.Function.Description = "浏览网页";
         browserDef.Function.Parameters.AddRequired("url", new ParameterProperty() { Type = "string", Description = "需要访问的网址" });
         browserDef.Function.FunctionCall = async (parameters) =>
         {
@@ -185,13 +185,12 @@ public class ZhipuAi : IDisposable
     {
         var recorder= (ZhipuMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
         var mutex = EnsureMutexExists(id);
-        if (mutex.CurrentCount == 0)
+        if (!mutex.Wait(0))
         {
             yield return "上一个请求尚未完成";
             yield break;
         }
         bool done = false;
-        mutex.Wait();
         //if last message is too old, start a new conversation
         if (history.TryGetValue(id, out List<ZhipuMessage>? value))
         {
