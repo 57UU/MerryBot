@@ -434,7 +434,7 @@ public class AiMessage : Plugin
                         var description = await ImageInterpreterPool!.Interpret(imageUrl);
                         sb.AppendLine($"<image：{description}/>");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         sb.AppendLine($"<image/>");
                     }

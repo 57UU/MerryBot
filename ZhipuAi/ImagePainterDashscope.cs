@@ -37,11 +37,26 @@ public class ImagePainterDashscope
         var requestBody = new ImageGenerateRequest
         {
             Model = _modelPreset.model,
-            Input = new ImageGenerateInput { Prompt = prompt },
+            Input = new ImageGenerateInput
+            {
+                Messages = new List<MessageItem>
+                {
+                    new MessageItem
+                    {
+                        Role = "user",
+                        Content = new List<ContentItem>
+                        {
+                            new ContentItem { Text = prompt }
+                        }
+                    }
+                }
+            },
             Parameters = new ImageGenerateParameters
             {
                 Size = $"{width}*{height}",
-                NegativePrompt = negativePrompt ?? string.Empty
+                NegativePrompt = negativePrompt ?? string.Empty,
+                PromptExtend = true,
+                Watermark = false
             }
         };
 
@@ -61,7 +76,9 @@ public class ImagePainterDashscope
 
         if (responseObj?.Output?.Choices?.Count > 0)
         {
-            return responseObj.Output.Choices[0].Image 
+            var firstChoice = responseObj.Output.Choices[0];
+            var imageUrl = firstChoice.Message?.Content?.FirstOrDefault()?.Image;
+            return imageUrl 
                 ?? throw new InvalidOperationException("Image URL is null");
         }
 
@@ -88,8 +105,23 @@ public class ImageGenerateRequest
 
 public class ImageGenerateInput
 {
-    [JsonPropertyName("prompt")]
-    public string Prompt { get; set; } = string.Empty;
+    [JsonPropertyName("messages")]
+    public List<MessageItem> Messages { get; set; } = new();
+}
+
+public class MessageItem
+{
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = "user";
+
+    [JsonPropertyName("content")]
+    public List<ContentItem> Content { get; set; } = new();
+}
+
+public class ContentItem
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
 }
 
 public class ImageGenerateParameters
@@ -99,6 +131,12 @@ public class ImageGenerateParameters
 
     [JsonPropertyName("negative_prompt")]
     public string NegativePrompt { get; set; } = string.Empty;
+
+    [JsonPropertyName("prompt_extend")]
+    public bool PromptExtend { get; set; } = true;
+
+    [JsonPropertyName("watermark")]
+    public bool Watermark { get; set; } = false;
 }
 
 public class ImageGenerateResponse
@@ -120,6 +158,24 @@ public class ImageGenerateOutput
 }
 
 public class ImageGenerateChoice
+{
+    [JsonPropertyName("message")]
+    public MessageContent? Message { get; set; }
+
+    [JsonPropertyName("finish_reason")]
+    public string? FinishReason { get; set; }
+}
+
+public class MessageContent
+{
+    [JsonPropertyName("content")]
+    public List<ImageContent>? Content { get; set; }
+
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
+}
+
+public class ImageContent
 {
     [JsonPropertyName("image")]
     public string? Image { get; set; }

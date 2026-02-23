@@ -68,7 +68,7 @@ public record PluginInterop(
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
     BotClient BotClient,
-    Detail Variables,
+    Dictionary<string, JsonElement> Variables,
     Action<int> Shutdown,
     long AuthorizedUser,
     string[] CommandLineArguments,
@@ -99,8 +99,8 @@ public record PluginInterop(
     /// <returns></returns>
     internal T GetVariable<T>(string key,T defaultValue)
     {
-        Variables.TryGetValue(key, out var value);
-        if (value is null)
+        
+        if (!Variables.TryGetValue(key, out var value))
         {
             return defaultValue;
         }
@@ -109,8 +109,7 @@ public record PluginInterop(
     }
     internal JsonElement? GetJsonElement(string key)
     {
-        Variables.TryGetValue(key, out var value);
-        if (value is null)
+        if (!Variables.TryGetValue(key, out var value))
         {
             return null;
         }
@@ -118,8 +117,7 @@ public record PluginInterop(
     }
     internal Nullable<long> GetLongVariable(string key)
     {
-        Variables.TryGetValue(key, out var value);
-        if (value is null)
+        if (!Variables.TryGetValue(key, out var value))
         {
             return null;
         }
@@ -134,8 +132,7 @@ public record PluginInterop(
     /// <returns></returns>
     internal T? GetVariable<T>(string key) where T : class
     {
-        Variables.TryGetValue(key, out var value);
-        if (value is null)
+        if (!Variables.TryGetValue(key, out var value))
         {
             return null;
         }
