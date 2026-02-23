@@ -134,6 +134,7 @@ public class AiMessage : Plugin
         }
         // turn to another bot
         //AddBotForHelp();
+        AddImagePainter();
 
     }
 
