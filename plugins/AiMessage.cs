@@ -215,9 +215,8 @@ public class AiMessage : Plugin
         try
         {
             string url = await imagePainter!.DrawImage(prompt);
-            byte[] image = await Actions.HttpGetBinary(url);
             await Actions.SendGroupMessage(groupId,
-                [new ImageData { File = Convert.ToBase64String(image) }]
+                [new ImageData { File = url,Summary = prompt }]
                 );
         }
         catch (Exception ex)
