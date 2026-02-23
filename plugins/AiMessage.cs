@@ -25,8 +25,8 @@ public class AiMessage : Plugin
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
     private AiMessageRecorder aiMessageStorage;
-    private readonly ImageInterpreter? imageInterpreter=null;
-    private readonly ModelPreset imageInterpreterModel=ModelPreset.GLM_4_6V_Free;
+    private readonly ImageInterpreterPool? ImageInterpreterPool;
+    private readonly ModelPreset[] imageInterpreterModels=[ModelPreset.GLM_4_6V_Free,ModelPreset.Glm_4_V_Free];
     public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
         this.aiMessageStorage = storageManager.AiMessageStorage;
@@ -47,13 +47,23 @@ public class AiMessage : Plugin
             ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
         //image interpreter
         {
-            var token_key_image=imageInterpreterModel.ApiTokenDictKey;
-            var token_image=interop.GetVariable<string>(token_key_image);
-            if (token_image == null)
+            var imageInterpreters = new List<ImageInterpreter>();
+            foreach (var model_image in imageInterpreterModels)
             {
-                Logger.Warn($"请在配置文件variable中设置{token_key_image}");
-            }else{
-                imageInterpreter = new ImageInterpreter(imageInterpreterModel, token_image);
+                var token_key_image = model_image.ApiTokenDictKey;
+                var token_image = interop.GetVariable<string>(token_key_image);
+                if (token_image == null)
+                {
+                    Logger.Warn($"请在配置文件variable中设置{token_key_image}");
+                }
+                else
+                {
+                    imageInterpreters.Add(new ImageInterpreter(model_image, token_image));
+                }
+            }
+            if (imageInterpreters.Count > 0)
+            {
+                ImageInterpreterPool = new ImageInterpreterPool(imageInterpreters);
             }
         }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
@@ -361,12 +371,18 @@ public class AiMessage : Plugin
             
             }else if(item is ImageData imageData)
             {
-                if((depth==0 || interpretImage)&&imageInterpreter!=null && imageData.Url!=null){
+                if((depth==0 || interpretImage)&&ImageInterpreterPool!=null && imageData.Url!=null){
                     //解析图片内容
                     var imageUrl = imageData.Url;
-                    var description = await imageInterpreter.Interpret(imageUrl);
-                    sb.AppendLine($"<image：{description}/>");
-                    
+                    try
+                    {
+                        var description = await ImageInterpreterPool!.Interpret(imageUrl);
+                        sb.AppendLine($"<image：{description}/>");
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"<image/>");
+                    }
                 }else{
                     sb.AppendLine("<image/>");
                 }
@@ -405,7 +421,7 @@ public class AiMessage : Plugin
                 _=SetLlmModel(text, groupId, messageId);
             }else if (text.StartsWith("/getllm"))
             {
-                _= Actions.ReplyGroupMessage(groupId, messageId,$"current llm: {aiClient.ModelPreset.model}");
+                _= Actions.ReplyGroupMessage(groupId, messageId,$"current llm: {aiClient.ModelPreset.model}\n{ModelPreset.AllModels()}");
             }
             return;
         }
