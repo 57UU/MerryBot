@@ -17,16 +17,16 @@ using DataService;
 
 namespace BotPlugin;
 
-[PluginTag("AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型",isIgnore:false)]
+[PluginTag("AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型", isIgnore: false)]
 public class AiMessage : Plugin
 {
     bool useFunctionCallToReply;
-    readonly RateLimiter rateLimiter = new RateLimiter(limitCount:3,limitTime:20);
+    readonly RateLimiter rateLimiter = new RateLimiter(limitCount: 3, limitTime: 20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
     private AiMessageRecorder aiMessageStorage;
     private readonly ImageInterpreterPool? ImageInterpreterPool;
-    private readonly ModelPreset[] imageInterpreterModels=[ModelPreset.GLM_4_6V_Free,ModelPreset.Glm_4_V_Free];
+    private readonly ModelPreset[] imageInterpreterModels = [ModelPreset.GLM_4_6V_Free, ModelPreset.Glm_4_V_Free];
     public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
         this.aiMessageStorage = storageManager.AiMessageStorage;
@@ -40,10 +40,10 @@ public class AiMessage : Plugin
             Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
             model = ModelPreset.Glm_4_5_Free;
         }
-        useFunctionCallToReply=interop.GetJsonElement("use_function_call_reply")?.GetBoolean()??false;
+        useFunctionCallToReply = interop.GetJsonElement("use_function_call_reply")?.GetBoolean() ?? false;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
-        var token_key= model.ApiTokenDictKey;
-        var token = interop.GetVariable<string>(token_key) 
+        var token_key = model.ApiTokenDictKey;
+        var token = interop.GetVariable<string>(token_key)
             ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
         //image interpreter
         {
@@ -67,12 +67,13 @@ public class AiMessage : Plugin
             }
         }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
-        
+
         // 创建自定义的 HistoryRecorder 委托，使用 AiMessageStorage
-        ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) => {
+        ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) =>
+        {
             await aiMessageStorage.RecordAiMessage(groupId, messageType, content);
         };
-        
+
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
         aiClient.Logger = Logger;
         //add voice tool
@@ -82,7 +83,7 @@ public class AiMessage : Plugin
         voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
         {
-            
+
             try
             {
                 rateLimiter.Increase(parameters.SpecialTag);
@@ -92,7 +93,8 @@ public class AiMessage : Plugin
                 }
                 string text = parameters["text"].GetString()!;
                 await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
-            }catch(Exception e)
+            }
+            catch (Exception e)
             {
                 return $"发送失败:{e.Message}";
             }
@@ -134,12 +136,12 @@ public class AiMessage : Plugin
         //AddBotForHelp();
 
     }
-    
+
     private void AddBotForHelp()
     {
         try
         {
-            var anotherBot = Interop.GetJsonElement("bot-help") 
+            var anotherBot = Interop.GetJsonElement("bot-help")
                 ?? throw new Exception("please specific bot-help in variables");
             long qq = anotherBot.GetInt64();
             var solver = new ToolDef();
@@ -149,7 +151,7 @@ public class AiMessage : Plugin
             solver.Function.FunctionCall = async (parameters) =>
             {
                 //verify bot in group
-                var groupList = await Actions.GetGroupMemberData(parameters.SpecialTag.ToString(),qq.ToString());
+                var groupList = await Actions.GetGroupMemberData(parameters.SpecialTag.ToString(), qq.ToString());
                 if (groupList == null)
                 {
                     return "该工具无法使用，请不要再使用本工具";
@@ -172,8 +174,9 @@ public class AiMessage : Plugin
             };
             aiClient.RegisterTool(solver);
             //拦截bot对自己发送的消息
-            Interop.Interceptors.Add((data) => {
-                return data.sender.user_id==qq;
+            Interop.Interceptors.Add((data) =>
+            {
+                return data.sender.user_id == qq;
             });
 
         }
@@ -182,9 +185,49 @@ public class AiMessage : Plugin
             Logger.Warn($"load bot help failed:{e.Message}");
         }
     }
+    private ImagePainterDashscope? imagePainter;
+    private void AddImagePainter()
+    {
+        var model = DashscopeModelPreset.QwenImageMax;
+        var token_key = model.ApiTokenDictKey;
+        var token = Interop.GetVariable<string>(token_key);
+        if (token == null)
+        {
+            Logger.Warn($"请在配置文件variable中设置{token_key}");
+            return;
+        }
+        imagePainter = new ImagePainterDashscope(model, token);
+        var imagePainterTool = new ToolDef();
+        imagePainterTool.Function.Name = "draw_image";
+        imagePainterTool.Function.Description = "绘制图片";
+        imagePainterTool.Function.Parameters.AddRequired("prompt", new ParameterProperty() { Type = "string", Description = "要绘制的图片描述" });
+        imagePainterTool.Function.FunctionCall = async (parameters) =>
+        {
+            string prompt = parameters["prompt"].GetString()!;
+            await DrawImageAndSend(prompt, parameters.SpecialTag);
+            return "正在绘制中...";
+        };
+        aiClient.RegisterTool(imagePainterTool);
+    }
+    private async Task DrawImageAndSend(string prompt, long groupId)
+    {
+        try
+        {
+            string url = await imagePainter!.DrawImage(prompt);
+            byte[] image = await Actions.HttpGetBinary(url);
+            await Actions.SendGroupMessage(groupId,
+                [new ImageData { File = Convert.ToBase64String(image) }]
+                );
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"图片生成异常: {ex.Message}");
+            await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
+        }
+    }
     public async override Task OnLoaded()
     {
-        
+
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var terminal = new Terminal();
@@ -194,11 +237,12 @@ public class AiMessage : Plugin
             shell.Function.Name = "shell";
             shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
-            shell.Function.FunctionCall = async (parameters) => {
-                var result= await terminal.RunCommandAsync(
+            shell.Function.FunctionCall = async (parameters) =>
+            {
+                var result = await terminal.RunCommandAsync(
                     parameters["command"].GetString()!,
-                    timeoutMs: timeout*1000+500,
-                    useHardTimeout:true
+                    timeoutMs: timeout * 1000 + 500,
+                    useHardTimeout: true
                     );
                 return PluginUtils.ConstraintLength(result, 1500);
             };
@@ -213,8 +257,8 @@ public class AiMessage : Plugin
     internal ZhipuAi aiClient;
     static bool IsContainsNew(string message)
     {
-        var l=message.Split(" ");
-        foreach(var item in l)
+        var l = message.Split(" ");
+        foreach (var item in l)
         {
             if (item == "#新对话")
             {
@@ -252,7 +296,7 @@ public class AiMessage : Plugin
         if (isTargeted)
         {
             _ = PreprocessMessage(messages, groupId, nickname, data);
-        }   
+        }
     }
     async Task SetLlmModel(string text, long groupId, long messageId)
     {
@@ -261,12 +305,14 @@ public class AiMessage : Plugin
         {
             var tag = textList[1];
             var model = ModelPreset.GetModelByName(tag);
-            if (model != null) {
+            if (model != null)
+            {
                 //access token
                 string? token = Interop.GetVariable<string>(model.ApiTokenDictKey);
-                if (token != null) {
+                if (token != null)
+                {
                     //valid
-                    aiClient.SetModelPreset(model,token);
+                    aiClient.SetModelPreset(model, token);
                     Interop.SetVarible(LLM_KEY, tag);
                     await Interop.SaveConfig();
                     _ = Actions.ReplyGroupMessage(groupId, messageId, $"set model: {tag}");
@@ -285,44 +331,48 @@ public class AiMessage : Plugin
         {
             _ = Actions.ReplyGroupMessage(groupId, messageId, $"/setllm [model-tag]\n{ModelPreset.AllModels()}");
         }
-        
+
     }
-    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive=false, int depth=0, bool interpretImage=false)
+    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, bool interpretImage = false)
     {
         StringBuilder sb = new();
-        string? referenceMessage=null;
+        string? referenceMessage = null;
         foreach (var item in chain)
         {
             if (item is TextData textData)
             {
                 sb.Append(textData.Text.Trim());
-            } else if (item is AtData atData)
+            }
+            else if (item is AtData atData)
             {
                 string qq = atData.Qq;
                 var detail = await Actions.GetGroupMemberData(groupId.ToString(), qq);
-                if (detail != null) {
+                if (detail != null)
+                {
                     sb.Append($" @{detail.Nickname} ");
                 }
                 else
                 {
                     sb.Append($" @unknown ");
                 }
-                
-            }else if (item is ReplyData replyData && recursive)
+
+            }
+            else if (item is ReplyData replyData && recursive)
             {
                 string referMessageId = replyData.Id;
-                var referMessage=await Actions.GetMessageById(referMessageId);
+                var referMessage = await Actions.GetMessageById(referMessageId);
                 if (referMessage != null)
                 {
-                    var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth+1, interpretImage:true);
+                    var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1, interpretImage: true);
                     referenceMessage = $"\n引用内容：\n{extractedMessage}";
                 }
-            }else if (item is JsonData jsonData)
+            }
+            else if (item is JsonData jsonData)
             {
                 JsonElement json = jsonData.Data;
-                if(json.TryGetProperty("meta",out var meta))
+                if (json.TryGetProperty("meta", out var meta))
                 {
-                    if(meta.TryGetProperty("news",out var news))
+                    if (meta.TryGetProperty("news", out var news))
                     {
                         try
                         {
@@ -331,7 +381,8 @@ public class AiMessage : Plugin
                                 $"URL:'{news.GetProperty("jumpUrl").ToString()}'"
                                 );
                         }
-                        catch (Exception) {
+                        catch (Exception)
+                        {
                             sb.AppendLine(news.ToString());
                         }
                     }
@@ -344,18 +395,19 @@ public class AiMessage : Plugin
                 {
                     sb.AppendLine(json.ToString());
                 }
-            }else if(item is ForwardData forwardData)
+            }
+            else if (item is ForwardData forwardData)
             {
                 //转发消息
-                string msgId= forwardData.Id;
-                var referMessage=await Actions.GetForwardMessageById(msgId);
+                string msgId = forwardData.Id;
+                var referMessage = await Actions.GetForwardMessageById(msgId);
                 if (referMessage != null)
                 {
                     StringBuilder forwardString = new();
                     forwardString.AppendLine("---转发消息---");
                     foreach (var msg in referMessage.Messages)
                     {
-                        var extractedMessage = await ExtractMessage(msg.Message, groupId, depth<3, depth+1);
+                        var extractedMessage = await ExtractMessage(msg.Message, groupId, depth < 3, depth + 1);
                         forwardString.AppendLine($"{msg.SenderInfo.nickname}:{extractedMessage}");
                     }
                     forwardString.AppendLine("------");
@@ -368,10 +420,12 @@ public class AiMessage : Plugin
                     sb.AppendLine("<转发消息/>");
                 }
 
-            
-            }else if(item is ImageData imageData)
+
+            }
+            else if (item is ImageData imageData)
             {
-                if((depth==0 || interpretImage)&&ImageInterpreterPool!=null && imageData.Url!=null){
+                if ((depth == 0 || interpretImage) && ImageInterpreterPool != null && imageData.Url != null)
+                {
                     //解析图片内容
                     var imageUrl = imageData.Url;
                     try
@@ -383,24 +437,30 @@ public class AiMessage : Plugin
                     {
                         sb.AppendLine($"<image/>");
                     }
-                }else{
+                }
+                else
+                {
                     sb.AppendLine("<image/>");
                 }
-                
-            }else if(item is FaceData faceData){
-                if(int.TryParse(faceData.Id,out int faceCode)){
+
+            }
+            else if (item is FaceData faceData)
+            {
+                if (int.TryParse(faceData.Id, out int faceCode))
+                {
                     string faceName = QqFace.GetFace(faceCode);
                     sb.AppendLine($" <表情:{faceName}/>");
                 }
             }
         }
-        if (referenceMessage != null) { 
+        if (referenceMessage != null)
+        {
             sb.AppendLine(referenceMessage);
         }
         var text = sb.ToString();
         return text;
     }
-    async Task PreprocessMessage(IEnumerable<TypedMessage> chain,long groupId,string nickname,ReceivedGroupMessage data)
+    async Task PreprocessMessage(IEnumerable<TypedMessage> chain, long groupId, string nickname, ReceivedGroupMessage data)
     {
         var messageId = data.message_id;
         //concat text
@@ -409,19 +469,21 @@ public class AiMessage : Plugin
         {
             text = await ExtractMessage(chain, groupId, true);
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             Logger.Error($"extract failed:{ex.Message}\n{ex.StackTrace}");
             return;
         }
-        
+
         if (text.StartsWith('/'))
         {
             if (text.StartsWith("/setllm"))
             {
-                _=SetLlmModel(text, groupId, messageId);
-            }else if (text.StartsWith("/getllm"))
+                _ = SetLlmModel(text, groupId, messageId);
+            }
+            else if (text.StartsWith("/getllm"))
             {
-                _= Actions.ReplyGroupMessage(groupId, messageId,$"current llm: {aiClient.ModelPreset.model}\n{ModelPreset.AllModels()}");
+                _ = Actions.ReplyGroupMessage(groupId, messageId, $"current llm: {aiClient.ModelPreset.model}\n{ModelPreset.AllModels()}");
             }
             return;
         }
@@ -437,9 +499,9 @@ public class AiMessage : Plugin
             _ = HandleMessage(groupId, text, messageId, nickname);
         }
     }
-    async Task HandleMessage(long groupId,string message,long messageId,string sender)
+    async Task HandleMessage(long groupId, string message, long messageId, string sender)
     {
-        await foreach(var result in  aiClient.Ask(message, groupId, sender,groupId))
+        await foreach (var result in aiClient.Ask(message, groupId, sender, groupId))
         {
             if (!useFunctionCallToReply && !string.IsNullOrWhiteSpace(result))
             {
@@ -450,10 +512,10 @@ public class AiMessage : Plugin
     public override void Dispose()
     {
         aiClient.Dispose();
-        
+
         // AiMessageStorage 由 StorageManagerPlugin 负责释放
-        
+
         GC.SuppressFinalize(this);
     }
-    
+
 }

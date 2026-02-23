@@ -21,8 +21,18 @@ public class ModelPreset
     private static ImmutableDictionary<string, object> Empty = ImmutableDictionary<string, object>.Empty;
 
     private static readonly Dictionary<string, ModelPreset> modelsByName = new();
+    /// <summary>
+    /// OpenAI api format
+    /// </summary>
     public string CompletionUrl => $"{url}/chat/completions";
-    public ModelPreset(string model, string url, string provider, ImmutableDictionary<string, object>? extraBody = null, bool enableSearch=true,bool supportImageInput=false)
+    public ModelPreset(
+        string model,
+        string url, 
+        string provider,
+        ImmutableDictionary<string, object>? extraBody = null,
+        bool enableSearch=true,
+        bool supportImageInput=false
+        )
     {
         this.model = model;
         this.url = url;
@@ -113,5 +123,20 @@ public class ModelPreset
         "mimo-v2-flash",
         "https://api.xiaomimimo.com/v1",
         "xiaomi"
+        );
+}
+
+public record DashscopeModelPreset(
+    string model,
+    string url,
+    string provider
+    )
+{
+    public string ApiTokenDictKey => $"ai-token-{provider}";
+    public string ImageGenerateUrl => $"{url}/services/aigc/multimodal-generation/generation";
+    public static DashscopeModelPreset QwenImageMax = new(
+        "qwen-image-max",
+        "https://dashscope.aliyuncs.com/api/v1",
+        "ali"
         );
 }
