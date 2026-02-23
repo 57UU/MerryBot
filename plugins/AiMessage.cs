@@ -205,7 +205,7 @@ public class AiMessage : Plugin
         imagePainterTool.Function.FunctionCall = async (parameters) =>
         {
             string prompt = parameters["prompt"].GetString()!;
-            await DrawImageAndSend(prompt, parameters.SpecialTag);
+            _ =  DrawImageAndSend(prompt, parameters.SpecialTag);
             return "正在绘制中...";
         };
         aiClient.RegisterTool(imagePainterTool);
