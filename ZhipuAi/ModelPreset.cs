@@ -95,6 +95,7 @@ public class ModelPreset
     public static readonly ModelPreset GLM_4_6V_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
     public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
     public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7",extraBody:Empty);
+    public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.With("glm-4.7-flash");
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
             "deepseek-chat",
             "https://api.deepseek.com",
