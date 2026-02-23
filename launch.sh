@@ -7,6 +7,9 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # 主循环
 while true; do
+    # 记录编译开始时间
+    start_time=$(date +%s)
+    
     # 先发布 HistoryWebFrontend 以生成 wwwroot 资源
     echo "开始发布 HistoryWebFrontend..."
     if ! dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
@@ -48,6 +51,15 @@ while true; do
         echo "复制 wwwroot 失败，退出脚本"
         exit 1
     fi
+    
+    # 计算编译总时间
+    end_time=$(date +%s)
+    total_time=$((end_time - start_time))
+    minutes=$((total_time / 60))
+    seconds=$((total_time % 60))
+    echo "========================================"
+    echo "编译完成！总耗时: ${minutes}分${seconds}秒"
+    echo "========================================"
 
     # 运行应用程序
     echo "启动应用程序..."
