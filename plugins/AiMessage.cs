@@ -325,12 +325,12 @@ public class AiMessage : Plugin
             }
             else
             {
-                _ = Actions.ReplyGroupMessage(groupId, messageId, $"invalid model tag\n{ModelPreset.AllModels()}");
+                _ = Actions.ReplyGroupMessage(groupId, messageId, $"invalid model tag\n{string.Join(",", ModelPreset.AllModelsDict.Keys)}");
             }
         }
         else
         {
-            _ = Actions.ReplyGroupMessage(groupId, messageId, $"/setllm [model-tag]\n{ModelPreset.AllModels()}");
+            _ = Actions.ReplyGroupMessage(groupId, messageId, $"/setllm [model-tag]\n{string.Join(",", ModelPreset.AllModelsDict.Keys)}");
         }
 
     }

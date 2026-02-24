@@ -4,6 +4,7 @@ using CommonLib;
 using NapcatClient;
 using NapcatClient.Action;
 using NapcatClient.MessageType;
+using System.Reactive;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -130,16 +131,22 @@ public record PluginInterop(
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
     /// <returns></returns>
-    internal T? GetVariable<T>(string key) where T : class
+    internal T? GetVariable<T>(string key) 
     {
         if (!Variables.TryGetValue(key, out var value))
         {
-            return null;
+            return default;
         }
         var realValue = (JsonElement)value;
         return realValue.Deserialize<T>();
     }
-    internal void SetVarible(string key,dynamic value)
+    internal void SetVarible<T>(string key,T value) 
+    {
+        JsonElement node=JsonSerializer.SerializeToElement<T>(value);
+        SetVarible(key,node);
+    }
+    
+    internal void SetVarible(string key,JsonElement value)
     {
         Variables[key] = value;
     }

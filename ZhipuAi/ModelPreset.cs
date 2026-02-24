@@ -92,6 +92,7 @@ public class ModelPreset
         sb.AppendLine();
         return sb.ToString();
     }
+    public static ImmutableDictionary<string, ModelPreset> AllModelsDict => modelsByName.ToImmutableDictionary();
     public string ApiTokenDictKey => $"ai-token-{provider}";
 
 
