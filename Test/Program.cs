@@ -12,14 +12,14 @@ public static class Program
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
 
-        await TestImagePainterDashscope();
+        await TestZhipuAi();
     }
 
     public static async Task TestZhipuAi()
     {
         var config = Config.Instance;
 
-        var model = ModelPreset.XiaomiMimoV2;
+        var model = ModelPreset.Glm_4_7_Flash_Free;
         var token_key = model.ApiTokenDictKey;
         string token = ((JsonElement)config.Variables[token_key]).GetString()!;
         string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString()!;

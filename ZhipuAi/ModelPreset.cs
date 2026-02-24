@@ -100,7 +100,7 @@ public class ModelPreset
             model: "GLM-4.5-Flash",
             url: "https://open.bigmodel.cn/api/paas/v4",
             provider: "zhipu",
-            extraBody: Empty.Add("thinking","enabled")
+            extraBody: Empty.Add("thinking",Empty.Add("type", "enabled"))
         );
     public static readonly ModelPreset GLM_4_6V_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
     public static readonly ModelPreset Glm_4_V_Free = GLM_4_6V_Free.With("GLM-4V-Flash");
