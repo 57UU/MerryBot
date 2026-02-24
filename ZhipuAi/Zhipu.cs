@@ -42,7 +42,7 @@ public class ZhipuAi : IDisposable
     readonly Browser browser = new();
     public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
     public int MaxWebContentLength { get; set; } = 5000;
-    public int SlidingWindowContext { get; set; } = 100;
+    public int SlidingWindowContext { get; set; } = 30;
     public HistoryRecorder? HistoryRecorder { get; set; } = null;
     public ZhipuAi(string token, string prompt, ModelPreset modelPreset,HistoryRecorder? historyRecorder=null)
     {

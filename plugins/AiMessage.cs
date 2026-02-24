@@ -233,7 +233,7 @@ public class AiMessage : Plugin
             var terminal = new Terminal();
             //add Linux shell
             var shell = new ToolDef();
-            int timeout = 5;//second
+            int timeout = 10;//second
             shell.Function.Name = "shell";
             shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
@@ -242,7 +242,8 @@ public class AiMessage : Plugin
                 var result = await terminal.RunCommandAsync(
                     parameters["command"].GetString()!,
                     timeoutMs: timeout * 1000 + 500,
-                    useHardTimeout: true
+                    useHardTimeout: true,
+                    waitMutex: true
                     );
                 return PluginUtils.ConstraintLength(result, 1500);
             };

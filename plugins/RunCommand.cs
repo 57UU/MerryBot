@@ -176,8 +176,11 @@ public partial class Terminal : IDisposable
     /// </summary>
     /// <param name="command">要执行的命令</param>
     /// <param name="timeoutMs">超时毫秒数</param>
+    /// <param name="useSoftTimeout">是否使用软超时</param>
+    /// <param name="useHardTimeout">是否使用硬超时</param>
+    /// <param name="waitMutex">是否等待互斥锁</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command, int timeoutMs = 2000, bool useSoftTimeout=false,bool useHardTimeout=false)
+    public async Task<string> RunCommandAsync(string command, int timeoutMs = 2000, bool useSoftTimeout=false,bool useHardTimeout=false,bool waitMutex=false)
     {
         if (!isGotoHome)
         {
@@ -185,11 +188,13 @@ public partial class Terminal : IDisposable
             await _writer.FlushAsync();
             isGotoHome = true;
         }
-        if (mutex.CurrentCount < 1)
-        {
-            return "请等待上一个命令执行";
+        if(waitMutex){
+            await mutex.WaitAsync();
+        }else{
+            if(!mutex.Wait(0)){
+                return "请等待上一个命令执行";
+            }
         }
-        await mutex.WaitAsync();
 
         // 用 Linux 的 timeout 包装
         float sec = timeoutMs / 1000.0f;

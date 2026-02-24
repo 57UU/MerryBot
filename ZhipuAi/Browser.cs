@@ -98,10 +98,13 @@ public partial class Browser : IDisposable
 
         LoadScripts().Wait();
     }
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
     private async Task<ChromeDriver> LoadBrowser()
     {
         resourceCountdown.Start();
         var driver = await Task.Run(() => Stealth.Instantiate(options, stealthInstanceSettings));
+        driver.Manage().Timeouts().PageLoad = Timeout;
+        driver.Manage().Timeouts().AsynchronousJavaScript = Timeout;
         driverPack = new(driver);
         return driver;
     }
