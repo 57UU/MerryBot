@@ -103,8 +103,9 @@ public class ModelPreset
             provider: "zhipu",
             extraBody: Empty.Add("thinking",Empty.Add("type", "enabled"))
         );
-    public static readonly ModelPreset GLM_4_6V_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
-    public static readonly ModelPreset Glm_4_V_Free = GLM_4_6V_Free.With("GLM-4V-Flash");
+    public static readonly ModelPreset GLM_4_6V_Flash_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
+    public static readonly ModelPreset Glm_4V_Flash_Free = GLM_4_6V_Flash_Free.With("GLM-4V-Flash");
+    public static readonly ModelPreset Glm_4_1V_Flash_Free = Glm_4V_Flash_Free.With("GLM-4.1V-Thinking-Flash");
     public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
     public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7",extraBody:Empty);
     public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.With("glm-4.7-flash");

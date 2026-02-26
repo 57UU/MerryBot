@@ -1,0 +1,214 @@
+using System.Runtime.InteropServices;
+using NapcatClient.MessageType;
+using ZhipuClient;
+
+
+namespace BotPlugin;
+
+public partial class AiMessage
+{
+    void RegisterVoiceTool()
+    {
+        var voiceSender = new ToolDef();
+        voiceSender.Function.Name = "send_voice";
+        voiceSender.Function.Description = "发送语音/唱歌";
+        voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
+        voiceSender.Function.FunctionCall = async (parameters) =>
+        {
+            try
+            {
+                rateLimiter.Increase(parameters.SpecialTag);
+                if (rateLimiter.CheckIsLimited(parameters.SpecialTag))
+                {
+                    throw new Exception("请求速率过高，请不要再发了");
+                }
+                string text = parameters["text"].GetString()!;
+                await Actions.SendGroupAiVoice(parameters.SpecialTag.ToString(), text);
+            }
+            catch (Exception e)
+            {
+                return $"发送失败:{e.Message}";
+            }
+            return "发送成功。你不必回复'已发送',也不必重复发送的信息";
+        };
+        aiClient.RegisterTool(voiceSender);
+    }
+
+    void RegisterReplyTool()
+    {
+        var replyTool = new ToolDef();
+        replyTool.Function.Name = "reply";
+        replyTool.Function.Description = "回复消息";
+        replyTool.DynamicPrompt = "需要发送消息时，使用reply工具";
+        replyTool.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要回复的内容" });
+        replyTool.Function.FunctionCall = async (parameters) =>
+        {
+            try
+            {
+                messageRateLimiter.Increase(parameters.SpecialTag);
+                if (messageRateLimiter.CheckIsLimited(parameters.SpecialTag))
+                {
+                    throw new Exception("请求速率过高，请不要再发了");
+                }
+                string text = parameters["text"].GetString()!;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    await Actions.SendGroupMessage(parameters.SpecialTag, text);
+                }
+            }
+            catch (Exception e)
+            {
+                return $"发送失败:{e.Message}";
+            }
+            return "成功";
+        };
+        aiClient.RegisterTool(replyTool);
+    }
+
+    void RegisterImagePainterTool()
+    {
+        var imagePainterTool = new ToolDef();
+        imagePainterTool.Function.Name = "draw_image";
+        imagePainterTool.Function.Description = "绘制图片";
+        imagePainterTool.Function.Parameters.AddRequired("prompt", new ParameterProperty() { Type = "string", Description = "要绘制的图片描述" });
+        imagePainterTool.Function.FunctionCall = async (parameters) =>
+        {
+            string prompt = parameters["prompt"].GetString()!;
+            _ = DrawImageAndSend(prompt, parameters.SpecialTag);
+            return "正在绘制中...";
+        };
+        aiClient.RegisterTool(imagePainterTool);
+    }
+
+    void RegisterShellTool()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            var terminal = new Terminal();
+            int timeout = 10;
+            var shell = new ToolDef();
+            shell.Function.Name = "shell";
+            shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
+            shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
+            shell.Function.FunctionCall = async (parameters) =>
+            {
+                var result = await terminal.RunCommandAsync(
+                    parameters["command"].GetString()!,
+                    timeoutMs: timeout * 1000 + 500,
+                    useHardTimeout: true,
+                    waitMutex: true
+                    );
+                return PluginUtils.ConstraintLength(result, 1500);
+            };
+            aiClient.RegisterTool(shell);
+        }
+    }
+    private void RegisterBotForHelp()
+    {
+        try
+        {
+            var anotherBot = Interop.GetJsonElement("bot-help")
+                ?? throw new Exception("please specific bot-help in variables");
+            long qq = anotherBot.GetInt64();
+            var solver = new ToolDef();
+            solver.Function.Name = "turn_to";
+            solver.Function.Description = "让智能AI处理某问题";
+            solver.Function.Parameters.AddRequired("question", new ParameterProperty() { Type = "string", Description = "要处理的问题" });
+            solver.Function.FunctionCall = async (parameters) =>
+            {
+                //verify bot in group
+                var groupList = await Actions.GetGroupMemberData(parameters.SpecialTag.ToString(), qq.ToString());
+                if (groupList == null)
+                {
+                    return "该工具无法使用，请不要再使用本工具";
+                }
+                var chain = NapcatClient.Action.Actions.EmptyMessageChain;
+                chain.Add(AtData.FromAt(qq.ToString()));
+                chain.Add(TextData.FromText($" {parameters["question"]}"));
+                await Actions.SendGroupMessage(parameters.SpecialTag, chain);
+                return "求助成功，你不用解决这个问题了";
+            };
+            solver.DynamicPrompt = "如果问题非常复杂，请智能AI求助";
+            solver.isUseable = async (tag) =>
+            {
+                var groupList = await Actions.GetGroupMemberData(tag.ToString(), qq.ToString());
+                if (groupList == null)
+                {
+                    return false;
+                }
+                return true;
+            };
+            aiClient.RegisterTool(solver);
+            //拦截bot对自己发送的消息
+            Interop.Interceptors.Add((data) =>
+            {
+                return data.sender.user_id == qq;
+            });
+
+        }
+        catch (Exception e)
+        {
+            Logger.Warn($"load bot help failed:{e.Message}");
+        }
+    }
+    private void RegisterImagePainter()
+    {
+        var model = DashscopeModelPreset.QwenImageMax;
+        var token_key = model.ApiTokenDictKey;
+        var token = Interop.GetVariable<string>(token_key);
+        if (token == null)
+        {
+            Logger.Warn($"请在配置文件variable中设置{token_key}");
+            return;
+        }
+        imagePainter = new ImagePainterDashscope(model, token);
+        var imagePainterTool = new ToolDef();
+        imagePainterTool.Function.Name = "draw_image";
+        imagePainterTool.Function.Description = "绘制图片";
+        imagePainterTool.Function.Parameters.AddRequired("prompt", new ParameterProperty() { Type = "string", Description = "要绘制的图片描述" });
+        imagePainterTool.Function.FunctionCall = async (parameters) =>
+        {
+            string prompt = parameters["prompt"].GetString()!;
+            _ = DrawImageAndSend(prompt, parameters.SpecialTag);
+            return "正在绘制中...";
+        };
+        aiClient.RegisterTool(imagePainterTool);
+    }
+    private async Task DrawImageAndSend(string prompt, long groupId)
+    {
+        try
+        {
+            string url = await imagePainter!.DrawImage(prompt);
+            await Actions.SendGroupMessage(groupId,
+                [new ImageData { File = url, Summary = prompt }]
+                );
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"图片生成异常: {ex.Message}");
+            await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
+        }
+    }
+    private void RegisterFileSenderTool(){
+        var fileSender = new ToolDef();
+        const int maxSize = 1024 * 1024 * 10; //10MB
+        fileSender.Function.Name = "send_file";
+        fileSender.Function.Description = "发送文件";
+        fileSender.Function.Parameters.AddRequired("path", new ParameterProperty() { Type = "string", Description = "绝对路径" });
+        fileSender.Function.FunctionCall = async (parameters) =>
+        {
+            string filePath = parameters["path"].GetString()!;
+            if (!File.Exists(filePath))
+            {
+                return $"文件不存在: {filePath}";
+            }
+            if (new FileInfo(filePath).Length > maxSize)
+            {
+                return $"文件大小超过{maxSize/1024/1024}MB，无法发送: {filePath}大小为 {new FileInfo(filePath).Length/1024/1024}MB";
+            }
+            await Actions.SendGroupMessage(parameters.SpecialTag, [FileData.FromFile(filePath)]);
+            return "成功";
+        };
+        aiClient.RegisterTool(fileSender);
+    }
+}

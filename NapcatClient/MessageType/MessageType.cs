@@ -691,6 +691,7 @@ public class FileData : TypedMessage
     {
         return $"file {File}";
     }
+    public static FileData FromFile(string file) => new FileData { File = file };
 }
 
 /// <summary>
