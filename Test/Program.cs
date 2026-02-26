@@ -40,12 +40,12 @@ public static class Program
         while (true)
         {
             Console.Write("User: ");
-            string input = Console.ReadLine();
+            string input = Console.ReadLine()!;
             if (input == "exit")
             {
                 break;
             }
-            var result = await terminal.RunCommandAutoTimeoutAsync(input);
+            var result = await terminal.RunCommandAsync(input);
             Console.WriteLine($"out:{result}");
         }
     }

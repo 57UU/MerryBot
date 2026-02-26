@@ -17,34 +17,20 @@ using System.Threading.Tasks;
 
 namespace ZhipuClient;
 
-public class ZhipuAi : IDisposable
+public partial class ZhipuAi : IDisposable
 {
     string token;
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     public ModelPreset ModelPreset { get; private set; } = null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
 
-    public const string SYSTEM = "system";
-    public const string USER = "user";
-    public const string ASSISTANT = "assistant";
-    public const string TOOL = "tool";
-    //finish reason
-    public const string STOP = "stop";
-    public const string TOOL_CALL = "tool_calls";
-    public const string LENGTH = "length";
-    public const string SENSITIVE = "sensitive";
-    public const string NETWORK_ERROR = "network_error";
     HttpClient client = new HttpClient();
-    List<ToolDef> Tools { get; set; } = new();
-    Dictionary<string, FunctionDef> functionMapper = new();
-    public bool UseDynamicPrompt { get; set; } = true;
+    private List<ToolDef> Tools { get; set; } = new();
+    private Dictionary<string, FunctionDef> functionMapper = new();
+    
     readonly string prompt;
-    readonly Browser browser = new();
-    public ISimpleLogger Logger { set; private get; } = ConsoleLogger.Instance;
-    public int MaxWebContentLength { get; set; } = 5000;
-    public int SlidingWindowContext { get; set; } = 30;
-    public HistoryRecorder? HistoryRecorder { get; set; } = null;
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset,HistoryRecorder? historyRecorder=null)
+    private readonly Browser browser = new();
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null)
     {
         this.token = token;
         this.prompt = prompt;
@@ -55,14 +41,12 @@ public class ZhipuAi : IDisposable
             Content = prompt,
         };
         SetModelPreset(modelPreset, token);
-        //set timeout
-        client.Timeout = TimeSpan.FromSeconds(10);
         options.Converters.Add(new MessageConverter());
         //tools
         AddBuiltInTools();
 
     }
-    public void SetModelPreset(ModelPreset modelPreset,string token)
+    public void SetModelPreset(ModelPreset modelPreset, string token)
     {
         client.DefaultRequestHeaders.Clear();
         // 创建HttpClient并设置请求头
@@ -159,7 +143,7 @@ public class ZhipuAi : IDisposable
         }
         return mutex[groupId];
     }
-    ZhipuMessage SystemPrompt;
+    private ZhipuMessage SystemPrompt;
     /// <summary>
     /// reset dialog for a group
     /// </summary>
@@ -181,9 +165,9 @@ public class ZhipuAi : IDisposable
     /// <param name="sender">发送者</param>
     /// <param name="specialTag">一个tag，该tag会出现在function call的参数中</param>
     /// <returns>异步字符串迭代器，模型返回结果</returns>
-    public async IAsyncEnumerable<string> Ask(string content, long id, string sender,long specialTag = 0)
+    public async IAsyncEnumerable<string> Ask(string content, long id, string sender, long specialTag = 0)
     {
-        var recorder= (ZhipuMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
+        var recorder = (ZhipuMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
         var mutex = EnsureMutexExists(id);
         if (!mutex.Wait(0))
         {
@@ -275,7 +259,7 @@ public class ZhipuAi : IDisposable
                         });
                     }
                     currentHistory.Add(assistantMessage);
-                    HistoryRecorder?.Invoke(id, assistantMessage.Role, $"{assistantMessage.Content}:"+string.Join(",", assistantMessage.ToolCalls.Select(i=>$"{i.Function.Name}({i.Function.Arguments})")));
+                    HistoryRecorder?.Invoke(id, assistantMessage.Role, $"{assistantMessage.Content}:" + string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})")));
                     //tool call
                     List<Task<ToolMessage>> tasks = new();
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
@@ -291,7 +275,7 @@ public class ZhipuAi : IDisposable
                 }
                 else
                 {
-                    var currentMessage=new ZhipuMessage()
+                    var currentMessage = new ZhipuMessage()
                     {
                         Role = msg.Role,
                         Content = msg.Content
@@ -316,7 +300,7 @@ public class ZhipuAi : IDisposable
 
 
     }
-    async Task<ToolMessage> HandleFunctionCall(Function func, string id, long specialTag)
+    private async Task<ToolMessage> HandleFunctionCall(Function func, string id, long specialTag)
     {
         ToolMessage message = new();
         message.Role = TOOL;
@@ -423,11 +407,12 @@ public class ZhipuAi : IDisposable
     public void Dispose()
     {
         browser.Dispose();
+        client.Dispose();
         GC.SuppressFinalize(this);
     }
 
 
-    JsonSerializerOptions options = new JsonSerializerOptions
+    private JsonSerializerOptions options = new JsonSerializerOptions
     {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
     };
