@@ -36,7 +36,7 @@ public static class Program
 
     public static async Task TestTerminal()
     {
-        Terminal terminal = new Terminal();
+        Terminal terminal = Terminal.CreateUserTerminal();
         while (true)
         {
             Console.Write("User: ");

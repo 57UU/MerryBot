@@ -84,10 +84,11 @@ public partial class AiMessage
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var terminal = new Terminal();
+            var terminal = Terminal.CreateUserTerminal();
             int timeout = 10;
             var shell = new ToolDef();
             shell.Function.Name = "shell";
+            shell.DynamicPrompt = "你可以使用shell工具执行Linux bash，已安装py等程序，user: merrybot";
             shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) =>
@@ -98,7 +99,7 @@ public partial class AiMessage
                     useHardTimeout: true,
                     waitMutex: true
                     );
-                return PluginUtils.ConstraintLength(result, 1500);
+                return PluginUtils.ConstraintLength(result, 3000);
             };
             aiClient.RegisterTool(shell);
         }
