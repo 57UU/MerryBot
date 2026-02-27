@@ -1,7 +1,6 @@
 @page "/"
 @using DataService
 @inject HistoryRecorder HistoryRecorder
-@inject AiMessageRecorder AiMessageRecorder
 
 <PageTitle>统计数据</PageTitle>
 <h1 style="margin-top: 1rem; margin-bottom: 1rem;">历史记录统计</h1>
@@ -16,7 +15,6 @@
 <br />
 <h2>文件大小</h2>
 <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-	<StatCard Title="AI 消息库" Value="@AiMessageDbSize" />
 	<StatCard Title="群聊历史库" Value="@GroupHistoryDbSize" />
 </div>
 
@@ -27,13 +25,12 @@
 	private int AiMessageCount { get; set; } = 0;
 	private int ImageCount { get; set; } = 0;
 	private int FileCount { get; set; } = 0;
-	private string AiMessageDbSize { get; set; } = "Unavaliable";
 	private string GroupHistoryDbSize { get; set; } = "Unavaliable";
 
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadGroupIds();
-		await LoadStatistics();
+		LoadStatistics();
 		LoadDbSizes();
 	}
 
@@ -52,7 +49,7 @@
 		}
 	}
 
-	private async Task LoadStatistics()
+	private void LoadStatistics()
 	{
 		try
 		{
@@ -66,7 +63,7 @@
 			AiMessageCount = 0;
 			foreach (var gid in GroupIds)
 			{
-				var count = await AiMessageRecorder.GetAiMessageCountByGroupId(gid);
+				var count = HistoryRecorder.GetAiMessageCountByGroupId(gid);
 				AiMessageCount += count;
 			}
 
@@ -85,7 +82,6 @@
 	{
 		try
 		{
-			AiMessageDbSize = AiMessageRecorder.GetDatabaseSize();
 			GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
 		}
 		catch (Exception ex)

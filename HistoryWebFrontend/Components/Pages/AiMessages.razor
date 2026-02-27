@@ -4,7 +4,6 @@
 @using Microsoft.AspNetCore.Components
 @rendermode InteractiveServer
 @inject HistoryRecorder HistoryRecorder
-@inject AiMessageRecorder AiMessageRecorder
 @inject IJSRuntime JSRuntime
 
 <PageTitle>AI消息</PageTitle>
@@ -116,7 +115,7 @@
     private List<long> GroupIds { get; set; } = new List<long>();
     private Dictionary<long, GroupNameEntry> GroupNameCache { get; set; } = new Dictionary<long, GroupNameEntry>();
     private long SelectedAiGroupId { get; set; } = 0;
-    private List<(long Id, long GroupId, string MessageType, string Content, long Time)> AiMessageList { get; set; } = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
+    private List<AiMessageEntry> AiMessageList { get; set; } = new List<AiMessageEntry>();
     private bool IsAiLoading { get; set; } = false;
     private bool IsLoadingMore { get; set; } = false;
     private int CurrentPage { get; set; } = 1;
@@ -159,14 +158,14 @@
         IsAiLoading = true;
         try
         {
-            AiMessageList = await AiMessageRecorder.GetAiMessagesByGroupId(groupId, CurrentPage, PageSize);
+            AiMessageList = HistoryRecorder.GetAiMessagesByGroupId(groupId, CurrentPage, PageSize);
             await Task.Delay(100);
             await ScrollToBottom();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading AI messages: {ex.Message}");
-            AiMessageList = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
+            AiMessageList = new List<AiMessageEntry>();
         }
         finally
         {
@@ -184,7 +183,7 @@
         
         try
         {
-            var moreMessages = await AiMessageRecorder.GetAiMessagesByGroupId(SelectedAiGroupId, CurrentPage, PageSize);
+            var moreMessages = HistoryRecorder.GetAiMessagesByGroupId(SelectedAiGroupId, CurrentPage, PageSize);
             if (moreMessages.Any())
             {
                 var oldScrollHeight = await GetScrollHeight();

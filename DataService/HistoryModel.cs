@@ -213,4 +213,29 @@ public class GroupNameEntry{
     public DateTime UpdatedTime { get; set; }
 }
 
+public class AiMessageEntry
+{
+    [BsonId]
+    public long Id { get; set; }
+    public long GroupId { get; set; }
+    public string MessageType { get; set; }
+    public string Content { get; set; }
+    public long Time { get; set; }
+
+    public AiMessageEntry()
+    {
+        MessageType = string.Empty;
+        Content = string.Empty;
+    }
+
+    public AiMessageEntry(long id, long groupId, string messageType, string content, long time)
+    {
+        Id = id;
+        GroupId = groupId;
+        MessageType = messageType;
+        Content = content;
+        Time = time;
+    }
+}
+
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。

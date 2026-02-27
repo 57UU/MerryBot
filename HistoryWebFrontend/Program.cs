@@ -10,13 +10,11 @@ public class Program
     public static void Main()
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        var app=CreateApp(
-            new AiMessageRecorder($"{dataPath}/ai_messages.db"), 
-            new HistoryRecorder($"{dataPath}/group_history.db")
-            );
+        var historyRecorder = new HistoryRecorder($"{dataPath}/group_history.db");
+        var app=CreateApp(historyRecorder);
         app.Run();
     }
-    public static WebApplication CreateApp(AiMessageRecorder aiMessageRecorder, HistoryRecorder historyRecorder)
+    public static WebApplication CreateApp(HistoryRecorder historyRecorder)
     {
         var webAssembly = typeof(Program).Assembly;
 
@@ -28,7 +26,6 @@ public class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
         // data
-        builder.Services.AddSingleton(aiMessageRecorder);
         builder.Services.AddSingleton(historyRecorder);
 
         var app = builder.Build();

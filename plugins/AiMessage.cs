@@ -24,7 +24,7 @@ public partial class AiMessage : Plugin
     readonly RateLimiter rateLimiter = new RateLimiter(limitCount: 3, limitTime: 20);
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
-    private AiMessageRecorder aiMessageStorage;
+    private DataService.HistoryRecorder aiMessageStorage;
     private readonly ImageInterpreterPool? ImageInterpreterPool;
     private readonly ModelPreset[] imageInterpreterModels = [
         ModelPreset.GLM_4_6V_Flash_Free,
@@ -72,10 +72,9 @@ public partial class AiMessage : Plugin
         }
         var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
 
-        // 创建自定义的 HistoryRecorder 委托，使用 AiMessageStorage
-        ZhipuClient.HistoryRecorder historyRecorder = async (groupId, messageType, content) =>
+        ZhipuClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
         {
-            await aiMessageStorage.RecordAiMessage(groupId, messageType, content);
+            aiMessageStorage.RecordAiMessage(groupId, messageType, content);
         };
 
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);

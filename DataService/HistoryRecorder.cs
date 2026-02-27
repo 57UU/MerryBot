@@ -18,6 +18,7 @@ public class HistoryRecorder : IDisposable
     ILiteCollection<GroupEvent> eventsCollection;
     ILiteCollection<ForwardMessageEntry> forwardMessagesCollection;
     ILiteCollection<GroupNameEntry> groupNameCollection;
+    ILiteCollection<AiMessageEntry> aiMessagesCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     
@@ -31,6 +32,7 @@ public class HistoryRecorder : IDisposable
         eventsCollection = database.GetCollection<GroupEvent>("events");
         forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
         groupNameCollection = database.GetCollection<GroupNameEntry>("group_names");
+        aiMessagesCollection = database.GetCollection<AiMessageEntry>("ai_messages");
         
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
         
@@ -45,6 +47,7 @@ public class HistoryRecorder : IDisposable
         eventsCollection.EnsureIndex(x => x.Time);
         forwardMessagesCollection.EnsureIndex(x => x.SourceGroupId);
         groupNameCollection.EnsureIndex(x => x.UpdatedTime);
+        aiMessagesCollection.EnsureIndex(x => x.GroupId);
     }
     
     private long GenerateId()
@@ -345,5 +348,28 @@ public class HistoryRecorder : IDisposable
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    public bool RecordAiMessage(long groupId, string messageType, string content)
+    {
+        var entry = new AiMessageEntry(GenerateId(), groupId, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        aiMessagesCollection.Insert(entry);
+        return true;
+    }
+
+    public List<AiMessageEntry> GetAiMessagesByGroupId(long groupId, int page = 1, int pageSize = 50)
+    {
+        var skip = (page - 1) * pageSize;
+        return aiMessagesCollection.Query()
+            .Where(x => x.GroupId == groupId)
+            .OrderByDescending(x => x.Id)
+            .Skip(skip)
+            .Limit(pageSize)
+            .ToList();
+    }
+
+    public int GetAiMessageCountByGroupId(long groupId)
+    {
+        return aiMessagesCollection.Count(x => x.GroupId == groupId);
     }
 }
