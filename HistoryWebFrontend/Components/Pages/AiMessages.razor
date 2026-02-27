@@ -96,6 +96,8 @@
 </div>
 
 <script>
+    let scrollTimeout = null;
+    
     function scrollToElementBottom(elementId) {
         const element = document.getElementById(elementId);
         if (element) {
@@ -109,6 +111,15 @@
             dotNetRef.invokeMethodAsync('LoadMoreMessages');
         }
     }
+    
+    function handleScrollWithDebounce(elementId, dotNetRef) {
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+        }
+        scrollTimeout = setTimeout(() => {
+            checkScrollPosition(elementId, dotNetRef);
+        }, 200);
+    }
 </script>
 
 @code {
@@ -121,17 +132,41 @@
     private int CurrentPage { get; set; } = 1;
     private int PageSize { get; set; } = 50;
     private bool HasMoreMessages { get; set; } = true;
+    private DotNetObjectReference<AiMessages>? _dotNetRef;
+    private bool _isDisposed;
     
     protected override async Task OnInitializedAsync()
     {
-        // 初始化数据
         await LoadGroupIds();
         
-        // 默认选择第一个群聊
         if (GroupIds.Any())
         {
             SelectedAiGroupId = GroupIds[0];
-            await LoadAiMessages(SelectedAiGroupId);
+            await LoadAiMessages(SelectedAiGroupId, false);
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            if (SelectedAiGroupId > 0)
+            {
+                await ScrollToBottom();
+            }
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        if (!_isDisposed)
+        {
+            if (_dotNetRef != null)
+            {
+                _dotNetRef.Dispose();
+            }
+            _isDisposed = true;
         }
     }
     
@@ -151,7 +186,7 @@
         }
     }
     
-    private async Task LoadAiMessages(long groupId)
+    private async Task LoadAiMessages(long groupId, bool shouldScroll = true)
     {
         CurrentPage = 1;
         HasMoreMessages = true;
@@ -159,8 +194,11 @@
         try
         {
             AiMessageList = HistoryRecorder.GetAiMessagesByGroupId(groupId, CurrentPage, PageSize);
-            await Task.Delay(100);
-            await ScrollToBottom();
+            if (shouldScroll)
+            {
+                await Task.Delay(100);
+                await ScrollToBottom();
+            }
         }
         catch (Exception ex)
         {
@@ -215,8 +253,10 @@
     
     private async Task HandleScroll(EventArgs e)
     {
-        // 使用 JavaScript 互操作来检查滚动位置
-        await JSRuntime.InvokeVoidAsync("checkScrollPosition", "ai-message-container", DotNetObjectReference.Create(this));
+        if (_dotNetRef != null)
+        {
+            await JSRuntime.InvokeVoidAsync("handleScrollWithDebounce", "ai-message-container", _dotNetRef);
+        }
     }
     
     [JSInvokable]
@@ -252,11 +292,5 @@
     {
         SelectedAiGroupId = groupId;
         await LoadAiMessages(groupId);
-    }
-    
-    // JavaScript interop for scrolling
-    public class HTMLElement
-    {
-        public double ScrollTop { get; set; }
     }
 }

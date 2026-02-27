@@ -223,15 +223,19 @@
 		if (GroupIds.Any())
 		{
 			SelectedGroupId = GroupIds[0];
-			await LoadGroupMessages(SelectedGroupId);
+			await LoadGroupMessages(SelectedGroupId, false);
 		}
 	}
 
-	protected override void OnAfterRender(bool firstRender)
+	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
 		if (firstRender)
 		{
 			_dotNetRef = DotNetObjectReference.Create(this);
+			if (SelectedGroupId > 0)
+			{
+				await ScrollToBottom();
+			}
 		}
 	}
 
@@ -263,7 +267,7 @@
 		}
 	}
 
-	private async Task LoadGroupMessages(long groupId)
+	private async Task LoadGroupMessages(long groupId, bool shouldScroll = true)
 	{
 		CurrentPage = 1;
 		HasMoreMessages = true;
@@ -271,8 +275,11 @@
 		try
 		{
 			GroupMessageList = HistoryRecorder.GetMessagesByGroupId(groupId, CurrentPage, PageSize);
-			await Task.Delay(100);
-			await ScrollToBottom();
+			if (shouldScroll)
+			{
+				await Task.Delay(100);
+				await ScrollToBottom();
+			}
 		}
 		catch (Exception ex)
 		{
