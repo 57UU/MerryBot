@@ -14,7 +14,7 @@ public partial class PluginStorageDatabase : IDisposable
     {
         _db = new LiteDatabaseAsync(databasePath);
         _collection = _db.GetCollection<PluginData>("Plugin_Data_Table");
-        _ = _collection.EnsureIndexAsync(x => x.Name);
+        _ = _collection.EnsureIndexAsync(x => x.Id);
     }
 
     public async Task StorePluginData(string pluginName, object data)
@@ -23,7 +23,6 @@ public partial class PluginStorageDatabase : IDisposable
         var pluginData = new PluginData
         {
             Id = pluginName,
-            Name = pluginName,
             Value = data
         };
         await _collection.UpsertAsync(pluginData);
@@ -47,9 +46,6 @@ public partial class PluginStorageDatabase : IDisposable
     {
         [BsonId]
         public string Id { get; set; } = "";
-
-        [BsonField("Name")]
-        public string Name { get; set; } = "";
 
         [BsonField("Value")]
         public object Value { get; set; }
