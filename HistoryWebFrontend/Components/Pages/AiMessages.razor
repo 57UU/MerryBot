@@ -174,9 +174,9 @@
     {
         try
         {
-            GroupIds = HistoryRecorder.GetAllGroupIds();
+            GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
             // 加载群名称缓存
-            var allGroupNames = HistoryRecorder.GetAllGroupNames();
+            var allGroupNames = await HistoryRecorder.GetAllGroupNamesAsync();
             GroupNameCache = allGroupNames.ToDictionary(g => g.GroupId, g => g);
         }
         catch (Exception ex)
@@ -193,7 +193,7 @@
         IsAiLoading = true;
         try
         {
-            AiMessageList = HistoryRecorder.GetAiMessagesByGroupId(groupId, CurrentPage, PageSize);
+            AiMessageList = await HistoryRecorder.GetAiMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
             if (shouldScroll)
             {
                 await Task.Delay(100);
@@ -221,7 +221,7 @@
         
         try
         {
-            var moreMessages = HistoryRecorder.GetAiMessagesByGroupId(SelectedAiGroupId, CurrentPage, PageSize);
+            var moreMessages = await HistoryRecorder.GetAiMessagesByGroupIdAsync(SelectedAiGroupId, CurrentPage, PageSize);
             if (moreMessages.Any())
             {
                 var oldScrollHeight = await GetScrollHeight();

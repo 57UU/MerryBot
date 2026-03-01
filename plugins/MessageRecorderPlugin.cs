@@ -61,7 +61,7 @@ public class MessageRecorderPlugin : Plugin
             var groupMessage = DataService.GroupMessage.FromReceivedGroupMessage(clonedMessage);
 
             // 记录消息到数据库（消息链已包含在 GroupMessage.Messages 中）
-            var success = historyRecorder.RecordMessage(groupMessage);
+            var success = await historyRecorder.RecordMessageAsync(groupMessage);
 
             if (success)
             {
@@ -88,7 +88,7 @@ public class MessageRecorderPlugin : Plugin
                 return;
             }
 
-            var existingEntry = historyRecorder.GetGroupNameById(groupId);
+            var existingEntry = await historyRecorder.GetGroupNameByIdAsync(groupId);
             var now = DateTime.Now;
 
             // 如果不存在，或者更新时间超过1天，则更新
@@ -106,7 +106,7 @@ public class MessageRecorderPlugin : Plugin
                         UpdatedTime = now
                     };
 
-                    historyRecorder.RecordOrUpdateGroupName(groupNameEntry);
+                    await historyRecorder.RecordOrUpdateGroupNameAsync(groupNameEntry);
                     Logger.Debug($"更新群信息: 群 {groupId}, 名称 {groupInfo.GroupName}, 成员 {groupInfo.MemberCount}/{groupInfo.MaxMemberCount}");
                 }
             }
@@ -201,7 +201,7 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储图片并获取内部ID
-                var imageEntry = historyRecorder.RecordImage(imageData.Url, imageDataBytes);
+                var imageEntry = await historyRecorder.RecordImageAsync(imageData.Url, imageDataBytes);
 
                 // 替换URL为内部ID（字符串形式）
                 imageData.Url = imageEntry.Id.ToString();
@@ -241,7 +241,7 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储文件并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(fileData.Url, fileDataBytes);
+                var fileEntry = await historyRecorder.RecordFileAsync(fileData.Url, fileDataBytes);
 
                 // 替换URL为内部ID（字符串形式）
                 fileData.Url = fileEntry.Id.ToString();
@@ -277,7 +277,7 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储视频并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(videoData.Url, videoDataBytes);
+                var fileEntry = await historyRecorder.RecordFileAsync(videoData.Url, videoDataBytes);
 
                 // 替换URL为内部ID（字符串形式）
                 videoData.Url = fileEntry.Id.ToString();
@@ -313,7 +313,7 @@ public class MessageRecorderPlugin : Plugin
                 }
 
                 // 存储语音并获取内部ID
-                var fileEntry = historyRecorder.RecordFile(recordData.Url, recordDataBytes);
+                var fileEntry = await historyRecorder.RecordFileAsync(recordData.Url, recordDataBytes);
 
                 // 替换URL为内部ID（字符串形式）
                 recordData.Url = fileEntry.Id.ToString();
@@ -331,7 +331,7 @@ public class MessageRecorderPlugin : Plugin
     {
         try
         {
-            if (historyRecorder.ForwardMessageExists(forwardData.Id))
+            if (await historyRecorder.ForwardMessageExistsAsync(forwardData.Id))
             {
                 Logger.Trace($"转发消息已存在: {forwardData.Id}");
                 return;
@@ -357,7 +357,7 @@ public class MessageRecorderPlugin : Plugin
                     time
                 );
 
-                historyRecorder.RecordForwardMessage(entry);
+                await historyRecorder.RecordForwardMessageAsync(entry);
                 Logger.Debug($"保存转发消息: {forwardData.Id}, 包含 {messages.Count} 条消息");
             }
         }
@@ -376,11 +376,11 @@ public class MessageRecorderPlugin : Plugin
             if (replyMessage != null)
             {
                 // 检查消息是否已存在，避免重复存储
-                if (!historyRecorder.MessageExists(replyMessage.MessageId))
+                if (!await historyRecorder.MessageExistsAsync(replyMessage.MessageId))
                 {
                     // 转换并保存回复消息内容
                     var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(replyMessage);
-                    historyRecorder.RecordMessage(groupMessage);
+                    await historyRecorder.RecordMessageAsync(groupMessage);
                     Logger.Trace($"保存回复消息: {replyMessage.MessageId}");
                 }
 
@@ -395,6 +395,11 @@ public class MessageRecorderPlugin : Plugin
     }
 
     public override void OnGroupAdminEvent(GroupAdminEvent eventData)
+    {
+        _ = RecordGroupAdminEventAsync(eventData);
+    }
+
+    private async Task RecordGroupAdminEventAsync(GroupAdminEvent eventData)
     {
         try
         {
@@ -411,7 +416,7 @@ public class MessageRecorderPlugin : Plugin
                 time
             );
 
-            var success = historyRecorder.RecordGroupEvent(groupEvent);
+            var success = await historyRecorder.RecordGroupEventAsync(groupEvent);
             if (success)
             {
                 Logger.Debug($"记录群管理员事件: 群 {eventData.GroupId}, 操作 {eventData.SubType}, 用户 {eventData.UserId}");
@@ -424,6 +429,11 @@ public class MessageRecorderPlugin : Plugin
     }
 
     public override void OnGroupDecreaseEvent(GroupDecreaseEvent eventData)
+    {
+        _ = RecordGroupDecreaseEventAsync(eventData);
+    }
+
+    private async Task RecordGroupDecreaseEventAsync(GroupDecreaseEvent eventData)
     {
         try
         {
@@ -440,7 +450,7 @@ public class MessageRecorderPlugin : Plugin
                 time
             );
 
-            var success = historyRecorder.RecordGroupEvent(groupEvent);
+            var success = await historyRecorder.RecordGroupEventAsync(groupEvent);
             if (success)
             {
                 Logger.Debug($"记录群成员减少事件: 群 {eventData.GroupId}, 操作 {eventData.SubType}, 用户 {eventData.UserId}, 操作者 {eventData.OperatorId}");
@@ -453,6 +463,11 @@ public class MessageRecorderPlugin : Plugin
     }
 
     public override void OnGroupIncreaseEvent(GroupIncreaseEvent eventData)
+    {
+        _ = RecordGroupIncreaseEventAsync(eventData);
+    }
+
+    private async Task RecordGroupIncreaseEventAsync(GroupIncreaseEvent eventData)
     {
         try
         {
@@ -469,7 +484,7 @@ public class MessageRecorderPlugin : Plugin
                 time
             );
 
-            var success = historyRecorder.RecordGroupEvent(groupEvent);
+            var success = await historyRecorder.RecordGroupEventAsync(groupEvent);
             if (success)
             {
                 Logger.Debug($"记录群成员增加事件: 群 {eventData.GroupId}, 操作 {eventData.SubType}, 用户 {eventData.UserId}, 操作者 {eventData.OperatorId}");
@@ -482,6 +497,11 @@ public class MessageRecorderPlugin : Plugin
     }
 
     public override void OnGroupBanEvent(GroupBanEvent eventData)
+    {
+        _ = RecordGroupBanEventAsync(eventData);
+    }
+
+    private async Task RecordGroupBanEventAsync(GroupBanEvent eventData)
     {
         try
         {
@@ -498,7 +518,7 @@ public class MessageRecorderPlugin : Plugin
                 time
             );
 
-            var success = historyRecorder.RecordGroupEvent(groupEvent);
+            var success = await historyRecorder.RecordGroupEventAsync(groupEvent);
             if (success)
             {
                 Logger.Debug($"记录群禁言事件: 群 {eventData.GroupId}, 操作 {eventData.SubType}, 用户 {eventData.UserId}, 操作者 {eventData.OperatorId}, 时长 {eventData.Duration}秒");
@@ -511,6 +531,11 @@ public class MessageRecorderPlugin : Plugin
     }
 
     public override void OnGroupRecallEvent(GroupRecallEvent eventData)
+    {
+        _ = RecordGroupRecallEventAsync(eventData);
+    }
+
+    private async Task RecordGroupRecallEventAsync(GroupRecallEvent eventData)
     {
         try
         {
@@ -527,13 +552,13 @@ public class MessageRecorderPlugin : Plugin
                 time
             );
 
-            var success = historyRecorder.RecordGroupEvent(groupEvent);
+            var success = await historyRecorder.RecordGroupEventAsync(groupEvent);
             if (success)
             {
                 Logger.Debug($"记录群消息撤回事件: 群 {eventData.GroupId}, 消息发送者 {eventData.UserId}, 撤回操作者 {eventData.OperatorId}, 消息ID {eventData.MessageId}");
             }
 
-            historyRecorder.MarkMessageAsDeleted(eventData.MessageId);
+            await historyRecorder.MarkMessageAsDeletedAsync(eventData.MessageId);
             Logger.Debug($"标记消息为已删除: 消息ID {eventData.MessageId}");
         }
         catch (Exception ex)

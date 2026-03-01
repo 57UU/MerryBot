@@ -30,7 +30,7 @@
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadGroupIds();
-		LoadStatistics();
+		await LoadStatistics();
 		LoadDbSizes();
 	}
 
@@ -38,7 +38,7 @@
 	{
 		try
 		{
-			GroupIds = HistoryRecorder.GetAllGroupIds();
+			GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
 			GroupCount = GroupIds.Count;
 		}
 		catch (Exception ex)
@@ -49,26 +49,26 @@
 		}
 	}
 
-	private void LoadStatistics()
+	private async Task LoadStatistics()
 	{
 		try
 		{
 			MessageCount = 0;
 			foreach (var gid in GroupIds)
 			{
-				var messages = HistoryRecorder.GetMessagesByGroupId(gid, 1000);
+				var messages = await HistoryRecorder.GetMessagesByGroupIdAsync(gid, 1000);
 				MessageCount += messages.Count;
 			}
 
 			AiMessageCount = 0;
 			foreach (var gid in GroupIds)
 			{
-				var count = HistoryRecorder.GetAiMessageCountByGroupId(gid);
+				var count = await HistoryRecorder.GetAiMessageCountByGroupIdAsync(gid);
 				AiMessageCount += count;
 			}
 
-			ImageCount = HistoryRecorder.GetImageCount();
-			FileCount = HistoryRecorder.GetFileCount();
+			ImageCount = await HistoryRecorder.GetImageCountAsync();
+			FileCount = await HistoryRecorder.GetFileCountAsync();
 		}
 		catch (Exception ex)
 		{

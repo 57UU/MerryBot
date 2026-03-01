@@ -1,31 +1,32 @@
 using CommonLib;
 using LiteDB;
+using LiteDB.Async;
 using NapcatClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
+using System.Threading.Tasks;
 
 namespace DataService;
 
-public class HistoryRecorder : IDisposable
+public class HistoryRecorder : IDisposable, IAsyncDisposable
 {
-    LiteDatabase database;
-    ILiteCollection<GroupMessage> messagesCollection;
-    ILiteCollection<ImageEntry> imageBedCollection;
-    ILiteCollection<FileEntry> fileBedCollection;
-    ILiteCollection<GroupEvent> eventsCollection;
-    ILiteCollection<ForwardMessageEntry> forwardMessagesCollection;
-    ILiteCollection<GroupNameEntry> groupNameCollection;
-    ILiteCollection<AiMessageEntry> aiMessagesCollection;
+    LiteDatabaseAsync database;
+    ILiteCollectionAsync<GroupMessage> messagesCollection;
+    ILiteCollectionAsync<ImageEntry> imageBedCollection;
+    ILiteCollectionAsync<FileEntry> fileBedCollection;
+    ILiteCollectionAsync<GroupEvent> eventsCollection;
+    ILiteCollectionAsync<ForwardMessageEntry> forwardMessagesCollection;
+    ILiteCollectionAsync<GroupNameEntry> groupNameCollection;
+    ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     
-    public HistoryRecorder(string dbPath,int machineCode=0)
+    public HistoryRecorder(string dbPath, int machineCode = 0)
     {
         _dbPath = dbPath;
-        database = new LiteDatabase(dbPath);
+        database = new LiteDatabaseAsync(dbPath);
         messagesCollection = database.GetCollection<GroupMessage>("messages");
         imageBedCollection = database.GetCollection<ImageEntry>("images");
         fileBedCollection = database.GetCollection<FileEntry>("files");
@@ -36,18 +37,18 @@ public class HistoryRecorder : IDisposable
         
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
         
-        messagesCollection.EnsureIndex(x => x.GroupId);
-        messagesCollection.EnsureIndex(x => x.SenderId);
-        messagesCollection.EnsureIndex(x => x.MessageId);
-        messagesCollection.EnsureIndex(x => x.Time);
-        imageBedCollection.EnsureIndex(x => x.Hash);
-        fileBedCollection.EnsureIndex(x => x.Hash);
-        eventsCollection.EnsureIndex(x => x.GroupId);
-        eventsCollection.EnsureIndex(x => x.EventType);
-        eventsCollection.EnsureIndex(x => x.Time);
-        forwardMessagesCollection.EnsureIndex(x => x.SourceGroupId);
-        groupNameCollection.EnsureIndex(x => x.UpdatedTime);
-        aiMessagesCollection.EnsureIndex(x => x.GroupId);
+        _ = messagesCollection.EnsureIndexAsync(x => x.GroupId);
+        _ = messagesCollection.EnsureIndexAsync(x => x.SenderId);
+        _ = messagesCollection.EnsureIndexAsync(x => x.MessageId);
+        _ = messagesCollection.EnsureIndexAsync(x => x.Time);
+        _ = imageBedCollection.EnsureIndexAsync(x => x.Hash);
+        _ = fileBedCollection.EnsureIndexAsync(x => x.Hash);
+        _ = eventsCollection.EnsureIndexAsync(x => x.GroupId);
+        _ = eventsCollection.EnsureIndexAsync(x => x.EventType);
+        _ = eventsCollection.EnsureIndexAsync(x => x.Time);
+        _ = forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId);
+        _ = groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime);
+        _ = aiMessagesCollection.EnsureIndexAsync(x => x.GroupId);
     }
     
     private long GenerateId()
@@ -66,96 +67,100 @@ public class HistoryRecorder : IDisposable
     {
         database.Dispose();
     }
-    
-    public bool RecordMessage(GroupMessage message)
+
+    public async ValueTask DisposeAsync()
     {
-        if (messagesCollection.Exists(x => x.MessageId == message.MessageId))
+        await Task.Run(() => database.Dispose());
+    }
+    
+    public async Task<bool> RecordMessageAsync(GroupMessage message)
+    {
+        if (await messagesCollection.ExistsAsync(x => x.MessageId == message.MessageId))
         {
             return false;
         }
         
-        messagesCollection.Insert(message);
+        await messagesCollection.InsertAsync(message);
         return true;
     }
     
-    public bool MessageExists(long messageId)
+    public async Task<bool> MessageExistsAsync(long messageId)
     {
-        return messagesCollection.Exists(x => x.MessageId == messageId);
+        return await messagesCollection.ExistsAsync(x => x.MessageId == messageId);
     }
     
-    public bool MarkMessageAsDeleted(long messageId)
+    public async Task<bool> MarkMessageAsDeletedAsync(long messageId)
     {
-        var message = messagesCollection.FindOne(x => x.MessageId == messageId);
+        var message = await messagesCollection.FindOneAsync(x => x.MessageId == messageId);
         if (message == null)
         {
             return false;
         }
         
         message.IsDeleted = true;
-        messagesCollection.Update(message);
-        return true;
+        return await messagesCollection.UpdateAsync(message);
     }
     
-    public List<GroupMessage> GetMessagesByGroupId(long groupId, int limit = 100)
+    public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int limit = 100)
     {
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupMessage> GetMessagesByGroupId(long groupId, int page, int pageSize)
+    public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int page, int pageSize)
     {
         var skip = (page - 1) * pageSize;
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId)
             .OrderByDescending(x => x.Time)
             .Skip(skip)
             .Limit(pageSize)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupMessage> GetMessagesBySenderId(long senderId, int limit = 100)
+    public async Task<List<GroupMessage>> GetMessagesBySenderIdAsync(long senderId, int limit = 100)
     {
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.SenderId == senderId)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupMessage> GetMessagesByGroupAndSender(long groupId, long senderId, int limit = 100)
+    public async Task<List<GroupMessage>> GetMessagesByGroupAndSenderAsync(long groupId, long senderId, int limit = 100)
     {
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId && x.SenderId == senderId)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupMessage> GetMessagesByTimeRange(DateTime startTime, DateTime endTime, int limit = 100)
+    public async Task<List<GroupMessage>> GetMessagesByTimeRangeAsync(DateTime startTime, DateTime endTime, int limit = 100)
     {
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.Time >= startTime && x.Time <= endTime)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupMessage> GetMessagesByGroupAndTimeRange(long groupId, DateTime startTime, DateTime endTime, int limit = 100)
+    public async Task<List<GroupMessage>> GetMessagesByGroupAndTimeRangeAsync(long groupId, DateTime startTime, DateTime endTime, int limit = 100)
     {
-        return messagesCollection.Query()
+        return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId && x.Time >= startTime && x.Time <= endTime)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public ImageEntry RecordImage(string originalUrl, byte[] data)
+    public async Task<ImageEntry> RecordImageAsync(string originalUrl, byte[] data)
     {
         var hash = CalculateHash(data);
-        var existingImage = imageBedCollection.FindOne(x => x.Hash == hash);
+        var existingImage = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
         if (existingImage != null)
         {
             return existingImage;
@@ -163,14 +168,14 @@ public class HistoryRecorder : IDisposable
         
         var id = GenerateId();
         var imageEntry = new ImageEntry(id, originalUrl, hash, data);
-        imageBedCollection.Insert(imageEntry);
+        await imageBedCollection.InsertAsync(imageEntry);
         return imageEntry;
     }
     
-    public FileEntry RecordFile(string originalUrl, byte[] data)
+    public async Task<FileEntry> RecordFileAsync(string originalUrl, byte[] data)
     {
         var hash = CalculateHash(data);
-        var existingFile = fileBedCollection.FindOne(x => x.Hash == hash);
+        var existingFile = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
         if (existingFile != null)
         {
             return existingFile;
@@ -178,146 +183,150 @@ public class HistoryRecorder : IDisposable
         
         var id = GenerateId();
         var fileEntry = new FileEntry(id, originalUrl, hash, data);
-        fileBedCollection.Insert(fileEntry);
+        await fileBedCollection.InsertAsync(fileEntry);
         return fileEntry;
     }
     
-    public ImageEntry? GetImageById(long id)
+    public async Task<ImageEntry?> GetImageByIdAsync(long id)
     {
-        return imageBedCollection.FindOne(x => x.Id == id);
+        return await imageBedCollection.FindOneAsync(x => x.Id == id);
     }
     
-    public FileEntry? GetFileById(long id)
+    public async Task<FileEntry?> GetFileByIdAsync(long id)
     {
-        return fileBedCollection.FindOne(x => x.Id == id);
+        return await fileBedCollection.FindOneAsync(x => x.Id == id);
     }
+
     private readonly RequestCaching requestCaching = new(TimeSpan.FromHours(24));
-    public ImageEntry? GetImageByHash(string hash)
+
+    public async Task<ImageEntry?> GetImageByHashAsync(string hash)
     {
         var cacheKey = $"img_hash_{hash}";
         if (requestCaching.TryGetCache<ImageEntry?>(cacheKey, out var cachedImage))
         {
             return cachedImage;
         }
-        var image = imageBedCollection.FindOne(x => x.Hash == hash);
+        var image = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
         requestCaching.SetCache(cacheKey, image);
         return image;
     }
 
-    public FileEntry? GetFileByHash(string hash)
+    public async Task<FileEntry?> GetFileByHashAsync(string hash)
     {
         var cacheKey = $"file_hash_{hash}";
         if (requestCaching.TryGetCache<FileEntry?>(cacheKey, out var cachedFile))
         {
             return cachedFile;
         }
-        var file = fileBedCollection.FindOne(x => x.Hash == hash);
+        var file = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
         requestCaching.SetCache(cacheKey, file);
         return file;
     }
     
-    public bool RecordGroupEvent(GroupEvent groupEvent)
+    public async Task<bool> RecordGroupEventAsync(GroupEvent groupEvent)
     {
-        eventsCollection.Insert(groupEvent);
+        await eventsCollection.InsertAsync(groupEvent);
         return true;
     }
     
-    public List<GroupEvent> GetEventsByGroupId(long groupId, int limit = 100)
+    public async Task<List<GroupEvent>> GetEventsByGroupIdAsync(long groupId, int limit = 100)
     {
-        return eventsCollection.Query()
+        return await eventsCollection.Query()
             .Where(x => x.GroupId == groupId)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupEvent> GetEventsByType(string eventType, int limit = 100)
+    public async Task<List<GroupEvent>> GetEventsByTypeAsync(string eventType, int limit = 100)
     {
-        return eventsCollection.Query()
+        return await eventsCollection.Query()
             .Where(x => x.EventType == eventType)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<GroupEvent> GetEventsByGroupAndType(long groupId, string eventType, int limit = 100)
+    public async Task<List<GroupEvent>> GetEventsByGroupAndTypeAsync(long groupId, string eventType, int limit = 100)
     {
-        return eventsCollection.Query()
+        return await eventsCollection.Query()
             .Where(x => x.GroupId == groupId && x.EventType == eventType)
             .OrderByDescending(x => x.Time)
             .Limit(limit)
-            .ToList();
+            .ToListAsync();
     }
     
-    public List<long> GetAllGroupIds()
+    public async Task<List<long>> GetAllGroupIdsAsync()
     {
-        var messageGroupIds = messagesCollection.FindAll().Select(x => x.GroupId).Distinct();
-        var eventGroupIds = eventsCollection.FindAll().Select(x => x.GroupId).Distinct();
+        var messages = await messagesCollection.FindAllAsync();
+        var events = await eventsCollection.FindAllAsync();
+        var messageGroupIds = messages.Select(x => x.GroupId).Distinct();
+        var eventGroupIds = events.Select(x => x.GroupId).Distinct();
         return messageGroupIds.Concat(eventGroupIds).Distinct().OrderBy(x => x).ToList();
     }
     
-    public bool RecordForwardMessage(ForwardMessageEntry forwardEntry)
+    public async Task<bool> RecordForwardMessageAsync(ForwardMessageEntry forwardEntry)
     {
-        if (forwardMessagesCollection.Exists(x => x.ForwardId == forwardEntry.ForwardId))
+        if (await forwardMessagesCollection.ExistsAsync(x => x.ForwardId == forwardEntry.ForwardId))
         {
             return false;
         }
         
-        forwardMessagesCollection.Insert(forwardEntry);
+        await forwardMessagesCollection.InsertAsync(forwardEntry);
         return true;
     }
     
-    public ForwardMessageEntry? GetForwardMessageById(string forwardId)
+    public async Task<ForwardMessageEntry?> GetForwardMessageByIdAsync(string forwardId)
     {
-        return forwardMessagesCollection.FindOne(x => x.ForwardId == forwardId);
+        return await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardId);
     }
     
-    public bool ForwardMessageExists(string forwardId)
+    public async Task<bool> ForwardMessageExistsAsync(string forwardId)
     {
-        return forwardMessagesCollection.Exists(x => x.ForwardId == forwardId);
+        return await forwardMessagesCollection.ExistsAsync(x => x.ForwardId == forwardId);
     }
     
-    public bool RecordOrUpdateGroupName(GroupNameEntry groupNameEntry)
+    public async Task<bool> RecordOrUpdateGroupNameAsync(GroupNameEntry groupNameEntry)
     {
-        var existingEntry = groupNameCollection.FindOne(x => x.GroupId == groupNameEntry.GroupId);
+        var existingEntry = await groupNameCollection.FindOneAsync(x => x.GroupId == groupNameEntry.GroupId);
         if (existingEntry != null)
         {
             existingEntry.Name = groupNameEntry.Name;
             existingEntry.MemberCount = groupNameEntry.MemberCount;
             existingEntry.MaxMemberCount = groupNameEntry.MaxMemberCount;
             existingEntry.UpdatedTime = groupNameEntry.UpdatedTime;
-            return groupNameCollection.Update(existingEntry);
+            return await groupNameCollection.UpdateAsync(existingEntry);
         }
         else
         {
-            groupNameCollection.Insert(groupNameEntry);
+            await groupNameCollection.InsertAsync(groupNameEntry);
             return true;
         }
     }
     
-    public GroupNameEntry? GetGroupNameById(long groupId)
+    public async Task<GroupNameEntry?> GetGroupNameByIdAsync(long groupId)
     {
-        return groupNameCollection.FindOne(x => x.GroupId == groupId);
+        return await groupNameCollection.FindOneAsync(x => x.GroupId == groupId);
     }
     
-    public List<GroupNameEntry> GetAllGroupNames()
+    public async Task<List<GroupNameEntry>> GetAllGroupNamesAsync()
     {
-        return groupNameCollection.FindAll().ToList();
+        return (await groupNameCollection.FindAllAsync()).ToList();
     }
     
-    public bool DeleteGroupName(long groupId)
+    public async Task<bool> DeleteGroupNameAsync(long groupId)
     {
-        return groupNameCollection.Delete(groupId);
+        return await groupNameCollection.DeleteAsync(groupId);
     }
     
-    public int GetImageCount()
+    public async Task<int> GetImageCountAsync()
     {
-        return imageBedCollection.Count();
+        return await imageBedCollection.CountAsync();
     }
     
-    public int GetFileCount()
+    public async Task<int> GetFileCountAsync()
     {
-        return fileBedCollection.Count();
+        return await fileBedCollection.CountAsync();
     }
     
     public string GetDatabaseSize()
@@ -350,26 +359,26 @@ public class HistoryRecorder : IDisposable
         return $"{len:0.##} {sizes[order]}";
     }
 
-    public bool RecordAiMessage(long groupId, string messageType, string content)
+    public async Task<bool> RecordAiMessageAsync(long groupId, string messageType, string content)
     {
         var entry = new AiMessageEntry(GenerateId(), groupId, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        aiMessagesCollection.Insert(entry);
+        await aiMessagesCollection.InsertAsync(entry);
         return true;
     }
 
-    public List<AiMessageEntry> GetAiMessagesByGroupId(long groupId, int page = 1, int pageSize = 50)
+    public async Task<List<AiMessageEntry>> GetAiMessagesByGroupIdAsync(long groupId, int page = 1, int pageSize = 50)
     {
         var skip = (page - 1) * pageSize;
-        return aiMessagesCollection.Query()
+        return await aiMessagesCollection.Query()
             .Where(x => x.GroupId == groupId)
             .OrderByDescending(x => x.Id)
             .Skip(skip)
             .Limit(pageSize)
-            .ToList();
+            .ToListAsync();
     }
 
-    public int GetAiMessageCountByGroupId(long groupId)
+    public async Task<int> GetAiMessageCountByGroupIdAsync(long groupId)
     {
-        return aiMessagesCollection.Count(x => x.GroupId == groupId);
+        return await aiMessagesCollection.CountAsync(x => x.GroupId == groupId);
     }
 }

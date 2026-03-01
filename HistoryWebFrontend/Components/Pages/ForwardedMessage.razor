@@ -95,7 +95,7 @@
         {
             if (!string.IsNullOrEmpty(ForwardId))
             {
-                ForwardEntry = HistoryRecorder.GetForwardMessageById(ForwardId);
+                ForwardEntry = await HistoryRecorder.GetForwardMessageByIdAsync(ForwardId);
             }
         }
         catch (Exception ex)

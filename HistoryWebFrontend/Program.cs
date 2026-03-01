@@ -11,7 +11,7 @@ public class Program
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         var historyRecorder = new HistoryRecorder($"{dataPath}/group_history.db");
-        var app=CreateApp(historyRecorder);
+        var app = CreateApp(historyRecorder);
         app.Run();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder)
@@ -53,9 +53,9 @@ public class Program
         app.Urls.Add("http://0.0.0.0:5000");
 
         // 图片API
-        app.MapGet("/api/image/{id}", (long id, HistoryRecorder historyRecorder) =>
+        app.MapGet("/api/image/{id}", async (long id, HistoryRecorder historyRecorder) =>
         {
-            var image = historyRecorder.GetImageById(id);
+            var image = await historyRecorder.GetImageByIdAsync(id);
             if (image == null)
             {
                 return Results.NotFound();
@@ -66,9 +66,9 @@ public class Program
         });
 
         // 文件API
-        app.MapGet("/api/file/{id}", (long id,[FromQuery] string? name,HistoryRecorder historyRecorder) =>
+        app.MapGet("/api/file/{id}", async (long id, [FromQuery] string? name, HistoryRecorder historyRecorder) =>
         {
-            var file = historyRecorder.GetFileById(id);
+            var file = await historyRecorder.GetFileByIdAsync(id);
             if (file == null)
             {
                 return Results.NotFound();

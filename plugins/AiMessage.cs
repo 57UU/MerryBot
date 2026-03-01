@@ -74,7 +74,7 @@ public partial class AiMessage : Plugin
 
         ZhipuClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
         {
-            aiMessageStorage.RecordAiMessage(groupId, messageType, content);
+            _ = aiMessageStorage.RecordAiMessageAsync(groupId, messageType, content);
         };
 
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
