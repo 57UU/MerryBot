@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace DataService;
 
-public class HistoryRecorder : IDisposable, IAsyncDisposable
+public class HistoryRecorder : IDisposable
 {
     LiteDatabaseAsync database;
     ILiteCollectionAsync<GroupMessage> messagesCollection;
@@ -68,11 +68,6 @@ public class HistoryRecorder : IDisposable, IAsyncDisposable
         database.Dispose();
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await Task.Run(() => database.Dispose());
-    }
-    
     public async Task<bool> RecordMessageAsync(GroupMessage message)
     {
         if (await messagesCollection.ExistsAsync(x => x.MessageId == message.MessageId))
