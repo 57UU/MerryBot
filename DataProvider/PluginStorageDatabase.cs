@@ -1,57 +1,57 @@
+using LiteDB;
+using LiteDB.Async;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using System.Xml.Linq;
-using Microsoft.Data.Sqlite;
 
 namespace DataProvider;
 
-public partial class PluginStorageDatabase : SQLiteDataProvider
+public partial class PluginStorageDatabase : IDisposable
 {
-    //sql
-    private const string UPSERT_SQL = $"INSERT INTO {Str.PLUGIN_DATA_TABLE} ({Str.NAME}, {Str.VALUE}) VALUES (@PluginName, @Data) ON CONFLICT({Str.NAME}) DO UPDATE SET {Str.VALUE} = excluded.{Str.VALUE}";
-    private const string SELECT_SQL = $"SELECT {Str.VALUE} FROM {Str.PLUGIN_DATA_TABLE} WHERE {Str.NAME}==@pluginName";
-    
-    public PluginStorageDatabase(string databasePath="plugin_data.db") : base(databasePath)
+    private readonly LiteDatabaseAsync _db;
+    private readonly ILiteCollectionAsync<PluginData> _collection;
+
+    public PluginStorageDatabase(string databasePath = "plugin_data.db")
     {
-        Task[] tasks=[
-            ExecuteSQLAsync(Str.Build_Table_SQL)
-        ];
-        Task.WaitAll(tasks);
-    }
-    
-    public async Task StorePluginData(string pluginName, string data)
-    {
-        await ExecutePreparedAsync(UPSERT_SQL, command => {
-            command.Parameters.AddWithValue("@Data", data);
-            command.Parameters.AddWithValue("@PluginName", pluginName);
-        });
-    }
-    
-    public async Task<string> GetPluginData(string pluginName)
-    {
-        // 直接使用预编译的SQL语句
-        using var result = await ReadPreparedAsync(SELECT_SQL, command => {
-            command.Parameters.AddWithValue("@pluginName", pluginName);
-        });
-        
-        if (await result.ReadAsync()) {
-            return (string)result[Str.VALUE];
-        }
-        return "";
+        _db = new LiteDatabaseAsync(databasePath);
+        _collection = _db.GetCollection<PluginData>("Plugin_Data_Table");
+        _ = _collection.EnsureIndexAsync(x => x.Name);
     }
 
-    private static class Str
+    public async Task StorePluginData(string pluginName, object data)
     {
-        internal const string NAME = "Name";
-        internal const string VALUE = "Value";
-        internal const string PLUGIN_DATA_TABLE = "Plugin_Data_Table";
-        internal const string Build_Table_SQL =
-            $"CREATE TABLE IF NOT EXISTS {PLUGIN_DATA_TABLE} (" +
-                $"{NAME} TEXT PRIMARY KEY," +
-                $"{VALUE} TEXT DEFAULT ''" +
-            $")";
+
+        var pluginData = new PluginData
+        {
+            Id = pluginName,
+            Name = pluginName,
+            Value = data
+        };
+        await _collection.UpsertAsync(pluginData);
+
+    }
+
+    public async Task<object?> GetPluginData(string pluginName)
+    {
+
+        var pluginData = await _collection.FindByIdAsync(pluginName);
+        return pluginData?.Value;
+
+    }
+
+    public void Dispose()
+    {
+        _db?.Dispose();
+    }
+
+    private class PluginData
+    {
+        [BsonId]
+        public string Id { get; set; } = "";
+
+        [BsonField("Name")]
+        public string Name { get; set; } = "";
+
+        [BsonField("Value")]
+        public object Value { get; set; }
     }
 }

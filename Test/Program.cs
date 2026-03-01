@@ -1,7 +1,6 @@
 ﻿using BotPlugin;
 using DataService;
 using MerryBot;
-using Microsoft.Data.Sqlite;
 using System;
 using System.Text.Json;
 using ZhipuClient;
@@ -14,63 +13,6 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
-
-        await MigrateAiMessages();
-    }
-
-    public static async Task MigrateAiMessages()
-    {
-        string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        string sqliteDbPath = Path.Combine(dataPath, "ai_messages.db");
-        string liteDbPath = Path.Combine(dataPath, "group_history.db");
-
-        if (!File.Exists(sqliteDbPath))
-        {
-            Console.WriteLine("SQLite 数据库文件不存在，跳过迁移");
-            return;
-        }
-
-        Console.WriteLine("开始迁移 AI 消息数据...");
-
-        using var sqliteConn = new SqliteConnection($"Data Source={sqliteDbPath}");
-        sqliteConn.Open();
-
-        string selectSql = "SELECT Id, Group_Id, Message_Type, Content, Time FROM AI_Message_Data_Table";
-        using var selectCommand = new SqliteCommand(selectSql, sqliteConn);
-        using var reader = await selectCommand.ExecuteReaderAsync();
-
-        var aiMessages = new List<(long Id, long GroupId, string MessageType, string Content, long Time)>();
-        while (await reader.ReadAsync())
-        {
-            aiMessages.Add((
-                reader.GetInt64(0),
-                reader.GetInt64(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetInt64(4)
-            ));
-        }
-        reader.Close();
-
-        Console.WriteLine($"从 SQLite 读取了 {aiMessages.Count} 条 AI 消息");
-
-        using var historyRecorder = new LiteHistoryRecorder(liteDbPath);
-        int migratedCount = 0;
-        foreach (var msg in aiMessages)
-        {
-            historyRecorder.RecordAiMessage(msg.GroupId, msg.MessageType, msg.Content);
-            migratedCount++;
-            if (migratedCount % 100 == 0)
-            {
-                Console.WriteLine($"已迁移 {migratedCount}/{aiMessages.Count} 条...");
-            }
-        }
-
-        Console.WriteLine($"迁移完成！共迁移 {migratedCount} 条 AI 消息");
-        sqliteConn.Close();
-        string backupPath = sqliteDbPath + ".bak";
-        File.Move(sqliteDbPath, backupPath, true);
-        Console.WriteLine($"已将原 SQLite 数据库备份到: {backupPath}");
     }
 
     public static async Task TestZhipuAi()

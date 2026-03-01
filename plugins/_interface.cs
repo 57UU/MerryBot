@@ -28,30 +28,32 @@ public record PluginInfo(
     PluginInterop Interop
     );
 /// <summary>
-/// 插件存储，建议使用其内置的json方法进行存储
+/// 插件存储，支持异步读取和写入
 /// </summary>
 /// <param name="Saver"></param>
 /// <param name="Getter"></param>
-public record PluginStorage(StringSaver Saver,StringGetter Getter)
+public class PluginStorage
 {
-    private static readonly JsonSerializerOptions _jsonSerializerOptions = new()
+    public PluginStorage(ObjectSaver Saver,ObjectGetter Getter)
     {
-        IncludeFields = true,
-    };
+        this.Saver = Saver;
+        this.Getter = Getter;
+    }
+    private readonly ObjectSaver Saver;
+    private readonly ObjectGetter Getter;
     public async Task<T> Load<T>(T defaultValue) where T : class
     {
         var data = await Getter();
-        if(string.IsNullOrEmpty(data)) return defaultValue;
-        return JsonSerializer.Deserialize<T>(data, _jsonSerializerOptions) ?? defaultValue;
+        if(data is null) return defaultValue;
+        return (T)data;
     }
     public async Task Save<T>(T data) where T : class
     {
-        var json = JsonSerializer.Serialize(data, _jsonSerializerOptions);
-        await Saver(json);
+        await Saver(data);
     }
 }
-public delegate Task StringSaver(string data);
-public delegate Task<string> StringGetter();
+public delegate Task ObjectSaver(object data);
+public delegate Task<object?> ObjectGetter();
 public delegate IEnumerable<PluginInfo> PluginInfoGetter();
 /// <summary>
 /// 拦截指定消息

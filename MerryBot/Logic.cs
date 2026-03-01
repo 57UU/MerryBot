@@ -304,7 +304,7 @@ internal class Logic
         {
             i.Instance.Dispose();
         }
-        PluginStorageDatabase.Close();
+        PluginStorageDatabase.Dispose();
         botClient.Close();
         NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);

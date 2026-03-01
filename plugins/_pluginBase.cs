@@ -245,34 +245,6 @@ public abstract class Plugin : IDisposable
         return Task.CompletedTask;
     }
 
-    private static JsonSerializerOptions _options = new JsonSerializerOptions() { IncludeFields = true };
-    /// <summary>
-    /// 存储某个对象
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="data"></param>
-    /// <returns></returns>
-    protected Task SaveData<T>(T data)
-    {
-        var json = JsonSerializer.Serialize(data, _options);
-        return Interop.PluginStorage.Saver.Invoke(json);
-    }
-    /// <summary>
-    /// 加载存储的对象
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <returns></returns>
-    protected async Task<T> LoadData<T>()
-    {
-        var json = await Interop.PluginStorage.Getter.Invoke();
-        if (json == string.Empty)
-        {
-            json = "{}";
-        }
-        var data = JsonSerializer.Deserialize<T>(json, _options)!;
-        return data;
-    }
-
     public virtual void Dispose()
     {
         
