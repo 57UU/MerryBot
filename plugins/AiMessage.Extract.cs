@@ -92,7 +92,7 @@ public partial class AiMessage
         if (referMessage != null)
         {
             var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1, interpretImage: true);
-            referenceMessage = $"\n引用内容：\n{extractedMessage}";
+            referenceMessage = $"<引用内容：{extractedMessage}/>";
         }
         return referenceMessage ?? "";
     }

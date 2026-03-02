@@ -11,7 +11,7 @@
 <script src="/js/BenzAMRRecorder.min.js"></script>
 <script>
 	window.amrPlayers = {};
-	window.playAmrAudio = function(url) {
+	window.playAmrAudio = function (url) {
 		if (window.amrPlayers[url]) {
 			var player = window.amrPlayers[url];
 			if (player.isPlaying()) {
@@ -23,10 +23,10 @@
 		}
 		var amr = new BenzAMRRecorder();
 		window.amrPlayers[url] = amr;
-		amr.initWithUrl(url).then(function() {
+		amr.initWithUrl(url).then(function () {
 			amr.play();
 		});
-		amr.onEnded(function() {
+		amr.onEnded(function () {
 		});
 	};
 </script>
@@ -43,13 +43,19 @@
 				<div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
 					<ul class="list-group-custom">
 						@foreach (var groupId in GroupIds)
+
 						{
-							<li class="list-group-item-custom @(SelectedGroupId == groupId ? "active-custom" : "")" @onclick="async () => await SelectGroup(groupId)">
-								@if (GroupNameCache.TryGetValue(groupId, out var groupNameEntry) && !string.IsNullOrEmpty(groupNameEntry.Name))
+							<li class="list-group-item-custom @(SelectedGroupId == groupId ? "active-custom" : "")"
+							@onclick="async () => await SelectGroup(groupId)">
+								@if (GroupNameCache.TryGetValue(groupId, out var groupNameEntry) &&
+										!string.IsNullOrEmpty(groupNameEntry.Name))
+
 								{
 									<span>@groupNameEntry.Name (@groupId)</span>
 								}
+
 								else
+
 								{
 									<span>@groupId</span>
 								}
@@ -65,25 +71,36 @@
 			<div class="card-full-height">
 				<div class="card-header-custom">
 					@if (SelectedGroupId > 0)
+
 					{
-						@if (GroupNameCache.TryGetValue(SelectedGroupId, out var groupInfo) && !string.IsNullOrEmpty(groupInfo.Name))
+						@if (GroupNameCache.TryGetValue(SelectedGroupId, out var groupInfo) &&
+								!string.IsNullOrEmpty(groupInfo.Name))
+
 						{
-							<span>@groupInfo.Name (@SelectedGroupId) - 成员: @groupInfo.MemberCount/@groupInfo.MaxMemberCount | 更新于: @groupInfo.UpdatedTime.ToString("yyyy-MM-dd HH:mm")</span>
+							<span>@groupInfo.Name (@SelectedGroupId) - 成员: @groupInfo.MemberCount/@groupInfo.MaxMemberCount |
+								更新于: @groupInfo.UpdatedTime.ToString("yyyy-MM-dd HH:mm")</span>
 						}
+
 						else
+
 						{
 							<span>群聊 @SelectedGroupId 的消息</span>
 						}
 					}
+
 					else
+
 					{
 						<span>请选择一个群聊</span>
 					}
 				</div>
-				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" @onscroll="HandleScroll" id="group-message-container">
+				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" @onscroll="HandleScroll"
+					id="group-message-container">
 					@if (SelectedGroupId > 0)
+
 					{
 						@if (IsLoading && CurrentPage == 1)
+
 						{
 							<div class="text-center-custom text-muted-custom py-2-custom">
 								加载中...
@@ -91,36 +108,46 @@
 						}
 
 						@if (GroupMessageList.Any())
+
 						{
 							<div class="message-container-custom" id="group-message-list">
 								@if (IsLoadingMore)
+
 								{
 									<div class="text-center-custom text-muted-custom py-2-custom">
 										加载更多消息...
 									</div>
 								}
 								@foreach (var message in ReversedMessages)
+
 								{
 									@* sender *@
-									<div class="@(message.IsDeleted ? "message-item-deleted-custom" : "message-item-custom") mb-3-custom">
+									<div
+										class="@(message.IsDeleted ? "message-item-deleted-custom" : "message-item-custom") mb-3-custom">
 										<div class="message-header-custom">
 
 											<p>
 												<strong>@message.SenderNickname</strong>
-												  @message.SenderId
-												  @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
-												
+												@message.SenderId
+												@(!string.IsNullOrEmpty(message.SenderGroupNickname) ?
+													$"({message.SenderGroupNickname})" : "")
+
 											</p>
 
-											<span class="text-muted-custom float-end-custom">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
+											<span class="text-muted-custom float-end-custom">
+												@message.MessageId &nbsp;
+												@message.Time.ToString("yyyy-MM-dd HH:mm:ss")
+											</span>
 										</div>
 										@* content *@
 										<div class="message-content-custom">
 											@if (message.IsDeleted)
+
 											{
 												<span class="message-deleted-text-custom">已撤回</span>
 											}
 											@foreach (var msg in message.Messages)
+
 											{
 												@RenderMessage(msg)
 											}
@@ -129,14 +156,18 @@
 								}
 							</div>
 						}
+
 						else if (!IsLoading)
+
 						{
 							<div class="text-center-custom text-muted-custom mt-5-custom">
 								暂无消息
 							</div>
 						}
 					}
+
 					else
+
 					{
 						<div class="text-center-custom text-muted-custom mt-5-custom">
 							请从左侧选择一个群聊
@@ -159,277 +190,482 @@
 </div>
 
 <script>
-    let scrollTimeout = null;
-    
-    function scrollToElementBottom(elementId) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            element.scrollTop = element.scrollHeight;
-        }
-    }
-    
-    function checkScrollPosition(elementId, dotNetRef) {
-        const element = document.getElementById(elementId);
-        if (element && element.scrollTop <= 50) {
-            dotNetRef.invokeMethodAsync('LoadMoreMessages');
-        }
-    }
-    
-    function handleScrollWithDebounce(elementId, dotNetRef) {
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout);
-        }
-        scrollTimeout = setTimeout(() => {
-            checkScrollPosition(elementId, dotNetRef);
-        }, 200);
-    }
-    
-    function openForwardModal(forwardId) {
-        const modal = document.getElementById('forward-modal');
-        const iframe = document.getElementById('forward-iframe');
-        iframe.src = '/forwardedmessage?id=' + forwardId + '&embed=1';
-        modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
-    
-    function closeForwardModal() {
-        const modal = document.getElementById('forward-modal');
-        const iframe = document.getElementById('forward-iframe');
-        modal.style.display = 'none';
-        iframe.src = '';
-        document.body.style.overflow = '';
-    }
+	let scrollTimeout = null;
+
+	function scrollToElementBottom(elementId) {
+		const element = document.getElementById(elementId);
+		if (element) {
+			element.scrollTop = element.scrollHeight;
+		}
+	}
+
+	function checkScrollPosition(elementId, dotNetRef) {
+		const element = document.getElementById(elementId);
+		if (element && element.scrollTop <= 50) {
+			dotNetRef.invokeMethodAsync('LoadMoreMessages');
+		}
+	}
+
+	function handleScrollWithDebounce(elementId, dotNetRef) {
+		if (scrollTimeout) {
+			clearTimeout(scrollTimeout);
+		}
+		scrollTimeout = setTimeout(() => {
+			checkScrollPosition(elementId, dotNetRef);
+		}, 200);
+	}
+
+	function openForwardModal(forwardId) {
+		const modal = document.getElementById('forward-modal');
+		const iframe = document.getElementById('forward-iframe');
+		iframe.src = '/forwardedmessage?id=' + forwardId + '&embed=1';
+		modal.style.display = 'flex';
+		document.body.style.overflow = 'hidden';
+	}
+
+	function closeForwardModal() {
+		const modal = document.getElementById('forward-modal');
+		const iframe = document.getElementById('forward-iframe');
+		modal.style.display = 'none';
+		iframe.src = '';
+		document.body.style.overflow = '';
+	}
 </script>
 
 @code {
 	private List<long> GroupIds { get; set; } = new List<long>();
+
 	private Dictionary<long, GroupNameEntry> GroupNameCache { get; set; } = new Dictionary<long, GroupNameEntry>();
+
 	private long SelectedGroupId { get; set; } = 0;
+
 	private List<GroupMessage> GroupMessageList { get; set; } = new List<GroupMessage>();
+
 	private bool IsLoading { get; set; } = false;
+
 	private bool IsLoadingMore { get; set; } = false;
+
 	private int CurrentPage { get; set; } = 1;
+
 	private int PageSize { get; set; } = 50;
+
 	private bool HasMoreMessages { get; set; } = true;
+
 	private DotNetObjectReference<GroupMessages>? _dotNetRef;
+
 	private bool _isDisposed;
+
+
 
 	private IEnumerable<GroupMessage> ReversedMessages => GroupMessageList.AsEnumerable().Reverse();
 
+
+
 	protected override async Task OnInitializedAsync()
+
 	{
+
 		await LoadGroupIds();
 
+
+
 		if (GroupIds.Any())
+
 		{
+
 			SelectedGroupId = GroupIds[0];
+
 			await LoadGroupMessages(SelectedGroupId, false);
+
 		}
+
 	}
+
+
 
 	protected override async Task OnAfterRenderAsync(bool firstRender)
+
 	{
+
 		if (firstRender)
+
 		{
+
 			_dotNetRef = DotNetObjectReference.Create(this);
+
 			if (SelectedGroupId > 0)
+
 			{
+
 				await ScrollToBottom();
+
 			}
+
 		}
+
 	}
+
+
 
 	public async ValueTask DisposeAsync()
+
 	{
+
 		if (!_isDisposed)
+
 		{
+
 			if (_dotNetRef != null)
+
 			{
+
 				_dotNetRef.Dispose();
+
 			}
+
 			_isDisposed = true;
+
 		}
+
 	}
+
+
 
 	private async Task LoadGroupIds()
+
 	{
+
 		try
+
 		{
+
 			GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
+
 			// 加载群名称缓存
+
 			var allGroupNames = await HistoryRecorder.GetAllGroupNamesAsync();
+
 			GroupNameCache = allGroupNames.ToDictionary(g => g.GroupId, g => g);
+
 		}
+
 		catch (Exception ex)
+
 		{
+
 			Console.WriteLine($"Error loading group IDs: {ex.Message}");
+
 			GroupIds = new List<long> { 0 };
+
 		}
+
 	}
+
+
 
 	private async Task LoadGroupMessages(long groupId, bool shouldScroll = true)
+
 	{
+
 		CurrentPage = 1;
+
 		HasMoreMessages = true;
+
 		IsLoading = true;
+
 		try
+
 		{
+
 			GroupMessageList = await HistoryRecorder.GetMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
+
 			if (shouldScroll)
+
 			{
+
 				await Task.Delay(100);
+
 				await ScrollToBottom();
+
 			}
+
 		}
+
 		catch (Exception ex)
+
 		{
+
 			Console.WriteLine($"Error loading group messages: {ex.Message}");
+
 			GroupMessageList = new List<GroupMessage>();
+
 		}
+
 		finally
+
 		{
+
 			IsLoading = false;
+
 		}
+
 	}
+
+
 
 	private async Task LoadMoreGroupMessages()
+
 	{
+
 		if (IsLoadingMore || !HasMoreMessages)
+
 			return;
-		
+
+
+
 		IsLoadingMore = true;
+
 		CurrentPage++;
-		
+
+
+
 		try
+
 		{
+
 			var moreMessages = await HistoryRecorder.GetMessagesByGroupIdAsync(SelectedGroupId, CurrentPage, PageSize);
+
 			if (moreMessages.Any())
+
 			{
+
 				var oldScrollHeight = await GetScrollHeight();
+
 				var oldScrollTop = await GetScrollTop();
-				
+
+
+
 				GroupMessageList.AddRange(moreMessages);
-				
+
+
+
 				await Task.Delay(50);
-				
+
+
+
 				var newScrollHeight = await GetScrollHeight();
+
 				var scrollPosition = oldScrollTop + (newScrollHeight - oldScrollHeight);
-				
+
+
+
 				await SetScrollTop(scrollPosition);
+
 			}
+
 			else
+
 			{
+
 				HasMoreMessages = false;
+
 			}
+
 		}
+
 		catch (Exception ex)
+
 		{
+
 			Console.WriteLine($"Error loading more group messages: {ex.Message}");
+
 		}
+
 		finally
+
 		{
+
 			IsLoadingMore = false;
+
 		}
+
 	}
+
+
 
 	private async Task<double> GetScrollHeight()
+
 	{
+
 		return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('group-message-container').scrollHeight");
+
 	}
+
+
 
 	private async Task<double> GetScrollTop()
+
 	{
+
 		return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('group-message-container').scrollTop");
+
 	}
+
+
 
 	private async Task SetScrollTop(double scrollTop)
+
 	{
+
 		await JSRuntime.InvokeVoidAsync("eval", $"document.getElementById('group-message-container').scrollTop = {scrollTop}");
+
 	}
+
+
 
 	private async Task HandleScroll(EventArgs e)
+
 	{
+
 		if (_dotNetRef != null)
+
 		{
+
 			await JSRuntime.InvokeVoidAsync("handleScrollWithDebounce", "group-message-container", _dotNetRef);
+
 		}
+
 	}
-	
+
+
+
 	private void OpenForwardModal(string forwardId)
+
 	{
+
 		JSRuntime.InvokeVoidAsync("openForwardModal", forwardId);
+
 	}
-	
+
+
+
 	[JSInvokable]
+
 	public async Task LoadMoreMessages()
+
 	{
+
 		if (HasMoreMessages && !IsLoadingMore)
+
 		{
+
 			await LoadMoreGroupMessages();
+
 		}
+
 	}
+
+
 
 	private async Task ScrollToBottom()
+
 	{
+
 		await JSRuntime.InvokeVoidAsync("scrollToElementBottom", "group-message-container");
+
 	}
+
+
 
 	private async Task SelectGroup(long groupId)
+
 	{
+
 		SelectedGroupId = groupId;
+
 		await LoadGroupMessages(groupId);
+
 	}
 
+
+
 	private RenderFragment RenderMessage(object msg)
+
 	{
+
 		return __builder =>
+
 		{
+
 			try
+
 			{
+
 				// 直接根据消息对象的类型进行处理
+
 				if (msg is NapcatClient.MessageType.TextData textData)
+
 				{
 					<span>@textData.Text</span>
 				}
+
 				else if (msg is NapcatClient.MessageType.AtData atData)
+
 				{
 					<span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
 				}
+
 				else if (msg is NapcatClient.MessageType.FaceData faceData)
+
 				{
 					<span class="text-muted-custom">[表情: @faceData.ToChinese()]</span>
 				}
+
 				else if (msg is NapcatClient.MessageType.ImageData imageData)
+
 				{
 					<div class="mt-1-custom">
 						<div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
-						<img src="/api/image/@imageData.Url" alt="@imageData.Summary" class="img-fluid-custom rounded-custom" style="max-height: 300px;" />
+						<img src="/api/image/@imageData.Url" alt="@imageData.Summary" class="img-fluid-custom rounded-custom"
+							style="max-height: 300px;" />
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.FileData fileData)
+
 				{
 					<div class="mt-1-custom">
-						<a href="/api/file/@fileData.Url?name=@fileData.File" download="@fileData.File" class="text-primary-custom" title="点击下载文件">
+						<a href="/api/file/@fileData.Url?name=@fileData.File" download="@fileData.File" class="text-primary-custom"
+							title="点击下载文件">
 							[文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize?? 0))
 						</a>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.RecordData recordData)
+
 				{
 					<div class="mt-1-custom d-flex align-items-center gap-2">
-						<button type="button" style="background: none; border: none; color: #0d6efd; cursor: pointer; padding: 0; font-size: 1rem;" @onclick='() => PlayAmr($"/api/file/{recordData.Url}")' title="点击播放语音">
+						<button type="button"
+							style="background: none; border: none; color: #0d6efd; cursor: pointer; padding: 0; font-size: 1rem;"
+						@onclick='() => PlayAmr($"/api/file/{recordData.Url}")' title="点击播放语音">
 							▶
 						</button>
 						<span class="text-primary-custom">@(recordData.Path ?? "语音消息")</span>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.VideoData videoData)
+
 				{
 					<div class="mt-1-custom">
-						<video src="/api/file/@videoData.Url" controls preload="metadata" style="max-height: 400px; border-radius: 8px;"></video>
+						<video src="/api/file/@videoData.Url" controls preload="metadata"
+							style="max-height: 400px; border-radius: 8px;"></video>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.ForwardData forwardData)
+
 				{
 					<div class="mt-1-custom">
 						<a href="javascript:void(0)" class="text-primary-custom" @onclick="() => OpenForwardModal(forwardData.Id)">
@@ -437,64 +673,92 @@
 						</a>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.ReplyData replyData)
+
 				{
 					<div class="mt-1-custom text-muted-custom">
 						[回复] 消息 ID: @replyData.Id
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.JsonData jsonData)
+
 				{
 					<div class="mt-1-custom text-muted-custom">
 						[卡片消息]
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.MusicData musicData)
+
 				{
 					<div class="mt-1-custom">
 						<span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.DiceData diceData)
+
 				{
 					<div class="mt-1-custom">
 						<span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.RpsData rpsData)
+
 				{
 					<div class="mt-1-custom">
-						<span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
+						<span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" :
+		"布")</span>
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.PokeData pokeData)
+
 				{
 					<div class="mt-1-custom text-muted-custom">
 						[戳一戳] @pokeData.Type
 					</div>
 				}
+
 				else if (msg is NapcatClient.MessageType.MfaceData mfaceData)
+
 				{
 					<div class="mt-1-custom text-muted-custom">
 						[商城表情] @mfaceData.Summary
 					</div>
 				}
+
 				else
+
 				{
 					<span class="text-muted-custom">[未知消息类型: @msg.GetType().Name]</span>
 				}
+
 			}
+
 			catch (Exception ex)
+
 			{
 				<span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
 			}
 		};
+
 	}
 
 
 
+
+
+
+
 	private async Task PlayAmr(string url)
+
 	{
+
 		await JSRuntime.InvokeVoidAsync("playAmrAudio", url);
+
 	}
 }

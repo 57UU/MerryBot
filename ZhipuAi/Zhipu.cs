@@ -352,6 +352,7 @@ public partial class ZhipuAi : IDisposable
         return usableFunctionCall;
 
     }
+    private static readonly MediaTypeHeaderValue JsonMediaType = new("application/json");
     public async Task<ApiResponse> Request(IEnumerable<ZhipuMessage> messages, long specialTag)
     {
         var usableFunctionCall = await GetUsableToolsByTag(specialTag);
@@ -368,7 +369,7 @@ public partial class ZhipuAi : IDisposable
         // 序列化请求数据为JSON
         string jsonData = JsonSerializer.Serialize(requestData, options);
         req.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-        req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        req.Content.Headers.ContentType = JsonMediaType;
 
         // 发送POST请求
         HttpResponseMessage response = await client.SendAsync(req);
