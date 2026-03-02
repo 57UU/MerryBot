@@ -9,116 +9,7 @@ namespace DataService;
 
 public static class StorageMigration
 {
-    public static async Task<MigrationResult> MigrateAsync(
-        string sourceDbPath,
-        string targetDbPath,
-        string storagePath,
-        int batchSize = 100)
-    {
-        var result = new MigrationResult();
-        
-        using var sourceDb = new LiteDatabaseAsync(sourceDbPath);
-        using var targetDb = new LiteDatabaseAsync(targetDbPath);
-        var objectStorage = new FileSystemObjectStorage(storagePath);
-        
-        var sourceImages = sourceDb.GetCollection<OldImageEntry>("images");
-        var sourceFiles = sourceDb.GetCollection<OldFileEntry>("files");
-        
-        var targetImages = targetDb.GetCollection<ImageEntry>("images");
-        var targetFiles = targetDb.GetCollection<FileEntry>("files");
-        
-        await targetImages.EnsureIndexAsync(x => x.Hash);
-        await targetFiles.EnsureIndexAsync(x => x.Hash);
-        
-        await MigrateImagesAsync(sourceImages, targetImages, objectStorage, result, batchSize);
-        await MigrateFilesAsync(sourceFiles, targetFiles, objectStorage, result, batchSize);
-        
-        return result;
-    }
-
-    private static async Task MigrateImagesAsync(
-        ILiteCollectionAsync<OldImageEntry> source,
-        ILiteCollectionAsync<ImageEntry> target,
-        IObjectStorage storage,
-        MigrationResult result,
-        int batchSize)
-    {
-        var total = await source.CountAsync();
-        var processed = 0;
-        
-        while (processed < total)
-        {
-            var batch = await source.Query()
-                .Skip(processed)
-                .Limit(batchSize)
-                .ToListAsync();
-            
-            foreach (var oldEntry in batch)
-            {
-                try
-                {
-                    if (oldEntry.Data != null && oldEntry.Data.Length > 0)
-                    {
-                        await storage.StoreAsync("images", oldEntry.Hash, oldEntry.Data);
-                    }
-                    
-                    var newEntry = new ImageEntry(oldEntry.Id, oldEntry.OriginalUrl, oldEntry.Hash);
-                    await target.InsertAsync(newEntry);
-                    result.ImagesMigrated++;
-                }
-                catch (Exception ex)
-                {
-                    result.Errors.Add($"Image {oldEntry.Id}: {ex.Message}");
-                }
-            }
-            
-            processed += batch.Count;
-            result.ImagesProcessed = processed;
-        }
-    }
-
-    private static async Task MigrateFilesAsync(
-        ILiteCollectionAsync<OldFileEntry> source,
-        ILiteCollectionAsync<FileEntry> target,
-        IObjectStorage storage,
-        MigrationResult result,
-        int batchSize)
-    {
-        var total = await source.CountAsync();
-        var processed = 0;
-        
-        while (processed < total)
-        {
-            var batch = await source.Query()
-                .Skip(processed)
-                .Limit(batchSize)
-                .ToListAsync();
-            
-            foreach (var oldEntry in batch)
-            {
-                try
-                {
-                    if (oldEntry.Data != null && oldEntry.Data.Length > 0)
-                    {
-                        await storage.StoreAsync("files", oldEntry.Hash, oldEntry.Data);
-                    }
-                    
-                    var newEntry = new FileEntry(oldEntry.Id, oldEntry.OriginalUrl, oldEntry.Hash);
-                    await target.InsertAsync(newEntry);
-                    result.FilesMigrated++;
-                }
-                catch (Exception ex)
-                {
-                    result.Errors.Add($"File {oldEntry.Id}: {ex.Message}");
-                }
-            }
-            
-            processed += batch.Count;
-            result.FilesProcessed = processed;
-        }
-    }
-
-    public static async Task<MigrationResult> MigrateInPlaceAsync(
+        public static async Task<MigrationResult> MigrateInPlaceAsync(
         string dbPath,
         string storagePath,
         int batchSize = 100)
@@ -156,10 +47,12 @@ public static class StorageMigration
             {
                 try
                 {
+                    var safename = HistoryRecorder.ToFileNameSafeBase64String(entry.Hash);
                     if (entry.Data != null && entry.Data.Length > 0)
                     {
-                        await storage.StoreAsync("images", entry.Hash, entry.Data);
+                        await storage.StoreAsync("images", safename, entry.Data);
                         entry.Data = null;
+                        entry.Hash = safename;
                         await collection.UpdateAsync(entry);
                     }
                     result.ImagesMigrated++;
@@ -195,10 +88,13 @@ public static class StorageMigration
             {
                 try
                 {
+                    var safename = HistoryRecorder.ToFileNameSafeBase64String(entry.Hash);
                     if (entry.Data != null && entry.Data.Length > 0)
                     {
-                        await storage.StoreAsync("files", entry.Hash, entry.Data);
+                        
+                        await storage.StoreAsync("files", safename, entry.Data);
                         entry.Data = null;
+                        entry.Hash = safename;
                         await collection.UpdateAsync(entry);
                     }
                     result.FilesMigrated++;

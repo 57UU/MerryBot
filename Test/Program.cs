@@ -14,11 +14,8 @@ public static class Program
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
 
-        if (args.Length > 0 && args[0] == "migrate")
-        {
-            await MigrateStorage(dataPath);
-            return;
-        }
+        await MigrateStorage(dataPath);
+    
     }
 
     public static async Task MigrateStorage(string dataPath)
@@ -39,16 +36,16 @@ public static class Program
         Console.WriteLine($"当前数据库大小: {FormatFileSize(dbFileInfo.Length)}");
         Console.WriteLine($"存储路径: {storagePath}");
         Console.WriteLine("是否继续? (y/n)");
-        
+
         var input = Console.ReadLine();
         if (input?.ToLower() != "y")
         {
             Console.WriteLine("已取消");
             return;
         }
-        
+
         var result = await StorageMigration.MigrateInPlaceAsync(dbPath, storagePath);
-        
+
         Console.WriteLine($"迁移完成: {result}");
         if (!result.Success)
         {
@@ -59,16 +56,6 @@ public static class Program
             }
             return;
         }
-
-        Console.WriteLine("正在重建数据库以释放空间...");
-        using (var db = new LiteDB.LiteDatabase(dbPath))
-        {
-            var diff = db.Rebuild();
-            Console.WriteLine($"重建完成，释放空间: {FormatFileSize(diff)}");
-        }
-        
-        dbFileInfo.Refresh();
-        Console.WriteLine($"重建后数据库大小: {FormatFileSize(dbFileInfo.Length)}");
     }
 
     private static string FormatFileSize(long bytes)
