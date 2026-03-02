@@ -126,6 +126,11 @@ public class ModelPreset
         "https://api.xiaomimimo.com/v1",
         "xiaomi"
         );
+    public static readonly ModelPreset MiniMax2_5 = new(
+        "MiniMax-M2.5",
+        "https://api.minimax.chat/v1",
+        "minimax"
+        );
 }
 
 public record DashscopeModelPreset(

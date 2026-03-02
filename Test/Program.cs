@@ -13,7 +13,7 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
-    
+        await TestZhipuAi();
     }
 
 
@@ -21,7 +21,7 @@ public static class Program
     {
         var config = Config.Instance;
 
-        var model = ModelPreset.Glm_4_7_Flash_Free;
+        var model = ModelPreset.MiniMax2_5;
         var token_key = model.ApiTokenDictKey;
         string token = ((JsonElement)config.Variables[token_key]).GetString()!;
         string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString()!;
