@@ -13,63 +13,9 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
-
-        await MigrateStorage(dataPath);
     
     }
 
-    public static async Task MigrateStorage(string dataPath)
-    {
-        Console.WriteLine("开始迁移存储...");
-        
-        var dbPath = Path.Combine(dataPath, "group_history.db");
-        var storagePath = Path.Combine(dataPath, "storage");
-        
-        if (!File.Exists(dbPath))
-        {
-            Console.WriteLine($"数据库文件不存在: {dbPath}");
-            return;
-        }
-        
-        var dbFileInfo = new FileInfo(dbPath);
-        Console.WriteLine($"数据库路径: {dbPath}");
-        Console.WriteLine($"当前数据库大小: {FormatFileSize(dbFileInfo.Length)}");
-        Console.WriteLine($"存储路径: {storagePath}");
-        Console.WriteLine("是否继续? (y/n)");
-
-        var input = Console.ReadLine();
-        if (input?.ToLower() != "y")
-        {
-            Console.WriteLine("已取消");
-            return;
-        }
-
-        var result = await StorageMigration.MigrateInPlaceAsync(dbPath, storagePath);
-
-        Console.WriteLine($"迁移完成: {result}");
-        if (!result.Success)
-        {
-            Console.WriteLine("错误列表:");
-            foreach (var error in result.Errors)
-            {
-                Console.WriteLine($"  - {error}");
-            }
-            return;
-        }
-    }
-
-    private static string FormatFileSize(long bytes)
-    {
-        string[] sizes = ["B", "KB", "MB", "GB", "TB"];
-        double len = bytes;
-        int order = 0;
-        while (len >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            len = len / 1024;
-        }
-        return $"{len:0.##} {sizes[order]}";
-    }
 
     public static async Task TestZhipuAi()
     {
