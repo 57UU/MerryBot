@@ -13,6 +13,7 @@ public class StorageManagerPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;
     private string dbPath;
+    private string storagePath;
     private int machineCode;
     WebApplication webApplication;
     
@@ -23,10 +24,11 @@ public class StorageManagerPlugin : Plugin
     public StorageManagerPlugin(PluginInterop interop) : base(interop)
     {
         dbPath = Path.Combine(interop.PathPrefix, "group_history.db");
+        storagePath = Path.Combine(interop.PathPrefix, "storage");
         
-        historyRecorder = new HistoryRecorder(dbPath);
+        historyRecorder = new HistoryRecorder(dbPath, storagePath);
         
-        Logger.Info($"StorageManagerPlugin 初始化完成，群历史数据库路径: {dbPath}");
+        Logger.Info($"StorageManagerPlugin 初始化完成，群历史数据库路径: {dbPath}, 存储路径: {storagePath}");
 
 
         var _machineCode=interop.GetJsonElement(machineCodeKey);

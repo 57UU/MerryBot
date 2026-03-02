@@ -89,45 +89,38 @@ public class ImageEntry
     public long Id { get; set; }
     public string OriginalUrl { get; set; }
     public string Hash { get; set; }
-    public byte[] Data { get; set; }
 
     public ImageEntry()
     {
         OriginalUrl = string.Empty;
         Hash = string.Empty;
-        Data = Array.Empty<byte>();
     }
 
-    public ImageEntry(long id, string originalUrl, string hash, byte[] data)
+    public ImageEntry(long id, string originalUrl, string hash)
     {
         Id = id;
         OriginalUrl = originalUrl;
         Hash = hash;
-        Data = data;
     }
 }
 
 public class FileEntry
 {
-    
     public long Id { get; set; }
     public string OriginalUrl { get; set; }
     public string Hash { get; set; }
-    public byte[] Data { get; set; }
 
     public FileEntry()
     {
         OriginalUrl = string.Empty;
         Hash = string.Empty;
-        Data = Array.Empty<byte>();
     }
 
-    public FileEntry(long id, string originalUrl, string hash, byte[] data)
+    public FileEntry(long id, string originalUrl, string hash)
     {
         Id = id;
         OriginalUrl = originalUrl;
         Hash = hash;
-        Data = data;
     }
 }
 

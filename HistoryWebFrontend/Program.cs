@@ -10,7 +10,7 @@ public class Program
     public static void Main()
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        var historyRecorder = new HistoryRecorder($"{dataPath}/group_history.db");
+        var historyRecorder = new HistoryRecorder($"{dataPath}/group_history.db", $"{dataPath}/storage");
         var app = CreateApp(historyRecorder);
         app.Run();
     }
@@ -61,11 +61,16 @@ public class Program
                 return Results.NotFound();
             }
 
+            var data = await historyRecorder.GetImageDataAsync(image.Hash);
+            if (data == null)
+            {
+                return Results.NotFound();
+            }
+
             var contentType = GetImageContentType(image.OriginalUrl);
-            return Results.File(image.Data, contentType);
+            return Results.File(data, contentType);
         });
 
-        // 文件API
         app.MapGet("/api/file/{id}", async (long id, [FromQuery] string? name, HistoryRecorder historyRecorder) =>
         {
             var file = await historyRecorder.GetFileByIdAsync(id);
@@ -74,9 +79,15 @@ public class Program
                 return Results.NotFound();
             }
 
+            var data = await historyRecorder.GetFileDataAsync(file.Hash);
+            if (data == null)
+            {
+                return Results.NotFound();
+            }
+
             var contentType = GetFileContentType(file.OriginalUrl);
             var fileName = name?? id.ToString();
-            return Results.File(file.Data, contentType, fileName);
+            return Results.File(data, contentType, fileName);
         });
 
         return app;

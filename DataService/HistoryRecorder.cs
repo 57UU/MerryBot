@@ -22,10 +22,14 @@ public class HistoryRecorder : IDisposable
     ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
+    private readonly IObjectStorage _objectStorage;
+    private const string ImageBucket = "images";
+    private const string FileBucket = "files";
     
-    public HistoryRecorder(string dbPath, int machineCode = 0)
+    public HistoryRecorder(string dbPath, string storagePath, int machineCode = 0)
     {
         _dbPath = dbPath;
+        _objectStorage = new FileSystemObjectStorage(storagePath);
         database = new LiteDatabaseAsync(dbPath);
         messagesCollection = database.GetCollection<GroupMessage>("messages");
         imageBedCollection = database.GetCollection<ImageEntry>("images");
@@ -66,6 +70,7 @@ public class HistoryRecorder : IDisposable
     public void Dispose()
     {
         database.Dispose();
+        _objectStorage?.Dispose();
     }
 
     public async Task<bool> RecordMessageAsync(GroupMessage message)
@@ -162,7 +167,8 @@ public class HistoryRecorder : IDisposable
         }
         
         var id = GenerateId();
-        var imageEntry = new ImageEntry(id, originalUrl, hash, data);
+        await _objectStorage.StoreAsync(ImageBucket, hash, data);
+        var imageEntry = new ImageEntry(id, originalUrl, hash);
         await imageBedCollection.InsertAsync(imageEntry);
         return imageEntry;
     }
@@ -177,7 +183,8 @@ public class HistoryRecorder : IDisposable
         }
         
         var id = GenerateId();
-        var fileEntry = new FileEntry(id, originalUrl, hash, data);
+        await _objectStorage.StoreAsync(FileBucket, hash, data);
+        var fileEntry = new FileEntry(id, originalUrl, hash);
         await fileBedCollection.InsertAsync(fileEntry);
         return fileEntry;
     }
@@ -190,6 +197,16 @@ public class HistoryRecorder : IDisposable
     public async Task<FileEntry?> GetFileByIdAsync(long id)
     {
         return await fileBedCollection.FindOneAsync(x => x.Id == id);
+    }
+
+    public async Task<byte[]?> GetImageDataAsync(string hash)
+    {
+        return await _objectStorage.GetAsync(ImageBucket, hash);
+    }
+
+    public async Task<byte[]?> GetFileDataAsync(string hash)
+    {
+        return await _objectStorage.GetAsync(FileBucket, hash);
     }
 
     private readonly RequestCaching requestCaching = new(TimeSpan.FromHours(24));
