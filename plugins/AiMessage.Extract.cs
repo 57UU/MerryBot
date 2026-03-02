@@ -10,12 +10,12 @@ namespace BotPlugin;
 
 public partial class AiMessage
 {
-    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, bool interpretImage = false)
+    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit=null)
     {
         StringBuilder sb = new();
         foreach (var item in chain)
         {
-            var result = await ProcessMessageItem(item, groupId, recursive, depth, interpretImage);
+            var result = await ProcessMessageItem(item, groupId, recursive, depth, resourceLimit?? new ResourceLimit());
             if (!string.IsNullOrEmpty(result))
             {
                 sb.Append(result);
@@ -25,7 +25,7 @@ public partial class AiMessage
         return sb.ToString();
     }
 
-    async Task<string> ProcessMessageItem(TypedMessage item, long groupId, bool recursive, int depth, bool interpretImage)
+    async Task<string> ProcessMessageItem(TypedMessage item, long groupId, bool recursive, int depth, ResourceLimit limit)
     {
         if (item is TextData textData)
         {
@@ -37,7 +37,7 @@ public partial class AiMessage
         }
         else if (item is ReplyData replyData && recursive)
         {
-            return await AppendReplyData(replyData, groupId, depth, interpretImage);
+            return await AppendReplyData(replyData, groupId, depth, limit);
         }
         else if (item is JsonData jsonData)
         {
@@ -49,7 +49,7 @@ public partial class AiMessage
         }
         else if (item is ImageData imageData)
         {
-            return await AppendImageData(imageData, depth, interpretImage);
+            return await AppendImageData(imageData, depth, limit);
         }
         else if (item is FaceData faceData)
         {
@@ -84,14 +84,14 @@ public partial class AiMessage
         }
     }
 
-    async Task<string> AppendReplyData(ReplyData replyData, long groupId, int depth, bool interpretImage)
+    async Task<string> AppendReplyData(ReplyData replyData, long groupId, int depth, ResourceLimit resourceLimit)
     {
         string? referenceMessage = null;
         string referMessageId = replyData.Id;
         var referMessage = await Actions.GetMessageById(referMessageId);
         if (referMessage != null)
         {
-            var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1, interpretImage: true);
+            var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1,resourceLimit: resourceLimit);
             referenceMessage = $"<引用内容：{extractedMessage}/>";
         }
         return referenceMessage ?? "";
@@ -149,14 +149,15 @@ public partial class AiMessage
         }
     }
 
-    async Task<string> AppendImageData(ImageData imageData, int depth, bool interpretImage)
+    async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)
     {
-        if ((depth == 0 || interpretImage) && ImageInterpreterPool != null && imageData.Url != null)
+        if ((depth == 0 || limit.ImageLimit>0) && ImageInterpreterPool != null && imageData.Url != null)
         {
             var imageUrl = imageData.Url;
             try
             {
                 var description = await ImageInterpreterPool!.Interpret(imageUrl);
+                limit.ImageLimit--;
                 return $"<image：{description}/>" ;
             }
             catch (Exception)
@@ -179,4 +180,10 @@ public partial class AiMessage
         }
         return "<表情unknown/>";
     }
+}
+
+
+internal class ResourceLimit
+{
+    public int ImageLimit { get; set; } = 3;
 }
