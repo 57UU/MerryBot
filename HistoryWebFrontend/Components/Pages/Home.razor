@@ -16,6 +16,8 @@
 <h2>文件大小</h2>
 <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
 	<StatCard Title="群聊历史库" Value="@GroupHistoryDbSize" />
+	<StatCard Title="图片存储" Value="@ImageStorageSize" />
+	<StatCard Title="文件存储" Value="@FileStorageSize" />
 </div>
 
 @code {
@@ -26,12 +28,14 @@
 	private int ImageCount { get; set; } = 0;
 	private int FileCount { get; set; } = 0;
 	private string GroupHistoryDbSize { get; set; } = "Unavaliable";
+	private string ImageStorageSize { get; set; } = "Unavaliable";
+	private string FileStorageSize { get; set; } = "Unavaliable";
 
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadGroupIds();
 		await LoadStatistics();
-		LoadDbSizes();
+		await LoadDbSizesAsync();
 	}
 
 	private async Task LoadGroupIds()
@@ -78,11 +82,13 @@
 		}
 	}
 
-	private void LoadDbSizes()
+	private async Task LoadDbSizesAsync()
 	{
 		try
 		{
 			GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
+			ImageStorageSize = await HistoryRecorder.GetImageStorageSizeAsync();
+			FileStorageSize = await HistoryRecorder.GetFileStorageSizeAsync();
 		}
 		catch (Exception ex)
 		{

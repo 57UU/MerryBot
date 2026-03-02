@@ -351,7 +351,7 @@ public class HistoryRecorder : IDisposable
             if (File.Exists(_dbPath))
             {
                 var fileInfo = new FileInfo(_dbPath);
-                return FormatFileSize(fileInfo.Length);
+                return Format.FormatFileSize(fileInfo.Length);
             }
             return "0 B";
         }
@@ -360,18 +360,46 @@ public class HistoryRecorder : IDisposable
             return "Unknown";
         }
     }
-    
-    private static string FormatFileSize(long bytes)
+
+    public async Task<string> GetObjectStorageSizeAsync()
     {
-        string[] sizes = ["B", "KB", "MB", "GB", "TB"];
-        double len = bytes;
-        int order = 0;
-        while (len >= 1024 && order < sizes.Length - 1)
+        try
         {
-            order++;
-            len = len / 1024;
+            var imageSize = await _objectStorage.GetTotalSizeAsync(ImageBucket);
+            var fileSize = await _objectStorage.GetTotalSizeAsync(FileBucket);
+            var totalSize = imageSize + fileSize;
+            return Format.FormatFileSize(totalSize);
         }
-        return $"{len:0.##} {sizes[order]}";
+        catch
+        {
+            return "Unknown";
+        }
+    }
+
+    public async Task<string> GetImageStorageSizeAsync()
+    {
+        try
+        {
+            var imageSize = await _objectStorage.GetTotalSizeAsync(ImageBucket);
+            return Format.FormatFileSize(imageSize);
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+
+    public async Task<string> GetFileStorageSizeAsync()
+    {
+        try
+        {
+            var fileSize = await _objectStorage.GetTotalSizeAsync(FileBucket);
+            return Format.FormatFileSize(fileSize);
+        }
+        catch
+        {
+            return "Unknown";
+        }
     }
 
     public async Task<bool> RecordAiMessageAsync(long groupId, string messageType, string content)

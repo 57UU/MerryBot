@@ -410,7 +410,7 @@
 				{
 					<div class="mt-1-custom">
 						<a href="/api/file/@fileData.Url?name=@fileData.File" download="@fileData.File" class="text-primary-custom" title="点击下载文件">
-							[文件] @fileData.File (@FormatFileSize(fileData.FileSize?.ToString() ?? "0"))
+							[文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize?? 0))
 						</a>
 					</div>
 				}
@@ -491,21 +491,7 @@
 		};
 	}
 
-	private string FormatFileSize(string sizeStr)
-	{
-		if (long.TryParse(sizeStr, out var size))
-		{
-			if (size < 1024)
-				return $"{size} B";
-			else if (size < 1024 * 1024)
-				return $"{size / 1024:F2} KB";
-			else if (size < 1024 * 1024 * 1024)
-				return $"{size / (1024 * 1024):F2} MB";
-			else
-				return $"{size / (1024 * 1024 * 1024):F2} GB";
-		}
-		return sizeStr;
-	}
+
 
 	private async Task PlayAmr(string url)
 	{

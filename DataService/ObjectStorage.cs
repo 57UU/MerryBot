@@ -10,5 +10,6 @@ public interface IObjectStorage : IDisposable
     Task<bool> ExistsAsync(string bucket, string key);
     Task<bool> DeleteAsync(string bucket, string key);
     Task<long> GetSizeAsync(string bucket, string key);
+    Task<long> GetTotalSizeAsync(string bucket);
     string GetPath(string bucket, string key);
 }

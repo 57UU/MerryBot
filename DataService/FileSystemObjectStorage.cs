@@ -83,6 +83,26 @@ public class FileSystemObjectStorage : IObjectStorage
         return Task.FromResult(fileInfo.Length);
     }
 
+    public async Task<long> GetTotalSizeAsync(string bucket)
+    {
+        return await Task.Run(() =>
+        {
+            var bucketPath = GetBucketPath(bucket);
+            if (!Directory.Exists(bucketPath))
+            {
+                return 0L;
+            }
+            var files = Directory.GetFiles(bucketPath, "*", SearchOption.AllDirectories);
+            long totalSize = 0;
+            foreach (var file in files)
+            {
+                var fileInfo = new FileInfo(file);
+                totalSize += fileInfo.Length;
+            }
+            return totalSize;
+        });
+    }
+
     public void Dispose()
     {
         if (_disposed)
