@@ -1,7 +1,19 @@
 #!/bin/bash
 
 restart_code=101
-runtime="linux-arm64"
+
+case $(uname -m) in
+    x86_64)
+        runtime="linux-x64"
+        ;;
+    aarch64|arm64)
+        runtime="linux-arm64"
+        ;;
+    *)
+        echo "Unknown architecture: $(uname -m), defaulting to linux-arm64"
+        runtime="linux-arm64"
+        ;;
+esac
 # 获取当前脚本所在目录
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
