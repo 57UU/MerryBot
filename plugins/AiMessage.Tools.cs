@@ -88,7 +88,7 @@ public partial class AiMessage
             int timeout = 10;
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.DynamicPrompt = "你可以使用shell工具执行Linux bash，已安装py等程序，user: merrybot";
+            shell.DynamicPrompt = "你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: merrybot";
             shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) =>
