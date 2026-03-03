@@ -218,11 +218,10 @@ internal class Logic
         });
         PluginInitializer<Plugin> pluginInitializer = new();
         Dictionary<Type, PluginInterop> pluginInteropMap = new();
+        logger.Debug($"find plugin: {string.Join(",",allPlugins.Select(p=>p.attribute.Name))}");
         foreach (var (type,attribute) in allPlugins) {
             try
             {
-                logger.Debug($"find plugin {attribute.Name}");
-
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
                         QqGroupIDs,

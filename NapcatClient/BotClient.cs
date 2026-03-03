@@ -112,10 +112,6 @@ public class BotClient
         SelfId = result.userId;
         Nickname = result.nickname;
     }
-    public BotClient(string address, string token, string pathPrefix) : this(address, token, ConsoleLogger.Instance, pathPrefix)
-    {
-        PathPrefix = pathPrefix;
-    }
     public void Close()
     {
         _messageMonitorTimer?.Dispose();

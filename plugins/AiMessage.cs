@@ -35,7 +35,7 @@ public partial class AiMessage : Plugin
     {
         this.aiMessageStorage = storageManager.AiMessageStorage;
         //display available model
-        ModelPreset.DisplayAllModels();
+        //ModelPreset.DisplayAllModels();
         var model = ModelPreset.GetModelByName(
             interop.GetVariable<string>(LLM_KEY)
             );
