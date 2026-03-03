@@ -13,16 +13,24 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
     1919810
   ],
   "authorized-user":114514,//授权用户qq号，插件可在高危操作时验证qq号
-  "variables": {// 插件可以访问这里定义的变量
-    "llm-model": "deepseek-chat",// 选择的llm模型
-    "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
-    "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
-    "ai-prompt": "你是一个助人为乐的AI助手" //ai 提示词
+  "variables": {
+    // 每个插件有独立的命名空间，key为插件id
+    "ai-message": {
+      "llm-model": "deepseek-chat",// 选择的llm模型
+      "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
+      "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
+      "ai-prompt": "你是一个助人为乐的AI助手" //ai 提示词
+    },
+    "storage-manager": {
+      "machine-code": 0
+    }
   }
 }
 ```
 
-note: `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
+note: 
+- `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
+- `variables` 中的 key 是插件的 `id`，每个插件的配置项相互隔离
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
 
@@ -67,14 +75,14 @@ note: `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
 1. 一个插件应当放在`plugins`项目的一个文件中
 2. 应当继承于`Plugin`抽象类
 3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数，可通过依赖注入接收其他插件实例
-4. 在类前面使用属性`PluginTag(string name,string descption,[bool isIgnore=false])`
+4. 在类前面使用属性`PluginTag(string id, string name, string description, [bool isIgnore=false], [int priority=0], [PluginType type=PluginType.Interactive])`
 
 主程序会通过反射加载`plugins`项目下的所有插件类，因此需要满足上述条件。
 
 ## 示例
 插件通过构造函数接收 `PluginInterop` 和其他插件实例，主程序会自动解析依赖顺序（确保能够拓扑排序）并初始化：
 ```csharp
-[PluginTag("About","使用 /about 来查看关于")]
+[PluginTag("about", "About", "使用 /about 来查看关于")]
 public class About : Plugin
 {
     private const string aboutMessage=
@@ -101,7 +109,7 @@ Merry Bot
         {
             Actions.SendGroupMessage(groupId, aboutMessage);
         }
-    } 
+    }
 }
 ```
 
@@ -146,8 +154,6 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |API|Description|Note
 |:---:|:---|:---
 |Actions Actions{get;}|获取`Actions`，用于发送消息
-|Task SaveData\<T>(T data)|异步存储并序列化对象|依赖于[插件存储](#插件存储-pluginstorage)
-|Task\<T> LoadData\<T>()|异步加载并反序列化对象|依赖于[插件存储](#插件存储-pluginstorage)
 |bool IsEnable {set;protected get;}|是否启用|无论是否启用，插件都会被加载，当为假时OnMessageReceived函数不会被调用
 |string? StartsWith {set;get;}|该项是属性，若设置，那么只有以`StartsWith`开头的消息会触发`OnMessageReceived`函数
 |ISimpleLogger logger {get;}|获取`logger`，用于记录日志
@@ -161,7 +167,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性(其实笔者更推荐直接在构造函数中直接注入其他插件实例)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
-|T? GetVariable<T>(string key)|获取设置中`Variable`自定义属性中的内容|
+|T? GetVariable<T>(string key)|获取当前插件命名空间下`Variable`中的配置项|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
 |Action<int> Shutdown|关闭程序，参数为退出码|
 |long AuthorizedUser|获取授权用户的QQ号|
@@ -175,7 +181,7 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### 插件存储-PluginStorage
 
-对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件名），以字符串为单位进行储存于读取，现阶段的实现依赖于`SQLite3`
+对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件id），以字符串为单位进行储存于读取，现阶段的实现依赖于`LiteDB`（一种高性能NoSQL数据库）
 
 |API|Description|
 |:---:|:---|
@@ -203,13 +209,17 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### PluginTag类属性标签
 
-构造函数为`(string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
+构造函数为`(string id, string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
 
-分别对应插件名称，插件描述，是否忽略，插件优先级，插件类型。
+参数说明：
+- `id` - 插件标识符，用于配置文件命名空间隔离
+- `name` - 插件名称，用于显示
+- `description` - 插件描述
+- `isIgnore` - 是否忽略加载
+- `priority` - 插件优先级，决定加载顺序。值越小，优先级越高
+- `type` - 插件类型
 
 当`isIgnore==true`时，插件不会被加载
-
-插件的优先级，决定加载顺序。值越小，优先级越高。
 
 `PluginType` 可选值：
 - `Interactive` - 交互式插件（默认）
