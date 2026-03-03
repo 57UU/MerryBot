@@ -246,7 +246,7 @@ public partial class ZhipuAi : IDisposable
                     var cotEndIndex = msg.Content.IndexOf("</think>");
                     if (cotEndIndex >= 0)
                     {
-                        msg.Content = msg.Content.Substring(cotEndIndex + 4).TrimStart('\n', ' ');
+                        msg.Content = msg.Content.Substring(cotEndIndex + 8).TrimStart('\n', ' ');
                     }
                 }
                 response = msg.Content;
