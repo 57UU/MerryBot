@@ -4,6 +4,7 @@ using NapcatClient;
 using NapcatClient.MessageType;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace MerryBot;
 
@@ -161,6 +162,12 @@ internal partial class Logic
         {
             try
             {
+                // 获取或创建该插件的命名空间字典
+                if (!Config.Instance.Variables.TryGetValue(attribute.Name, out var pluginVars))
+                {
+                    pluginVars = new Dictionary<string, JsonElement>();
+                    Config.Instance.Variables[attribute.Name] = pluginVars;
+                }
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Name),
                         QqGroupIDs,
@@ -170,7 +177,7 @@ internal partial class Logic
                             () => PluginStorageDatabase.GetPluginData(attribute.Name)
                             ),
                         botClient,
-                        Config.Instance.Variables,
+                        pluginVars,
                         Shutdown,
                         AuthorizedUser,
                         CommandLineArguments,

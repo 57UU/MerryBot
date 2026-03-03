@@ -1,6 +1,7 @@
 using BotPlugin;
 using DataProvider;
 using MerryBot;
+using System.Reflection;
 using System.Text.Json;
 using ZhipuClient;
 
@@ -21,8 +22,12 @@ public static class Program
 
         var model = ModelPreset.MiniMax2_5;
         var token_key = model.ApiTokenDictKey;
-        string token = ((JsonElement)config.Variables[token_key]).GetString()!;
-        string prompt = ((JsonElement)config.Variables["ai-prompt"]).GetString()!;
+
+        PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
+
+        var aiVars = config.Variables[tag.Name];
+        string token = aiVars[token_key].GetString()!;
+        string prompt = aiVars["ai-prompt"].GetString()!;
         ZhipuAi zhipu = new ZhipuAi(token, prompt, model);
         while (true)
         {
@@ -67,7 +72,9 @@ public static class Program
     public static async Task TestImagePainterDashscope()
     {
         var model = DashscopeModelPreset.QwenImageMax;
-        string? token = Config.Instance.Variables[model.ApiTokenDictKey].GetString()!;
+        // 使用 "AI机器人" 插件的命名空间
+        var aiVars = Config.Instance.Variables["AI机器人"];
+        string? token = aiVars.TryGetValue(model.ApiTokenDictKey, out var tokenElem) ? tokenElem.GetString() : null;
         if (string.IsNullOrEmpty(token))
         {
             Console.WriteLine("请设置环境变量 DASHSCOPE_API_KEY");

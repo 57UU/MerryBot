@@ -68,5 +68,5 @@ public class Config
     [JsonPropertyName("authorized-user")]
     public long AuthorizedUser = -1;
     [JsonPropertyName("variables")]
-    public Dictionary<string, JsonElement> Variables = new();
+    public Dictionary<string, Dictionary<string, JsonElement>> Variables = new();
 }

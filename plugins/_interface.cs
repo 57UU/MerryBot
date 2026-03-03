@@ -103,13 +103,11 @@ public record PluginInterop(
     /// <returns></returns>
     internal T GetVariable<T>(string key, T defaultValue)
     {
-
         if (!Variables.TryGetValue(key, out var value))
         {
             return defaultValue;
         }
-        var realValue = (JsonElement)value;
-        return realValue.Deserialize<T>()!;
+        return value.Deserialize<T>()!;
     }
     internal JsonElement? GetJsonElement(string key)
     {
@@ -117,7 +115,7 @@ public record PluginInterop(
         {
             return null;
         }
-        return (JsonElement)value;
+        return value;
     }
     internal Nullable<long> GetLongVariable(string key)
     {
@@ -125,8 +123,7 @@ public record PluginInterop(
         {
             return null;
         }
-        var realValue = (JsonElement)value;
-        return realValue.Deserialize<long>()!;
+        return value.Deserialize<long>()!;
     }
     /// <summary>
     /// 在配置文件的变量中查找
@@ -140,8 +137,7 @@ public record PluginInterop(
         {
             return default;
         }
-        var realValue = (JsonElement)value;
-        return realValue.Deserialize<T>();
+        return value.Deserialize<T>();
     }
     internal void SetVarible<T>(string key, T value)
     {
