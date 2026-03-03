@@ -242,6 +242,13 @@ public partial class ZhipuAi : IDisposable
             {
                 var aiResponse = await Request(currentHistory, specialTag);
                 var msg = aiResponse.Choices[0].Message;
+                if (msg.Content.StartsWith("<think>")){
+                    var cotEndIndex = msg.Content.IndexOf("</think>");
+                    if (cotEndIndex >= 0)
+                    {
+                        msg.Content = msg.Content.Substring(cotEndIndex + 4).TrimStart('\n', ' ');
+                    }
+                }
                 response = msg.Content;
                 if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
                 {
