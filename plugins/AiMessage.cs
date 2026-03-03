@@ -4,7 +4,7 @@ using ZhipuClient;
 
 namespace BotPlugin;
 
-[PluginTag("ai-message", "AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型", isIgnore: false)]
+[PluginTag("agent", "AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型", isIgnore: false)]
 public partial class AiMessage : Plugin
 {
     bool useFunctionCallToReply;
