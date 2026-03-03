@@ -5,10 +5,11 @@ using NapcatClient.MessageType;
 
 namespace MerryBot;
 
-internal partial class Logic{
-        private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
+internal partial class Logic
+{
+    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
     {
-        foreach(var i in plugins)
+        foreach (var i in plugins)
         {
             if (!i.Instance.IsEnable)
             {
@@ -19,10 +20,11 @@ internal partial class Logic{
             {
                 i.Instance.OnGroupMessageMentioned(groupId, chain, data);
             }
-            catch (Exception e) { 
+            catch (Exception e)
+            {
                 logger.Warn(e);
             }
-            
+
         }
     }
     private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)

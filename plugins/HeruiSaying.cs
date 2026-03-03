@@ -1,21 +1,14 @@
 ﻿using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BotPlugin;
 
-[PluginTag("锐言锐语","使用/hr来获取",isIgnore:true)]
-public class HeruiSaying :Plugin
+[PluginTag("锐言锐语", "使用/hr来获取", isIgnore: true)]
+public class HeruiSaying : Plugin
 {
     private const string url = "https://the-brotherhood-of-scu.github.io/herui_saying_text/";
     private List<string> sayings = new List<string>();
     private readonly ThreadLocal<Random> _randomWrapper = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
-    public HeruiSaying(PluginInterop interop):base(interop)
+    public HeruiSaying(PluginInterop interop) : base(interop)
     {
         AutoUpdate();
     }
@@ -25,7 +18,7 @@ public class HeruiSaying :Plugin
         {
             return;
         }
-        _=Actions.SendGroupMessage(groupId, PickOne());
+        _ = Actions.SendGroupMessage(groupId, PickOne());
     }
     private string PickOne()
     {
@@ -38,22 +31,24 @@ public class HeruiSaying :Plugin
     }
     private async void AutoUpdate()
     {
-        while (true) {
+        while (true)
+        {
             await Update();
             Logger.Info("data loaded");
-            await Task.Delay(1000*60*60);//update every 1 hour
+            await Task.Delay(1000 * 60 * 60);//update every 1 hour
         }
     }
     private async Task Update()
     {
-        var text=await HttpGetAsync(url);
-        if (text == null) { 
+        var text = await HttpGetAsync(url);
+        if (text == null)
+        {
             return;
         }
-        var strings = text.Split('\n',StringSplitOptions.RemoveEmptyEntries);
-        sayings=new List<string>(strings);
+        var strings = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        sayings = new List<string>(strings);
     }
-    
+
     public async Task<string?> HttpGetAsync(string url)
     {
         try

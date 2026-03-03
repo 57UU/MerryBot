@@ -1,17 +1,11 @@
-﻿using BotPlugin;
-using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using NapcatClient;
 
 namespace BotPlugin;
 
-[PluginTag("About","使用 /about 来查看关于",isIgnore:true)]
+[PluginTag("About", "使用 /about 来查看关于", isIgnore: true)]
 public class About : Plugin
 {
-    private const string aboutMessage=
+    private const string aboutMessage =
 """
 # -------About-------
 
@@ -30,7 +24,7 @@ Merry Bot
     {
         if (IsStartsWith(chain, "/about"))
         {
-            _=Actions.SendGroupMessage(groupId, aboutMessage);
+            _ = Actions.SendGroupMessage(groupId, aboutMessage);
         }
-    } 
+    }
 }

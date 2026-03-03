@@ -1,8 +1,5 @@
 using LiteDB;
 using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace DataService;
 
@@ -126,7 +123,7 @@ public class FileEntry
 
 public class GroupEvent
 {
-    
+
     public ObjectId Id { get; set; }
     public long GroupId { get; set; }
     public string EventType { get; set; }
@@ -155,7 +152,7 @@ public class GroupEvent
         long? duration,
         string? extra,
         DateTime time,
-        ObjectId? id=default)
+        ObjectId? id = default)
     {
         GroupId = groupId;
         EventType = eventType;
@@ -197,7 +194,8 @@ public class ForwardMessageEntry
 }
 
 
-public class GroupNameEntry{
+public class GroupNameEntry
+{
     [BsonId]
     public long GroupId { get; set; }
     public string Name { get; set; }

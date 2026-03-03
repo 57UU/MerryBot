@@ -1,13 +1,10 @@
 ﻿using BotPlugin;
 using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 
 namespace MerryBot;
 
-[PluginTag("MainPlugin", "特权插件，用于管理bot",priority:1919810,type:PluginType.Admin)]
+[PluginTag("MainPlugin", "特权插件，用于管理bot", priority: 1919810, type: PluginType.Admin)]
 internal class MainPlugin : Plugin
 {
     private Logic logic;
@@ -36,13 +33,14 @@ internal class MainPlugin : Plugin
             var group = Config.Instance.QqGroups;
             if (group.Contains(groupId))
             {
-                _= Actions.ReplyGroupMessage(groupId, data.message_id, "error: already active");
+                _ = Actions.ReplyGroupMessage(groupId, data.message_id, "error: already active");
                 return;
             }
             group.Add(groupId);
-            Task.Run(async () => {
+            Task.Run(async () =>
+            {
                 await Config.Save();
-                await Actions.ReplyGroupMessage(groupId, data.message_id,$"active on {groupId}");
+                await Actions.ReplyGroupMessage(groupId, data.message_id, $"active on {groupId}");
             });
         }
     }
@@ -56,7 +54,8 @@ internal class MainPlugin : Plugin
             }
             Logger.Info($"execute deactivating on {groupId}");
             var result = Config.Instance.QqGroups.Remove(groupId);
-            Task.Run(async () => {
+            Task.Run(async () =>
+            {
                 await Config.Save();
                 if (!result)
                 {

@@ -1,9 +1,5 @@
 ﻿using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using ZhipuClient;
 
 namespace BotPlugin;
@@ -13,7 +9,7 @@ public class ViewDialog : Plugin
 {
     public ViewDialog(PluginInterop interop, AiMessage aiMessage) : base(interop)
     {
-        this.aiMessage=aiMessage;
+        this.aiMessage = aiMessage;
         Logger.Info("ViewDialog plugin start");
     }
     readonly AiMessage aiMessage;
@@ -27,18 +23,18 @@ public class ViewDialog : Plugin
         if (s == null) return string.Empty;
         if (s.Length > lengthConstraint)
         {
-            s= string.Concat(s.AsSpan(0, lengthConstraint), "...");
+            s = string.Concat(s.AsSpan(0, lengthConstraint), "...");
         }
-        return s.Replace("\n","");
+        return s.Replace("\n", "");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/dialog"))
         {
-            var history=aiMessage.aiClient.GetDialogHistory(groupId);
+            var history = aiMessage.aiClient.GetDialogHistory(groupId);
             if (history.Length == 0)
             {
-                _=Actions.SendGroupMessage(groupId, "<EMPTY>");
+                _ = Actions.SendGroupMessage(groupId, "<EMPTY>");
             }
             else
             {
@@ -50,20 +46,21 @@ public class ViewDialog : Plugin
                     {
                         sb.AppendLine("system: <HIDDEN>");
                     }
-                    else if (item.Role == ZhipuAi.ASSISTANT) { 
+                    else if (item.Role == ZhipuAi.ASSISTANT)
+                    {
                         var item2 = item as AssistantMessage;
-                        sb.Append("assistant: " + ConstraintLength(item.Content??""));
-                        
-                        
-                        if(item2?.ToolCalls !=null && item2.ToolCalls.Count>0)
+                        sb.Append("assistant: " + ConstraintLength(item.Content ?? ""));
+
+
+                        if (item2?.ToolCalls != null && item2.ToolCalls.Count > 0)
                         {
-                            foreach(var i in item2.ToolCalls)
+                            foreach (var i in item2.ToolCalls)
                             {
                                 sb.Append($"[TOOL:{i.Function.Name} {ConstraintLength(i.Function.Arguments)}]");
                             }
                         }
                         sb.AppendLine();
-                        
+
                     }
                     else
                     {

@@ -1,6 +1,5 @@
 ﻿using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
@@ -9,8 +8,10 @@ namespace MerryBot;
 public class Config
 {
     public static string SettingFile = "setting.json";
-    public static Config Instance {
-        get {
+    public static Config Instance
+    {
+        get
+        {
             if (field == null)
             {
                 throw new Exception("Config is not initialized!");

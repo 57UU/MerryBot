@@ -18,8 +18,9 @@ public class Program
     {
         var webAssembly = typeof(Program).Assembly;
 
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions() { 
-            ApplicationName=webAssembly.GetName().Name,
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions()
+        {
+            ApplicationName = webAssembly.GetName().Name,
         });
 
         // Add services to the container.
@@ -39,7 +40,7 @@ public class Program
         app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
         app.UseAntiforgery();
 
-        
+
 #if DEBUG
         app.MapStaticAssets();
 #else
@@ -86,7 +87,7 @@ public class Program
             }
 
             var contentType = GetFileContentType(file.OriginalUrl);
-            var fileName = name?? id.ToString();
+            var fileName = name ?? id.ToString();
             return Results.File(data, contentType, fileName);
         });
 

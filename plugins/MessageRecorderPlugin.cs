@@ -1,12 +1,8 @@
-using BotPlugin;
+using CommonLib;
+using DataService;
 using NapcatClient;
 using NapcatClient.EventType;
 using NapcatClient.MessageType;
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using DataService;
-using CommonLib;
 
 namespace BotPlugin;
 

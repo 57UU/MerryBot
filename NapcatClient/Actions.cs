@@ -1,16 +1,15 @@
 ﻿using CommonLib;
 using NapcatClient.MessageType;
 using System.Collections.Concurrent;
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Websocket.Client;
 
 namespace NapcatClient.Action;
 
 public class Actions
 {
-    WebsocketClient WebSocket{
+    WebsocketClient WebSocket
+    {
         get => bot.WebSocket;
     }
     private readonly ISimpleLogger Logger;
@@ -29,7 +28,7 @@ public class Actions
     public async Task<byte[]> HttpGetBinary(string url)
     {
         var cacheKey = $"http-bin-{url}";
-        if(requestCaching.TryGetCache(cacheKey, out byte[]? cacheRes))
+        if (requestCaching.TryGetCache(cacheKey, out byte[]? cacheRes))
         {
             return cacheRes!;
         }
@@ -42,7 +41,7 @@ public class Actions
     public async Task<string> HttpGetText(string url)
     {
         var cacheKey = $"http-text-{url}";
-        if(requestCaching.TryGetCache(cacheKey, out string? cacheRes))
+        if (requestCaching.TryGetCache(cacheKey, out string? cacheRes))
         {
             return cacheRes!;
         }
@@ -52,7 +51,7 @@ public class Actions
         requestCaching.SetCache(cacheKey, responseBody);
         return responseBody;
     }
-    public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey =null, TimeSpan? expiration = null)
+    public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey = null, TimeSpan? expiration = null)
     {
         return _SendAction(act.ToAct(), cacheKey, expiration);
     }
@@ -65,9 +64,9 @@ public class Actions
 
         var echo = Interlocked.Increment(ref _echoCounter).ToString();
         act.Echo = echo;
-        
+
         var tcs = new TaskCompletionSource<ResponseRootObject>(TaskCreationOptions.RunContinuationsAsynchronously);
-        
+
         if (!_pendingResponses.TryAdd(echo, tcs))
         {
             throw new InvalidOperationException($"Duplicate echo: {echo}");
@@ -77,19 +76,19 @@ public class Actions
         {
             var json = BotUtils.Serialize(act);
             Logger.Info($"sending: {json}");
-            
+
             await Task.Run(() => WebSocket.Send(json));
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await using (cts.Token.Register(() => tcs.TrySetCanceled()))
             {
                 var result = await tcs.Task;
-                
+
                 if (cacheKey != null)
                 {
                     requestCaching.SetCache(cacheKey, result, expiration);
                 }
-                
+
                 return result;
             }
         }
@@ -101,7 +100,7 @@ public class Actions
     internal void AddResponse(string echo, ResponseRootObject response)
     {
         Logger.Info($"return: {echo}");
-        
+
         if (_pendingResponses.TryRemove(echo, out var tcs))
         {
             tcs.TrySetResult(response);
@@ -151,7 +150,7 @@ public class Actions
     /// <param name="messageId">要回复的消息的ID</param>
     /// <param name="text">文本</param>
     /// <returns></returns>
-    public async Task<ResponseRootObject> ReplyGroupMessage(long groupId,long messageId, string text)
+    public async Task<ResponseRootObject> ReplyGroupMessage(long groupId, long messageId, string text)
     {
         List<TypedMessage> messages = new List<TypedMessage>();
         messages.Add(ReplyData.FromReply(messageId.ToString()));
@@ -187,7 +186,7 @@ public class Actions
         }
         else
         {
-            return ReplyGroupMessage(groupId,messageId, text);
+            return ReplyGroupMessage(groupId, messageId, text);
         }
     }
     /// <summary>
@@ -197,9 +196,9 @@ public class Actions
     /// <param name="text">文本</param>
     /// <param name="nickname">昵称</param>
     /// <returns></returns>
-    public Task<ResponseRootObject> SendLongMessage(string groupId, string text,string nickname)
+    public Task<ResponseRootObject> SendLongMessage(string groupId, string text, string nickname)
     {
-        var fowardChain =new GroupForwardChain.Builder(bot.SelfId.ToString(),nickname,groupId);
+        var fowardChain = new GroupForwardChain.Builder(bot.SelfId.ToString(), nickname, groupId);
         var text_char = text.ToCharArray();
 
         for (int i = 0; i <= text_char.Length / PartLength; i++)
@@ -209,14 +208,14 @@ public class Actions
 
             if (end < text_char.Length)
             {
-                fowardChain.AddText(new string(text_char,start, PartLength));
+                fowardChain.AddText(new string(text_char, start, PartLength));
             }
             else
             {
-                fowardChain.AddText(new string(text_char, start,text_char.Length-start));
+                fowardChain.AddText(new string(text_char, start, text_char.Length - start));
             }
         }
-        Act act = new("send_group_forward_msg",fowardChain.Build());
+        Act act = new("send_group_forward_msg", fowardChain.Build());
         return _SendAction(act);
 
     }
@@ -227,7 +226,7 @@ public class Actions
     /// <param name="text">语音的文本</param>
     /// <param name="character">语音角色</param>
     /// <returns></returns>
-    public Task<ResponseRootObject> SendGroupAiVoice(string groupId, string text,string character= "lucy-voice-suxinjiejie")
+    public Task<ResponseRootObject> SendGroupAiVoice(string groupId, string text, string character = "lucy-voice-suxinjiejie")
     {
         ParameteredAct act = new(
             action: "send_group_ai_record",
@@ -244,17 +243,17 @@ public class Actions
     /// 获取当前登录账号信息。此信息被BotClient自动获取(SelfId,Nickname属性)，不用重复提取。
     /// </summary>
     /// <returns>(user_id,nickname)</returns>
-    public async Task<(long userId,string nickname)> GetAccountInfo()
+    public async Task<(long userId, string nickname)> GetAccountInfo()
     {
         Act act = new(
             action: "get_login_info",
             parameters: new object()
         );
-        var result=await _SendAction(act);
+        var result = await _SendAction(act);
         var data = result.Data;
-        long userId=data.GetProperty("user_id").GetInt64();
-        string nickname=data.GetProperty("nickname").GetString()!;
-        return (userId,nickname);
+        long userId = data.GetProperty("user_id").GetInt64();
+        string nickname = data.GetProperty("nickname").GetString()!;
+        return (userId, nickname);
     }
     public async Task<GroupInfo> GetGroupInfo(string groupId)
     {
@@ -262,7 +261,7 @@ public class Actions
             action: "get_group_info",
             parameters: new { group_id = groupId }
             );
-        var result=await _SendAction(act, $"group_info_{groupId}");
+        var result = await _SendAction(act, $"group_info_{groupId}");
         var data = result.Data;
         return BotUtils.Deserialize<GroupInfo>(data)!;
     }
@@ -270,9 +269,9 @@ public class Actions
     {
         Act act = new(
             action: "get_group_member_list",
-            parameters: new { group_id = groupId, no_cache=false }
+            parameters: new { group_id = groupId, no_cache = false }
             );
-        var result=await _SendAction(act, $"group_member_list_{groupId}");
+        var result = await _SendAction(act, $"group_member_list_{groupId}");
         var data = result.Data;
         return BotUtils.Deserialize<GroupMemberListData>(data)!;
     }
@@ -282,11 +281,11 @@ public class Actions
     /// <param name="groupId"></param>
     /// <param name="qq"></param>
     /// <returns></returns>
-    public async Task<GroupMemberInfo?> GetGroupMemberData(string groupId,string qq)
+    public async Task<GroupMemberInfo?> GetGroupMemberData(string groupId, string qq)
     {
         Act act = new(
             action: "get_group_member_info",
-            parameters: new { group_id = groupId, user_id=qq, no_cache = false }
+            parameters: new { group_id = groupId, user_id = qq, no_cache = false }
             );
         var result = await _SendAction(act, $"group_member_info_{groupId}_{qq}");
         if (result.Status == "failed")
@@ -305,11 +304,11 @@ public class Actions
     {
         Act act = new(
             action: "get_msg",
-            parameters: new { message_id=messageId }
+            parameters: new { message_id = messageId }
             );
         var result = await _SendAction(act, $"get_msg_{messageId}");
         var data = result.Data;
-        var deserilzed= BotUtils.Deserialize<GroupMessage>(data);
+        var deserilzed = BotUtils.Deserialize<GroupMessage>(data);
         if (deserilzed == null)
         {
             return null;
@@ -320,17 +319,17 @@ public class Actions
     {
         Act act = new(
             action: "get_forward_msg",
-            parameters: new { message_id=messageId }
+            parameters: new { message_id = messageId }
             );
         var result = await _SendAction(act, $"get_forward_msg_{messageId}");
         var data = result.Data;
-        var deserilzed= BotUtils.Deserialize<ForwardMessage>(data);
+        var deserilzed = BotUtils.Deserialize<ForwardMessage>(data);
         if (deserilzed == null)
         {
             return null;
         }
         return deserilzed;
-        
+
     }
 
 
@@ -357,7 +356,7 @@ public class ParameteredAct
         this.Action = action;
         this.Parameters = parameters;
     }
-    
+
     [JsonPropertyName("action")]
     public string Action { set; get; }
     [JsonPropertyName("params")]
@@ -367,7 +366,7 @@ public class ParameteredAct
     public string Echo { internal set; get; } = string.Empty;
     public Act ToAct()
     {
-        var tmp= new Act(this.Action, this.Parameters);
+        var tmp = new Act(this.Action, this.Parameters);
         tmp.Echo = this.Echo;
         return tmp;
     }

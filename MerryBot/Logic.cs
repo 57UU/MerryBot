@@ -1,18 +1,9 @@
-﻿﻿using BotPlugin;
-using CommonLib;
+﻿using BotPlugin;
 using DataProvider;
 using NapcatClient;
 using NapcatClient.MessageType;
-using OpenQA.Selenium.BiDi.Network;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace MerryBot;
 
@@ -22,17 +13,18 @@ internal partial class Logic
     private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase;
     private readonly List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-    public static long AuthorizedUser { get {return Config.Instance.AuthorizedUser; } }
-    readonly string[] CommandLineArguments= Environment.GetCommandLineArgs();
+    public static long AuthorizedUser { get { return Config.Instance.AuthorizedUser; } }
+    readonly string[] CommandLineArguments = Environment.GetCommandLineArgs();
     private MainPlugin? mainPlugin;
 
     private static List<long> QqGroupIDs
     {
-        get {
+        get
+        {
             return Config.Instance.QqGroups;
         }
     }
-    public Logic(BotClient botClient,string dbPath)
+    public Logic(BotClient botClient, string dbPath)
     {
         this.botClient = botClient;
         PluginStorageDatabase = new(dbPath);
@@ -40,7 +32,7 @@ internal partial class Logic
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
         RegisterEventHandlers();
     }
-    
+
     private void RegisterEventHandlers()
     {
         botClient.OnNoticeEventReceived += OnNoticeEventReceived;
@@ -88,7 +80,7 @@ internal partial class Logic
     }
     public event Action<ReceivedGroupMessage>? OnRawGroupMessageReceived;
 
-    public void OnGroupMessageReceived(long groupId,List<TypedMessage> chain, ReceivedGroupMessage data)
+    public void OnGroupMessageReceived(long groupId, List<TypedMessage> chain, ReceivedGroupMessage data)
     {
         if (chain.Count == 0)
         {
@@ -99,19 +91,19 @@ internal partial class Logic
             MainPluginInvokeNotInGroup(groupId, chain, data);
             return;
         }
-        ReadOnlySpan<TypedMessage> span=CollectionsMarshal.AsSpan(chain);
+        ReadOnlySpan<TypedMessage> span = CollectionsMarshal.AsSpan(chain);
         bool isTargeted = false;
         long selfId = BotUtils.GetSelfId(data);
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
 
-        long senderId= data.sender.user_id;
+        long senderId = data.sender.user_id;
 
         OnRawGroupMessageReceived?.Invoke(data);
 
         bool isIntercepted = false;
-        foreach(var plugInfo in plugins)
+        foreach (var plugInfo in plugins)
         {
-            foreach(var interceptor in plugInfo.Interop.Interceptors)
+            foreach (var interceptor in plugInfo.Interop.Interceptors)
             {
                 if (interceptor(data))
                 {
@@ -125,7 +117,7 @@ internal partial class Logic
             return;
         }
 
-        isTargeted= IsTargeted(data);
+        isTargeted = IsTargeted(data);
 
         if (isTargeted)
         {
@@ -156,15 +148,17 @@ internal partial class Logic
     private IEnumerable<Action>? _pluginsDisposeActions;
     private void LoadPlugins()
     {
-        var allPlugins= FindPlugins();
+        var allPlugins = FindPlugins();
         //sort by priority
-        allPlugins.Sort((a, b) => {
+        allPlugins.Sort((a, b) =>
+        {
             return a.attribute.Priority.CompareTo(b.attribute.Priority);
         });
         PluginInitializer<Plugin> pluginInitializer = new();
         Dictionary<Type, PluginInterop> pluginInteropMap = new();
-        logger.Debug($"find plugin: {string.Join(",",allPlugins.Select(p=>p.attribute.Name))}");
-        foreach (var (type,attribute) in allPlugins) {
+        logger.Debug($"find plugin: {string.Join(",", allPlugins.Select(p => p.attribute.Name))}");
+        foreach (var (type, attribute) in allPlugins)
+        {
             try
             {
                 var interop = new PluginInterop(
@@ -182,16 +176,16 @@ internal partial class Logic
                         CommandLineArguments,
                         Config.Save,
                         botClient.PathPrefix,
-                        f=>OnRawGroupMessageReceived+=f
+                        f => OnRawGroupMessageReceived += f
                         );
                 pluginInteropMap.Add(type, interop);
                 if (type == typeof(MainPlugin))
                 {
-                    pluginInitializer.AddDependency(type,new List<object> {this, interop});
+                    pluginInitializer.AddDependency(type, new List<object> { this, interop });
                 }
                 else
                 {
-                    pluginInitializer.AddDependency(type,new List<object> {interop});
+                    pluginInitializer.AddDependency(type, new List<object> { interop });
                 }
 
             }
@@ -204,14 +198,15 @@ internal partial class Logic
         try
         {
             pluginInitializer.InitializeAll();
-        }catch(Exception e)
+        }
+        catch (Exception e)
         {
             logger.Fatal(e);
         }
         _pluginsDisposeActions = pluginInitializer.GetDisposeActions();
-        IEnumerable<(Plugin? pluginInstance, PluginTag attribute)> allPluginInstance 
+        IEnumerable<(Plugin? pluginInstance, PluginTag attribute)> allPluginInstance
             = allPlugins.Select(p => (pluginInitializer.GetInstance(p.type), p.attribute));
-        foreach(var (pluginInstance, attribute) in allPluginInstance)
+        foreach (var (pluginInstance, attribute) in allPluginInstance)
         {
             if (pluginInstance != null)
             {
@@ -225,7 +220,7 @@ internal partial class Logic
             }
 
         }
-        mainPlugin=pluginInitializer.GetInstance<MainPlugin>();
+        mainPlugin = pluginInitializer.GetInstance<MainPlugin>();
 
         //加载插件的OnLoaded函数
         foreach (var i in plugins)
@@ -242,7 +237,7 @@ internal partial class Logic
     /// <summary>
     /// save data and shutdown
     /// </summary>
-    public void Shutdown(int exitCode=0)
+    public void Shutdown(int exitCode = 0)
     {
         foreach (var dispose in _pluginsDisposeActions!)
         {

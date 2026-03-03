@@ -6,7 +6,8 @@ public static class QqFace
     public static string GetFace(int code)
     {
         mapper.TryGetValue(code, out var face);
-        if(face is null){
+        if (face is null)
+        {
             return $"unknown({code})";
         }
         return face;

@@ -6,25 +6,25 @@ namespace NapcatClient.MessageType;
 
 class TypedJsonConverter : JsonConverter<TypedMessage>
 {
-    private TypedJsonConverter(){}
+    private TypedJsonConverter() { }
     public static TypedJsonConverter Instance { get; } = new();
     public override TypedMessage? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using (var jsonDocument = JsonDocument.ParseValue(ref reader))
         {
             var root = jsonDocument.RootElement;
-            
+
             if (!root.TryGetProperty("type", out var typeElement))
             {
                 throw new JsonException("Missing 'type' property");
             }
-            
+
             string type = typeElement.GetString() ?? throw new JsonException("can't read 'type' as string");
-            
+
             // 检查是否有 data 属性
             if (root.TryGetProperty("data", out var dataElement))
             {
-                
+
                 // 使用 data 部分进行反序列化
                 string dataJson = dataElement.GetRawText();
                 return type switch
@@ -55,7 +55,7 @@ class TypedJsonConverter : JsonConverter<TypedMessage>
     public override void Write(Utf8JsonWriter writer, TypedMessage value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        
+
         // 确定消息类型
         string type = value switch
         {
@@ -74,11 +74,11 @@ class TypedJsonConverter : JsonConverter<TypedMessage>
             JsonData => MessageTypeStringStr.Json,
             _ => throw new JsonException($"Unknown message type: {value.GetType().Name}")
         };
-        
+
         writer.WriteString("type", type);
         writer.WritePropertyName("data");
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
-        
+
         writer.WriteEndObject();
     }
 }

@@ -1,11 +1,5 @@
 ﻿using HWT;
-using NapcatClient;
 using NapcatClient.MessageType;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BotPlugin;
 
@@ -25,7 +19,7 @@ public class RateLimiter
         countdownManager = new HashedWheelTimer(
             tickDuration: TimeSpan.FromSeconds(1),
             ticksPerWheel: 100,
-            maxPendingTimeouts:0
+            maxPendingTimeouts: 0
             );
     }
     public bool CheckIsLimited(long groupId)
@@ -65,7 +59,7 @@ public class RateLimiter
     private void SetTimer(long uid)
     {
         countdownManager.NewTimeout(
-            new OnceTimerTask( 
+            new OnceTimerTask(
                 () => { DecreaseCallback(uid); }
                 ),
             timeSpan
@@ -90,7 +84,7 @@ class OnceTimerTask : TimerTask
 
 static class PluginUtils
 {
-    public static string ConstraintLength(string s,int lengthConstraint,string prompt="...")
+    public static string ConstraintLength(string s, int lengthConstraint, string prompt = "...")
     {
         if (s.Length > lengthConstraint)
         {

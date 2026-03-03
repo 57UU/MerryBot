@@ -1,11 +1,8 @@
 using CommonLib;
 using NapcatClient.Action;
 using NapcatClient.EventType;
-using NapcatClient.MessageType;
-using System;
 using System.Net.WebSockets;
 using System.Text.Json;
-using System.Collections.Generic;
 using Websocket.Client;
 namespace NapcatClient;
 
@@ -46,34 +43,36 @@ public class BotClient
 
         WebSocket = new(_uri);
         SetupWebSocketClient(WebSocket);
-        
+
         // 初始化消息监控定时器
-        _messageMonitorTimer = new Timer((o) =>_=CheckMessageActivity(), null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
-        
+        _messageMonitorTimer = new Timer((o) => _ = CheckMessageActivity(), null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
+
         WebSocket.Start().Wait();
-        this.Actions = new Actions(Logger,this);
+        this.Actions = new Actions(Logger, this);
         _lastMessageTime = DateTime.Now; // 初始化连接状态
         Initialize().Wait();
     }
-    
+
     private void SetupWebSocketClient(WebsocketClient webSocket)
     {
         webSocket.ErrorReconnectTimeout = TimeSpan.FromSeconds(5);
         webSocket.LostReconnectTimeout = TimeSpan.FromSeconds(30);
         webSocket.ReconnectTimeout = TimeSpan.FromSeconds(10);
         webSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
-        webSocket.DisconnectionHappened.Subscribe(d => {
+        webSocket.DisconnectionHappened.Subscribe(d =>
+        {
             _ = WebSocket_Disconnected(d)
-            .ContinueWith(result => {
+            .ContinueWith(result =>
+            {
                 if (result.Exception != null)
                 {
                     Logger.Error($"Error:{result.Exception.Message}");
                 }
             });
         });
-        webSocket.MessageReceived.Subscribe(msg=>WebSocket_OnMessage(msg.Text));
+        webSocket.MessageReceived.Subscribe(msg => WebSocket_OnMessage(msg.Text));
     }
-    
+
     // 消息活动检测方法
     private async Task CheckMessageActivity()
     {
@@ -84,13 +83,13 @@ public class BotClient
             try
             {
                 // 彻底关闭连接
-                await WebSocket.Stop(WebSocketCloseStatus.NormalClosure,"no message receivied");
+                await WebSocket.Stop(WebSocketCloseStatus.NormalClosure, "no message receivied");
                 WebSocket.Dispose();
-                
+
                 // 重新创建 WebSocket 实例
                 WebSocket = new WebsocketClient(_uri);
                 SetupWebSocketClient(WebSocket);
-                
+
                 // 重新启动连接
                 await WebSocket.Start();
             }
@@ -100,7 +99,7 @@ public class BotClient
             }
         }
     }
-    
+
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
     public string PathPrefix { get; private set; } = "data";
@@ -134,7 +133,7 @@ public class BotClient
     {
         // 更新最后消息时间 - 任何消息都表示连接活跃
         _lastMessageTime = DateTime.Now;
-        
+
         if (text == null)
         {
             Logger.Debug("empty message received");
@@ -163,21 +162,21 @@ public class BotClient
         else if (message.TryGetValue("post_type", out JsonElement postTypeValue))
         {
             var postType = postTypeValue.GetString();
-            
+
             if (postType == "notice")
             {
                 HandleNoticeEvent(text);
             }
         }
     }
-    
+
     private void HandleNoticeEvent(string text)
     {
         try
         {
             var noticeEvent = BotUtils.Deserialize<NoticeEvent>(text);
             OnNoticeEventReceived?.Invoke(noticeEvent);
-            
+
             switch (noticeEvent.NoticeType)
             {
                 case "group_upload":

@@ -1,9 +1,5 @@
-using CommonLib;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using System.Threading.Tasks;
-using ZhipuClient;
 
 namespace ZhipuClient;
 
@@ -27,11 +23,11 @@ public class ModelPreset
     public string CompletionUrl => $"{url}/chat/completions";
     public ModelPreset(
         string model,
-        string url, 
+        string url,
         string provider,
         ImmutableDictionary<string, object>? extraBody = null,
-        bool enableSearch=true,
-        bool supportImageInput=false
+        bool enableSearch = true,
+        bool supportImageInput = false
         )
     {
         this.model = model;
@@ -47,8 +43,8 @@ public class ModelPreset
         string? url = null,
         string? provider = null,
         ImmutableDictionary<string, object>? extraBody = null,
-        bool? enableSearch=null,
-        bool? supportImageInput=null
+        bool? enableSearch = null,
+        bool? supportImageInput = null
         )
     {
         return new(
@@ -101,13 +97,13 @@ public class ModelPreset
             model: "GLM-4.5-Flash",
             url: "https://open.bigmodel.cn/api/paas/v4",
             provider: "zhipu",
-            extraBody: Empty.Add("thinking",Empty.Add("type", "enabled"))
+            extraBody: Empty.Add("thinking", Empty.Add("type", "enabled"))
         );
-    public static readonly ModelPreset GLM_4_6V_Flash_Free = Glm_4_5_Free.With("GLM-4.6V-Flash",supportImageInput:true);
+    public static readonly ModelPreset GLM_4_6V_Flash_Free = Glm_4_5_Free.With("GLM-4.6V-Flash", supportImageInput: true);
     public static readonly ModelPreset Glm_4V_Flash_Free = GLM_4_6V_Flash_Free.With("GLM-4V-Flash");
     public static readonly ModelPreset Glm_4_1V_Flash_Free = Glm_4V_Flash_Free.With("GLM-4.1V-Thinking-Flash");
     public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
-    public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7",extraBody:Empty);
+    public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7", extraBody: Empty);
     public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.With("glm-4.7-flash");
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
             "deepseek-chat",
@@ -118,7 +114,7 @@ public class ModelPreset
             "qwen3-max",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "ali",
-            Empty.Add("enable_search",true)
+            Empty.Add("enable_search", true)
         );
     public static readonly ModelPreset Qwen3Plus = Qwen3Max.With("qwen-plus-latest");
     public static readonly ModelPreset XiaomiMimoV2 = new(

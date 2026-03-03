@@ -5,22 +5,23 @@ using NapcatClient;
 using NLog;
 
 // --- data path ---
-string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT")??"data";
+string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
 string logFileDir = "log";
 string dbPath = "plugin_data.db";
 
 Config.SettingFile = Path.Combine(dataPath, "setting.json");
 logFileDir = Path.Combine(dataPath, logFileDir);
-dbPath=Path.Combine(dataPath, dbPath);
+dbPath = Path.Combine(dataPath, dbPath);
 
-if(Utils.CreateDirectory(dataPath)){
+if (Utils.CreateDirectory(dataPath))
+{
     Console.WriteLine($"data directory created:{dataPath}");
 }
 if (Utils.CreateDirectory(logFileDir))
 {
     Console.WriteLine($"log directory created:{logFileDir}");
 }
-var logFilePath=Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
+var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
 Config.Initialize().Wait();
 //init logger
@@ -29,7 +30,7 @@ NLog.LogManager.Setup().LoadConfiguration(builder =>
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
     builder.ForLogger().FilterMinLevel(LogLevel.Info).WriteToFile(fileName: $"{logFilePath}.log");
 });
-var currentLogger= LogManager.GetCurrentClassLogger();
+var currentLogger = LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
 
 var config = Config.Instance;
@@ -38,8 +39,8 @@ if (config.AuthorizedUser < 0)
     currentLogger.Warn("'authorized-user' is not valid");
 }
 
-var logger= new NLogAdapter();
-var botClient = new BotClient(config.NapcatServer, config.NapcatToken,logger,dataPath);
+var logger = new NLogAdapter();
+var botClient = new BotClient(config.NapcatServer, config.NapcatToken, logger, dataPath);
 
 
 Logic logic = new Logic(botClient, dbPath);

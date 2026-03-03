@@ -2,8 +2,9 @@
 
 namespace MerryBot;
 
-internal partial class Logic{
-        private void OnNoticeEventReceived(NapcatClient.EventType.NoticeEvent eventData)
+internal partial class Logic
+{
+    private void OnNoticeEventReceived(NapcatClient.EventType.NoticeEvent eventData)
     {
         foreach (var plugin in plugins)
         {
@@ -11,7 +12,7 @@ internal partial class Logic{
             plugin.Instance.OnNoticeEvent(eventData);
         }
     }
-    
+
     private void OnGroupUploadEventReceived(NapcatClient.EventType.GroupUploadEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -20,7 +21,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupUploadEvent(eventData);
         }
     }
-    
+
     private void OnGroupAdminEventReceived(NapcatClient.EventType.GroupAdminEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -29,7 +30,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupAdminEvent(eventData);
         }
     }
-    
+
     private void OnGroupDecreaseEventReceived(NapcatClient.EventType.GroupDecreaseEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -38,7 +39,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupDecreaseEvent(eventData);
         }
     }
-    
+
     private void OnGroupIncreaseEventReceived(NapcatClient.EventType.GroupIncreaseEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -47,7 +48,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupIncreaseEvent(eventData);
         }
     }
-    
+
     private void OnGroupBanEventReceived(NapcatClient.EventType.GroupBanEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -56,7 +57,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupBanEvent(eventData);
         }
     }
-    
+
     private void OnFriendAddEventReceived(NapcatClient.EventType.FriendAddEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -65,7 +66,7 @@ internal partial class Logic{
             plugin.Instance.OnFriendAddEvent(eventData);
         }
     }
-    
+
     private void OnGroupRecallEventReceived(NapcatClient.EventType.GroupRecallEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -74,7 +75,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupRecallEvent(eventData);
         }
     }
-    
+
     private void OnFriendRecallEventReceived(NapcatClient.EventType.FriendRecallEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -83,7 +84,7 @@ internal partial class Logic{
             plugin.Instance.OnFriendRecallEvent(eventData);
         }
     }
-    
+
     private void OnPokeEventReceived(NapcatClient.EventType.PokeEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -92,7 +93,7 @@ internal partial class Logic{
             plugin.Instance.OnPokeEvent(eventData);
         }
     }
-    
+
     private void OnLuckyKingEventReceived(NapcatClient.EventType.LuckyKingEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -101,7 +102,7 @@ internal partial class Logic{
             plugin.Instance.OnLuckyKingEvent(eventData);
         }
     }
-    
+
     private void OnHonorEventReceived(NapcatClient.EventType.HonorEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -110,7 +111,7 @@ internal partial class Logic{
             plugin.Instance.OnHonorEvent(eventData);
         }
     }
-    
+
     private void OnGroupMsgEmojiLikeEventReceived(NapcatClient.EventType.GroupMsgEmojiLikeEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -119,7 +120,7 @@ internal partial class Logic{
             plugin.Instance.OnGroupMsgEmojiLikeEvent(eventData);
         }
     }
-    
+
     private void OnEssenceEventReceived(NapcatClient.EventType.EssenceEvent eventData)
     {
         foreach (var plugin in plugins)
@@ -128,7 +129,7 @@ internal partial class Logic{
             plugin.Instance.OnEssenceEvent(eventData);
         }
     }
-    
+
     private void OnGroupCardEventReceived(NapcatClient.EventType.GroupCardEvent eventData)
     {
         foreach (var plugin in plugins)

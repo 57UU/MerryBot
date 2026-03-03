@@ -7,11 +7,11 @@ public class ImageInterpreterPool
     private readonly IEnumerable<ImageInterpreter> _imageInterpreters;
     public ImageInterpreterPool(params ImageInterpreter[] imageInterpreters)
     {
-        _imageInterpreters=imageInterpreters;
+        _imageInterpreters = imageInterpreters;
     }
     public ImageInterpreterPool(IEnumerable<ImageInterpreter> imageInterpreters)
     {
-        _imageInterpreters=imageInterpreters;
+        _imageInterpreters = imageInterpreters;
     }
     public async Task<string> Interpret(string imageUrl)
     {

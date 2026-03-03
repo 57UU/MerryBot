@@ -1,22 +1,18 @@
 ﻿using NapcatClient;
 using NapcatClient.MessageType;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BotPlugin;
 
-[PluginTag("自动+1", "如果有刷屏消息，将会自动+1",priority:-1,type:PluginType.Background)]
+[PluginTag("自动+1", "如果有刷屏消息，将会自动+1", priority: -1, type: PluginType.Background)]
 public class AutoIncrease : Plugin
 {
     const int REPEAT_TIME = 3;
     public AutoIncrease(PluginInterop interop) : base(interop)
     {
-        var selfId=interop.BotClient.SelfId;
-        interop.Interceptors.Add((data) => {
+        var selfId = interop.BotClient.SelfId;
+        interop.Interceptors.Add((data) =>
+        {
             return data.sender.user_id == selfId;
         });
     }
@@ -52,7 +48,7 @@ public class AutoIncrease : Plugin
                 {
                     //this has not been sent
                     Logger.Info("+1 message detected");
-                    _=Actions.SendGroupMessage(groupId, _lastMessage.chain!);
+                    _ = Actions.SendGroupMessage(groupId, _lastMessage.chain!);
                     _lastMessage.used = true;
                 }
             }
@@ -67,12 +63,12 @@ public class AutoIncrease : Plugin
 }
 internal class ChainWithSender
 {
-    public List<TypedMessage>? chain=null;
-    public long sender=0;
+    public List<TypedMessage>? chain = null;
+    public long sender = 0;
     public int repeatTime = 1;
     public bool used = false;
     public ChainWithSender() { }
-    public void Renew(List<TypedMessage> chain,long sender)
+    public void Renew(List<TypedMessage> chain, long sender)
     {
         this.chain = chain;
         repeatTime = 1;

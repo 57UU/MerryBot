@@ -1,12 +1,7 @@
 using CommonLib;
 using LiteDB;
 using LiteDB.Async;
-using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 
 namespace DataService;
 
@@ -25,7 +20,7 @@ public class HistoryRecorder : IDisposable
     private readonly IObjectStorage _objectStorage;
     private const string ImageBucket = "images";
     private const string FileBucket = "files";
-    
+
     public HistoryRecorder(string dbPath, string storagePath, int machineCode = 0)
     {
         _dbPath = dbPath;
@@ -38,9 +33,9 @@ public class HistoryRecorder : IDisposable
         forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
         groupNameCollection = database.GetCollection<GroupNameEntry>("group_names");
         aiMessagesCollection = database.GetCollection<AiMessageEntry>("ai_messages");
-        
+
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
-        
+
         _ = messagesCollection.EnsureIndexAsync(x => x.GroupId);
         _ = messagesCollection.EnsureIndexAsync(x => x.SenderId);
         _ = messagesCollection.EnsureIndexAsync(x => x.MessageId);
@@ -54,7 +49,7 @@ public class HistoryRecorder : IDisposable
         _ = groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime);
         _ = aiMessagesCollection.EnsureIndexAsync(x => x.GroupId);
     }
-    
+
     private long GenerateId()
     {
         return idGenerator.CreateId();
@@ -82,16 +77,16 @@ public class HistoryRecorder : IDisposable
         {
             return false;
         }
-        
+
         await messagesCollection.InsertAsync(message);
         return true;
     }
-    
+
     public async Task<bool> MessageExistsAsync(long messageId)
     {
         return await messagesCollection.ExistsAsync(x => x.MessageId == messageId);
     }
-    
+
     public async Task<bool> MarkMessageAsDeletedAsync(long messageId)
     {
         var message = await messagesCollection.FindOneAsync(x => x.MessageId == messageId);
@@ -99,11 +94,11 @@ public class HistoryRecorder : IDisposable
         {
             return false;
         }
-        
+
         message.IsDeleted = true;
         return await messagesCollection.UpdateAsync(message);
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int limit = 100)
     {
         return await messagesCollection.Query()
@@ -112,7 +107,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int page, int pageSize)
     {
         var skip = (page - 1) * pageSize;
@@ -123,7 +118,7 @@ public class HistoryRecorder : IDisposable
             .Limit(pageSize)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesBySenderIdAsync(long senderId, int limit = 100)
     {
         return await messagesCollection.Query()
@@ -132,7 +127,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesByGroupAndSenderAsync(long groupId, long senderId, int limit = 100)
     {
         return await messagesCollection.Query()
@@ -141,7 +136,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesByTimeRangeAsync(DateTime startTime, DateTime endTime, int limit = 100)
     {
         return await messagesCollection.Query()
@@ -150,7 +145,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupMessage>> GetMessagesByGroupAndTimeRangeAsync(long groupId, DateTime startTime, DateTime endTime, int limit = 100)
     {
         return await messagesCollection.Query()
@@ -159,7 +154,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<ImageEntry> RecordImageAsync(string originalUrl, byte[] data)
     {
         var hash = CalculateHash(data);
@@ -168,14 +163,14 @@ public class HistoryRecorder : IDisposable
         {
             return existingImage;
         }
-        
+
         var id = GenerateId();
         await _objectStorage.StoreAsync(ImageBucket, hash, data);
         var imageEntry = new ImageEntry(id, originalUrl, hash);
         await imageBedCollection.InsertAsync(imageEntry);
         return imageEntry;
     }
-    
+
     public async Task<FileEntry> RecordFileAsync(string originalUrl, byte[] data)
     {
         var hash = CalculateHash(data);
@@ -184,19 +179,19 @@ public class HistoryRecorder : IDisposable
         {
             return existingFile;
         }
-        
+
         var id = GenerateId();
         await _objectStorage.StoreAsync(FileBucket, hash, data);
         var fileEntry = new FileEntry(id, originalUrl, hash);
         await fileBedCollection.InsertAsync(fileEntry);
         return fileEntry;
     }
-    
+
     public async Task<ImageEntry?> GetImageByIdAsync(long id)
     {
         return await imageBedCollection.FindOneAsync(x => x.Id == id);
     }
-    
+
     public async Task<FileEntry?> GetFileByIdAsync(long id)
     {
         return await fileBedCollection.FindOneAsync(x => x.Id == id);
@@ -237,13 +232,13 @@ public class HistoryRecorder : IDisposable
         requestCaching.SetCache(cacheKey, file);
         return file;
     }
-    
+
     public async Task<bool> RecordGroupEventAsync(GroupEvent groupEvent)
     {
         await eventsCollection.InsertAsync(groupEvent);
         return true;
     }
-    
+
     public async Task<List<GroupEvent>> GetEventsByGroupIdAsync(long groupId, int limit = 100)
     {
         return await eventsCollection.Query()
@@ -252,7 +247,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupEvent>> GetEventsByTypeAsync(string eventType, int limit = 100)
     {
         return await eventsCollection.Query()
@@ -261,7 +256,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<GroupEvent>> GetEventsByGroupAndTypeAsync(long groupId, string eventType, int limit = 100)
     {
         return await eventsCollection.Query()
@@ -270,7 +265,7 @@ public class HistoryRecorder : IDisposable
             .Limit(limit)
             .ToListAsync();
     }
-    
+
     public async Task<List<long>> GetAllGroupIdsAsync()
     {
         var messages = await messagesCollection.FindAllAsync();
@@ -279,28 +274,28 @@ public class HistoryRecorder : IDisposable
         var eventGroupIds = events.Select(x => x.GroupId).Distinct();
         return messageGroupIds.Concat(eventGroupIds).Distinct().OrderBy(x => x).ToList();
     }
-    
+
     public async Task<bool> RecordForwardMessageAsync(ForwardMessageEntry forwardEntry)
     {
         if (await forwardMessagesCollection.ExistsAsync(x => x.ForwardId == forwardEntry.ForwardId))
         {
             return false;
         }
-        
+
         await forwardMessagesCollection.InsertAsync(forwardEntry);
         return true;
     }
-    
+
     public async Task<ForwardMessageEntry?> GetForwardMessageByIdAsync(string forwardId)
     {
         return await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardId);
     }
-    
+
     public async Task<bool> ForwardMessageExistsAsync(string forwardId)
     {
         return await forwardMessagesCollection.ExistsAsync(x => x.ForwardId == forwardId);
     }
-    
+
     public async Task<bool> RecordOrUpdateGroupNameAsync(GroupNameEntry groupNameEntry)
     {
         var existingEntry = await groupNameCollection.FindOneAsync(x => x.GroupId == groupNameEntry.GroupId);
@@ -318,32 +313,32 @@ public class HistoryRecorder : IDisposable
             return true;
         }
     }
-    
+
     public async Task<GroupNameEntry?> GetGroupNameByIdAsync(long groupId)
     {
         return await groupNameCollection.FindOneAsync(x => x.GroupId == groupId);
     }
-    
+
     public async Task<List<GroupNameEntry>> GetAllGroupNamesAsync()
     {
         return (await groupNameCollection.FindAllAsync()).ToList();
     }
-    
+
     public async Task<bool> DeleteGroupNameAsync(long groupId)
     {
         return await groupNameCollection.DeleteAsync(groupId);
     }
-    
+
     public async Task<int> GetImageCountAsync()
     {
         return await imageBedCollection.CountAsync();
     }
-    
+
     public async Task<int> GetFileCountAsync()
     {
         return await fileBedCollection.CountAsync();
     }
-    
+
     public string GetDatabaseSize()
     {
         try

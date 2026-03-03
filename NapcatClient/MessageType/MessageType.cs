@@ -204,7 +204,8 @@ public class FaceData : TypedMessage
     {
         return $"face {ToChinese()}";
     }
-    public string ToChinese(){
+    public string ToChinese()
+    {
         return QqFace.GetFace(int.Parse(Id));
     }
 }

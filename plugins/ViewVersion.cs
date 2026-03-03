@@ -1,26 +1,21 @@
 ﻿using NapcatClient;
-using OpenQA.Selenium;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace BotPlugin;
 
-[PluginTag("version", "/version查看当前版本;/update更新软件",priority:114514)]
+[PluginTag("version", "/version查看当前版本;/update更新软件", priority: 114514)]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;
     private long authorized;
 #pragma warning disable CS8625
     //data will be loaded in `OnLoaded` function
-    private Data data=null;
+    private Data data = null;
 #pragma warning restore CS8625
     public ViewVersion(PluginInterop interop) : base(interop)
     {
-        gitInfo= GetGitInfo().Result.Trim();
+        gitInfo = GetGitInfo().Result.Trim();
         authorized = interop.AuthorizedUser;
         if (authorized < 0)
         {
@@ -30,7 +25,7 @@ public partial class ViewVersion : Plugin
     }
     public async override Task OnLoaded()
     {
-        data=await Interop.PluginStorage.Load<Data>() ??new Data();
+        data = await Interop.PluginStorage.Load<Data>() ?? new Data();
         Logger.Debug("data loaded");
         //if  contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
@@ -72,22 +67,22 @@ public partial class ViewVersion : Plugin
             // 使用单个命令获取大部分信息
             string gitLogFormat = "--pretty=format:%H|%ci|%s";
             string logOutput = await ExecuteGitCommand($"log -1 {gitLogFormat}");
-            
+
             if (logOutput.StartsWith("Error:"))
                 return $"获取Git信息失败: {logOutput}";
-                
+
             string[] logParts = logOutput.Split('|');
             if (logParts.Length < 3)
                 return "解析Git日志信息失败";
-                
+
             string commitHash = logParts[0];
             string commitDate = logParts[1];
             string commitMessage = logParts[2];
-            
+
             // 获取其他信息
             string commitCount = await ExecuteGitCommand("rev-list --count HEAD");
             string userName = await ExecuteGitCommand("config user.name");
-            
+
             // 格式化返回信息
             StringBuilder gitInfo = new StringBuilder();
             //gitInfo.AppendLine($"Git信息:");
@@ -115,14 +110,14 @@ public partial class ViewVersion : Plugin
     {
         // 先获取当前HEAD的commit哈希值
         string beforeCommit = await ExecuteGitCommand("rev-parse HEAD");
-        
+
         // 执行fetch和merge
         await ExecuteGitCommand("fetch");
         var diff = await ExecuteGitCommand("merge");
-        
+
         // 获取合并后的HEAD
         string afterCommit = await ExecuteGitCommand("rev-parse HEAD");
-        
+
         string commitMessages;
         try
         {
@@ -135,7 +130,7 @@ public partial class ViewVersion : Plugin
             {
                 // 获取两个commit之间的所有提交
                 string rangeCommits = await ExecuteGitCommand($"log {beforeCommit.Trim()}..{afterCommit.Trim()} --pretty=format:%s");
-                
+
                 if (string.IsNullOrWhiteSpace(rangeCommits))
                 {
                     commitMessages = "没有新的提交信息";
@@ -165,27 +160,29 @@ public partial class ViewVersion : Plugin
         {
             commitMessages = $"获取提交信息时出错: {ex.Message}";
         }
-        
+
         return (diff, commitMessages);
     }
     private async Task Update(long groupId)
     {
         var (diff, commitMessages) = await GitFetchMerge();
-        diff = _redundantRegex().Replace(diff, "").Replace("()","").Trim();
+        diff = _redundantRegex().Replace(diff, "").Replace("()", "").Trim();
 
         await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
         //store the update info
         data.UpdateByGroupId = groupId;
         await Interop.PluginStorage.Save(data);
         Interop.Shutdown(CommonLib.ExitCode.RESTART);
-        
-    } 
+
+    }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/version"))
         {
             _ = Actions.SendGroupMessage(groupId, gitInfo);
-        }else if (IsStartsWith(chain, "/update")){
+        }
+        else if (IsStartsWith(chain, "/update"))
+        {
             if (authorized == data.sender.user_id)
             {
                 _ = Update(groupId);
@@ -198,7 +195,7 @@ public partial class ViewVersion : Plugin
     }
     class Data
     {
-        public long UpdateByGroupId=-1;
+        public long UpdateByGroupId = -1;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]")]

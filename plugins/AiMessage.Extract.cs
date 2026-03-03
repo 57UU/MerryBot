@@ -1,8 +1,6 @@
 ﻿using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
-using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 
@@ -10,12 +8,12 @@ namespace BotPlugin;
 
 public partial class AiMessage
 {
-    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit=null)
+    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit = null)
     {
         StringBuilder sb = new();
         foreach (var item in chain)
         {
-            var result = await ProcessMessageItem(item, groupId, recursive, depth, resourceLimit?? new ResourceLimit());
+            var result = await ProcessMessageItem(item, groupId, recursive, depth, resourceLimit ?? new ResourceLimit());
             if (!string.IsNullOrEmpty(result))
             {
                 sb.Append(result);
@@ -54,15 +52,17 @@ public partial class AiMessage
         else if (item is FaceData faceData)
         {
             return AppendFaceData(faceData);
-        }else if(item is FileData fileData)
+        }
+        else if (item is FileData fileData)
         {
             return GetFileData(fileData);
         }
-        
+
         return "";
     }
-    string GetFileData(FileData fileData) {
-        return $"<file name={fileData.File} size={Format.FormatFileSize(fileData.FileSize??0)}/>";
+    string GetFileData(FileData fileData)
+    {
+        return $"<file name={fileData.File} size={Format.FormatFileSize(fileData.FileSize ?? 0)}/>";
     }
 
     string AppendTextData(TextData textData)
@@ -91,7 +91,7 @@ public partial class AiMessage
         var referMessage = await Actions.GetMessageById(referMessageId);
         if (referMessage != null)
         {
-            var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1,resourceLimit: resourceLimit);
+            var extractedMessage = await ExtractMessage(referMessage.Message, groupId, false, depth + 1, resourceLimit: resourceLimit);
             referenceMessage = $"<引用内容：{extractedMessage}/>";
         }
         return referenceMessage ?? "";
@@ -108,21 +108,21 @@ public partial class AiMessage
                 {
                     return
                         $"描述:{news.GetProperty("desc").ToString()}\n" +
-                        $"URL:'{news.GetProperty("jumpUrl").ToString()}\n'" ;
+                        $"URL:'{news.GetProperty("jumpUrl").ToString()}\n'";
                 }
                 catch (Exception)
                 {
-                    return news.ToString() ;
+                    return news.ToString();
                 }
             }
             else
             {
-                return meta.ToString() ;
+                return meta.ToString();
             }
         }
         else
         {
-            return json.ToString() ;
+            return json.ToString();
         }
     }
 
@@ -141,33 +141,33 @@ public partial class AiMessage
             }
             forwardLines.Add("</转发消息>");
             var forwardString = string.Join(Environment.NewLine, forwardLines);
-            return PluginUtils.ConstraintLength(forwardString, 600) ;
+            return PluginUtils.ConstraintLength(forwardString, 600);
         }
         else
         {
-            return "<转发消息/>" ;
+            return "<转发消息/>";
         }
     }
 
     async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)
     {
-        if ((depth == 0 || limit.ImageLimit>0) && ImageInterpreterPool != null && imageData.Url != null)
+        if ((depth == 0 || limit.ImageLimit > 0) && ImageInterpreterPool != null && imageData.Url != null)
         {
             var imageUrl = imageData.Url;
             try
             {
                 var description = await ImageInterpreterPool!.Interpret(imageUrl);
                 limit.ImageLimit--;
-                return $"<image：{description}/>" ;
+                return $"<image：{description}/>";
             }
             catch (Exception)
             {
-                return $"<image/>" ;
+                return $"<image/>";
             }
         }
         else
         {
-            return "<image/>" ;
+            return "<image/>";
         }
     }
 

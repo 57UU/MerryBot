@@ -1,11 +1,7 @@
-﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
-global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
-using CommonLib;
+﻿global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using NapcatClient.MessageType;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 namespace NapcatClient;
 
 
@@ -61,17 +57,19 @@ public class GroupForwardChain
 
     [JsonPropertyName("source")]
     public string Source { get; set; }
-    public class Builder{
+    public class Builder
+    {
         public readonly string userId;
         public readonly string nickname;
-        private readonly GroupForwardChain chain=new();
-        public Builder(string selfId,string nickname,string groupId){
-            userId=selfId;
-            this.nickname=nickname;
-            chain.GroupId=groupId;
-            chain.Prompt="我喜欢你很久了，能不能做我男朋友";
-            chain.Summary="思考结果";
-            chain.Source="聊天记录";
+        private readonly GroupForwardChain chain = new();
+        public Builder(string selfId, string nickname, string groupId)
+        {
+            userId = selfId;
+            this.nickname = nickname;
+            chain.GroupId = groupId;
+            chain.Prompt = "我喜欢你很久了，能不能做我男朋友";
+            chain.Summary = "思考结果";
+            chain.Source = "聊天记录";
         }
         public void AddText(string text)
         {
@@ -80,7 +78,7 @@ public class GroupForwardChain
             messageItem.Data.NickName = nickname;
             messageItem.Data.UserId = userId;
             messageItem.Data.Content = TextData.FromText(text);
-            chain.News.Add(new Dictionary<string, object>() { {"text",$"{nickname}:{text}" } });
+            chain.News.Add(new Dictionary<string, object>() { { "text", $"{nickname}:{text}" } });
         }
         public GroupForwardChain Build()
         {
@@ -310,7 +308,8 @@ public class ForwardMessage
     public List<GroupMessage> Messages { get; set; } = new();
 }
 
-public class GroupInfo{
+public class GroupInfo
+{
     [JsonPropertyName("group_all_shut")]
     public int GroupAllShut { get; set; }
 

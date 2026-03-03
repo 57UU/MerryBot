@@ -1,5 +1,5 @@
-using System.Runtime.InteropServices;
 using NapcatClient.MessageType;
+using System.Runtime.InteropServices;
 using ZhipuClient;
 
 
@@ -190,7 +190,8 @@ public partial class AiMessage
             await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
         }
     }
-    private void RegisterFileSenderTool(){
+    private void RegisterFileSenderTool()
+    {
         var fileSender = new ToolDef();
         const int maxSize = 1024 * 1024 * 10; //10MB
         fileSender.Function.Name = "send_file";
@@ -205,7 +206,7 @@ public partial class AiMessage
             }
             if (new FileInfo(filePath).Length > maxSize)
             {
-                return $"文件大小超过{maxSize/1024/1024}MB，无法发送: {filePath}大小为 {new FileInfo(filePath).Length/1024/1024}MB";
+                return $"文件大小超过{maxSize / 1024 / 1024}MB，无法发送: {filePath}大小为 {new FileInfo(filePath).Length / 1024 / 1024}MB";
             }
             await Actions.SendGroupMessage(parameters.SpecialTag, [FileData.FromFile(filePath)]);
             return "成功";

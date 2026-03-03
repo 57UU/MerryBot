@@ -1,6 +1,4 @@
 using CommonLib;
-using System;
-using System.Net.Http;
 
 namespace ZhipuClient;
 

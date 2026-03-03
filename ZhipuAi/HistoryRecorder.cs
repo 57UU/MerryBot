@@ -1,4 +1,4 @@
 
 namespace ZhipuClient;
 
-public delegate void HistoryRecorder(long id,string messageType,string content);
+public delegate void HistoryRecorder(long id, string messageType, string content);

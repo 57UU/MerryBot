@@ -1,14 +1,9 @@
-﻿global using Detail = System.Collections.Generic.Dictionary<string, dynamic>;
-global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
+﻿global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using CommonLib;
 using NapcatClient;
-using NapcatClient.Action;
 using NapcatClient.MessageType;
-using System.Reactive;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Threading.Tasks.Dataflow;
 
 namespace BotPlugin;
 
@@ -34,7 +29,7 @@ public record PluginInfo(
 /// <param name="Getter"></param>
 public class PluginStorage
 {
-    public PluginStorage(ObjectSaver Saver,ObjectGetter Getter)
+    public PluginStorage(ObjectSaver Saver, ObjectGetter Getter)
     {
         this.Saver = Saver;
         this.Getter = Getter;
@@ -44,13 +39,13 @@ public class PluginStorage
     public async Task<T?> Load<T>() where T : class
     {
         var data = await Getter();
-        if(data is null) return null;
+        if (data is null) return null;
         return (T)data;
     }
     public async Task<T> Load<T>(T defaultValue) where T : class
     {
         var data = await Getter();
-        if(data is null) return defaultValue;
+        if (data is null) return defaultValue;
         return (T)data;
     }
     public async Task Save<T>(T data) where T : class
@@ -106,14 +101,14 @@ public record PluginInterop(
     /// <param name="key"></param>
     /// <param name="defaultValue"></param>
     /// <returns></returns>
-    internal T GetVariable<T>(string key,T defaultValue)
+    internal T GetVariable<T>(string key, T defaultValue)
     {
-        
+
         if (!Variables.TryGetValue(key, out var value))
         {
             return defaultValue;
         }
-        var realValue=(JsonElement)value ;
+        var realValue = (JsonElement)value;
         return realValue.Deserialize<T>()!;
     }
     internal JsonElement? GetJsonElement(string key)
@@ -139,7 +134,7 @@ public record PluginInterop(
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
     /// <returns></returns>
-    internal T? GetVariable<T>(string key) 
+    internal T? GetVariable<T>(string key)
     {
         if (!Variables.TryGetValue(key, out var value))
         {
@@ -148,13 +143,13 @@ public record PluginInterop(
         var realValue = (JsonElement)value;
         return realValue.Deserialize<T>();
     }
-    internal void SetVarible<T>(string key,T value) 
+    internal void SetVarible<T>(string key, T value)
     {
-        JsonElement node=JsonSerializer.SerializeToElement<T>(value);
-        SetVarible(key,node);
+        JsonElement node = JsonSerializer.SerializeToElement<T>(value);
+        SetVarible(key, node);
     }
-    
-    internal void SetVarible(string key,JsonElement value)
+
+    internal void SetVarible(string key, JsonElement value)
     {
         Variables[key] = value;
     }
@@ -163,14 +158,15 @@ public record PluginInterop(
         await ConfigSaver.Invoke();
     }
 }
-public enum PluginType{
-    Interactive,Background,Admin
+public enum PluginType
+{
+    Interactive, Background, Admin
 }
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class PluginTag : Attribute
 {
-    public readonly string Name ;
-    public readonly string Description ;
+    public readonly string Name;
+    public readonly string Description;
     /// <summary>
     /// 当为真时，加载插件时将会忽略这个插件。
     /// </summary>
@@ -186,7 +182,7 @@ public class PluginTag : Attribute
     /// <param name="name">名称</param>
     /// <param name="description">描述</param>
     /// <param name="isIgnore">加载插件时是否忽略这个插件</param>
-    public PluginTag(string name, string description, bool isIgnore=false, int priority=0,PluginType type=PluginType.Interactive)
+    public PluginTag(string name, string description, bool isIgnore = false, int priority = 0, PluginType type = PluginType.Interactive)
     {
         Name = name;
         Description = description;
@@ -206,7 +202,7 @@ public static class MessageUtils
     /// <param name="a"></param>
     /// <param name="b"></param>
     /// <returns></returns>
-    public static bool IsEqual(MessageChain a,MessageChain b)
+    public static bool IsEqual(MessageChain a, MessageChain b)
     {
         if (a.IsEmpty || b.IsEmpty) { return false; }
         var a1 = a.ToArray();
@@ -217,13 +213,13 @@ public static class MessageUtils
         }
         for (var i = 0; i < a1.Length; i++)
         {
-            var o1=a1[i];
-            var o2=b1[i];
-            if(o1==null || o2 == null)
+            var o1 = a1[i];
+            var o2 = b1[i];
+            if (o1 == null || o2 == null)
             {
                 return false;
             }
-            if(o1.GetType() != o2.GetType())
+            if (o1.GetType() != o2.GetType())
             {
                 return false;
             }

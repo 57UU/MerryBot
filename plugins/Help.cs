@@ -1,11 +1,5 @@
-﻿using BotPlugin;
-using ConsoleTables;
-using NapcatClient;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using NapcatClient;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace BotPlugin;
 

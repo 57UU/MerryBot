@@ -1,19 +1,6 @@
 using NapcatClient;
 using NapcatClient.MessageType;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Security.Claims;
-using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Timers;
 using ZhipuClient;
-using DataService;
 
 namespace BotPlugin;
 
@@ -177,7 +164,7 @@ public partial class AiMessage : Plugin
         }
 
     }
-   
+
     async Task PreprocessMessage(IEnumerable<TypedMessage> chain, long groupId, string nickname, ReceivedGroupMessage data)
     {
         var messageId = data.message_id;

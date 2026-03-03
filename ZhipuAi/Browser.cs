@@ -1,23 +1,14 @@
 ﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.DevTools;
-using OpenQA.Selenium.Support.Extensions;
 using OpenQA.Selenium.Support.UI;
 using SeleniumStealth.NET.Clients;
-using SeleniumStealth.NET.Clients.Enums;
 using SeleniumStealth.NET.Clients.Extensions;
 using SeleniumStealth.NET.Clients.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Timers;
 using System.Web;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace ZhipuClient;
 
@@ -193,7 +184,7 @@ public partial class Browser : IDisposable
 
         return await task.ContinueWith((t) =>
         {
-            _=GotoBlankPage();
+            _ = GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -231,7 +222,7 @@ public partial class Browser : IDisposable
 
         return await await task.ContinueWith(async (t) =>
         {
-            _=GotoBlankPage();
+            _ = GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {
@@ -291,7 +282,7 @@ public partial class Browser : IDisposable
 
         return await task.ContinueWith((t) =>
         {
-            _=GotoBlankPage();
+            _ = GotoBlankPage();
             mutex.Release();
             if (t.Status == TaskStatus.RanToCompletion)
             {

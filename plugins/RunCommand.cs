@@ -1,16 +1,6 @@
-﻿using CommonLib;
-using NapcatClient;
+﻿using NapcatClient;
 using NapcatClient.MessageType;
-using OpenQA.Selenium;
-using OpenQA.Selenium.BiDi.Input;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace BotPlugin;
 
@@ -28,14 +18,14 @@ public class RunCommand : Plugin
         }
         terminal = Terminal.CreateUserTerminal();
         terminal.logger = Logger;
-        authorized=interop.AuthorizedUser;
+        authorized = interop.AuthorizedUser;
         Logger.Info("shell plugin started");
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        long sender=data.sender.user_id;
+        long sender = data.sender.user_id;
         var isAuthorized = sender == authorized;
-        if (useUnprivileged==false && !isAuthorized)
+        if (useUnprivileged == false && !isAuthorized)
         {
             _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nYou do not have the permission");
             return;
@@ -60,21 +50,22 @@ public class RunCommand : Plugin
             {
                 text = text[1..];
             }
-            _=HandleCommand(text, groupId,data.message_id,isAuthorized);
+            _ = HandleCommand(text, groupId, data.message_id, isAuthorized);
         }
     }
-    internal Terminal terminal ;
-    async Task HandleCommand(string command,long groupId,long messageId,bool isAuthorized=false)
+    internal Terminal terminal;
+    async Task HandleCommand(string command, long groupId, long messageId, bool isAuthorized = false)
     {
         string result;
         try
         {
-            result = await terminal.RunCommandAsync(command, timeoutMs: 3000,useHardTimeout:true);
+            result = await terminal.RunCommandAsync(command, timeoutMs: 3000, useHardTimeout: true);
         }
-        catch (Exception e) { 
+        catch (Exception e)
+        {
             result = $"error:{e.Message}";
         }
-        
+
         result = PluginUtils.ConstraintLength(result, 3000);
 
         await Actions.ChooseBestReplyMethod(groupId, messageId, result);

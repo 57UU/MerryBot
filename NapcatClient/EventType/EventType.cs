@@ -1,5 +1,4 @@
-﻿using System;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace NapcatClient.EventType;
 
@@ -15,13 +14,13 @@ public class TypedEvent
     /// </summary>
     [JsonPropertyName("time")]
     public long Time { get; set; }
-    
+
     /// <summary>
     /// 事件类型
     /// </summary>
     [JsonPropertyName("post_type")]
     public string PostType { get; set; }
-    
+
     /// <summary>
     /// 收到事件的机器人 QQ 号
     /// </summary>
@@ -51,19 +50,19 @@ public class GroupUploadEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 上传者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 文件信息
     /// </summary>
     [JsonPropertyName("file")]
     public FileInfo File { get; set; }
-    
+
     /// <summary>
     /// 文件信息类
     /// </summary>
@@ -74,19 +73,19 @@ public class GroupUploadEvent : NoticeEvent
         /// </summary>
         [JsonPropertyName("id")]
         public string Id { get; set; }
-        
+
         /// <summary>
         /// 文件名
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; }
-        
+
         /// <summary>
         /// 文件大小
         /// </summary>
         [JsonPropertyName("size")]
         public long Size { get; set; }
-        
+
         /// <summary>
         /// 文件 busid
         /// </summary>
@@ -105,13 +104,13 @@ public class GroupAdminEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号
     /// </summary>
@@ -129,19 +128,19 @@ public class GroupDecreaseEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号（如果是被踢，否则为 0）
     /// </summary>
     [JsonPropertyName("operator_id")]
     public long OperatorId { get; set; }
-    
+
     /// <summary>
     /// 被操作 QQ 号
     /// </summary>
@@ -159,19 +158,19 @@ public class GroupIncreaseEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号
     /// </summary>
     [JsonPropertyName("operator_id")]
     public long OperatorId { get; set; }
-    
+
     /// <summary>
     /// 被操作 QQ 号
     /// </summary>
@@ -189,25 +188,25 @@ public class GroupBanEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号
     /// </summary>
     [JsonPropertyName("operator_id")]
     public long OperatorId { get; set; }
-    
+
     /// <summary>
     /// 被禁言 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 禁言时长（秒）
     /// </summary>
@@ -237,19 +236,19 @@ public class GroupRecallEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 消息发送者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号
     /// </summary>
     [JsonPropertyName("operator_id")]
     public long OperatorId { get; set; }
-    
+
     /// <summary>
     /// 被撤回消息 ID
     /// </summary>
@@ -267,7 +266,7 @@ public class FriendRecallEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 被撤回消息 ID
     /// </summary>
@@ -285,19 +284,19 @@ public class PokeEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号（如果是群聊）
     /// </summary>
     [JsonPropertyName("group_id")]
     public long? GroupId { get; set; }
-    
+
     /// <summary>
     /// 戳人者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 被戳者 QQ 号
     /// </summary>
@@ -315,19 +314,19 @@ public class LuckyKingEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 红包发送者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 运气王 QQ 号
     /// </summary>
@@ -345,19 +344,19 @@ public class HonorEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 荣誉类型
     /// </summary>
     [JsonPropertyName("honor_type")]
     public string HonorType { get; set; }
-    
+
     /// <summary>
     /// 获得荣誉者 QQ 号
     /// </summary>
@@ -375,25 +374,25 @@ public class GroupMsgEmojiLikeEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 回应者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 被回应消息 ID
     /// </summary>
     [JsonPropertyName("message_id")]
     public long MessageId { get; set; }
-    
+
     /// <summary>
     /// 表情 ID
     /// </summary>
     [JsonPropertyName("likes")]
     public string Likes { get; set; }
-    
+
     /// <summary>
     /// 回应数量
     /// </summary>
@@ -411,25 +410,25 @@ public class EssenceEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("sub_type")]
     public string SubType { get; set; }
-    
+
     /// <summary>
     /// 群号
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 消息 ID
     /// </summary>
     [JsonPropertyName("message_id")]
     public long MessageId { get; set; }
-    
+
     /// <summary>
     /// 消息发送者 QQ 号
     /// </summary>
     [JsonPropertyName("sender_id")]
     public long SenderId { get; set; }
-    
+
     /// <summary>
     /// 操作者 QQ 号
     /// </summary>
@@ -447,19 +446,19 @@ public class GroupCardEvent : NoticeEvent
     /// </summary>
     [JsonPropertyName("group_id")]
     public long GroupId { get; set; }
-    
+
     /// <summary>
     /// 变更者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
-    
+
     /// <summary>
     /// 新群名片
     /// </summary>
     [JsonPropertyName("card_new")]
     public string CardNew { get; set; }
-    
+
     /// <summary>
     /// 旧群名片
     /// </summary>

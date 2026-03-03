@@ -1,9 +1,9 @@
-﻿using System.Text;
+﻿using NapcatClient.MessageType;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
-using NapcatClient.MessageType;
 
 namespace NapcatClient;
 
@@ -28,7 +28,7 @@ public static class BotUtils
     {
         return JsonSerializer.Deserialize<T>(text, options)!;
     }
-        public static T Deserialize<T>(JsonElement text)
+    public static T Deserialize<T>(JsonElement text)
     {
         return JsonSerializer.Deserialize<T>(text, options)!;
     }
@@ -39,7 +39,7 @@ public static class BotUtils
     public static string MessageChainToString(MessageChain chain)
     {
         var sb = new StringBuilder();
-        foreach(var i in chain)
+        foreach (var i in chain)
         {
             sb.Append(i.ToString());
             sb.Append(";");
@@ -55,9 +55,9 @@ public static class BotUtils
     {
         List<TypedMessage> result = [];
         StringBuilder sb = new();
-        foreach( var i in raw)
+        foreach (var i in raw)
         {
-            if(i is TextData textData)
+            if (i is TextData textData)
             {
                 sb.Append(textData.Text);
             }
@@ -72,7 +72,7 @@ public static class BotUtils
                 result.Add(i);
             }
         }
-        var tail=sb.ToString();
+        var tail = sb.ToString();
         if (!string.IsNullOrWhiteSpace(tail))
         {
             result.Add(TextData.FromText(tail));

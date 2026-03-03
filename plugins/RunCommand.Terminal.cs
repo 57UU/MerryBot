@@ -1,16 +1,15 @@
 
 
+using CommonLib;
 using System.Diagnostics;
 using System.Text;
-using System.Text.RegularExpressions;
-using CommonLib;
 
 namespace BotPlugin;
 
 public partial class Terminal : IDisposable
 {
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
-    private Process _process=null;
+    private Process _process = null;
     private StreamWriter _writer = null;
     private StreamReader _reader = null;
     private StreamReader _errorReader = null;
@@ -18,11 +17,12 @@ public partial class Terminal : IDisposable
 
     private readonly string _endMarker = $"_END_{Guid.NewGuid()}";
     private readonly SemaphoreSlim mutex = new(1);
-    public ISimpleLogger logger=ConsoleLogger.Instance;
+    public ISimpleLogger logger = ConsoleLogger.Instance;
 
     bool isGotoHome = false;
     readonly string shell, arguments;
-    public static Terminal CreateUserTerminal(string user="merrybot"){
+    public static Terminal CreateUserTerminal(string user = "merrybot")
+    {
         return new Terminal("sudo", $"-u {user} /bin/sh");
     }
     public Terminal(string shell, string arguments)
@@ -81,7 +81,7 @@ public partial class Terminal : IDisposable
     /// <param name="useHardTimeout">是否使用硬超时</param>
     /// <param name="waitMutex">是否等待互斥锁</param>
     /// <returns>命令输出</returns>
-    public async Task<string> RunCommandAsync(string command, int timeoutMs = 2000, bool useSoftTimeout=false,bool useHardTimeout=false,bool waitMutex=false)
+    public async Task<string> RunCommandAsync(string command, int timeoutMs = 2000, bool useSoftTimeout = false, bool useHardTimeout = false, bool waitMutex = false)
     {
         if (!isGotoHome)
         {
@@ -89,10 +89,14 @@ public partial class Terminal : IDisposable
             await _writer.FlushAsync();
             isGotoHome = true;
         }
-        if(waitMutex){
+        if (waitMutex)
+        {
             await mutex.WaitAsync();
-        }else{
-            if(!mutex.Wait(0)){
+        }
+        else
+        {
+            if (!mutex.Wait(0))
+            {
                 return "请等待上一个命令执行";
             }
         }
@@ -119,17 +123,17 @@ public partial class Terminal : IDisposable
         var ctsToken = new CancellationTokenSource();
         if (useHardTimeout)
         {
-            ctsToken.CancelAfter(timeoutMs+500);
+            ctsToken.CancelAfter(timeoutMs + 500);
         }
 
         try
         {
-            var readStandardOutTask = _readOutput(_reader, _endMarker,ctsToken.Token)!;
-            var readErrorTask = _readOutput(_errorReader, _endMarker,ctsToken.Token)!;
+            var readStandardOutTask = _readOutput(_reader, _endMarker, ctsToken.Token)!;
+            var readErrorTask = _readOutput(_errorReader, _endMarker, ctsToken.Token)!;
             await Task.WhenAll(readStandardOutTask, readErrorTask);
 
-            var (_standardOutTrim,cancelled) = readStandardOutTask.Result;
-            var (_errTrim,cancelled2) = readErrorTask.Result;
+            var (_standardOutTrim, cancelled) = readStandardOutTask.Result;
+            var (_errTrim, cancelled2) = readErrorTask.Result;
             _standardOutTrim = _standardOutTrim.Trim();
             _errTrim = _errTrim.Trim();
 
@@ -148,24 +152,28 @@ public partial class Terminal : IDisposable
             output = output.Trim().Replace("\t", " ");
             if (string.IsNullOrWhiteSpace(output))
             {
-                output= "[无输出]";
+                output = "[无输出]";
             }
-            if(cancelled){
-                if(await TryKillProcessAsync()){
-                    output +="\n命令执行时间过长，终止shell";
+            if (cancelled)
+            {
+                if (await TryKillProcessAsync())
+                {
+                    output += "\n命令执行时间过长，终止shell";
                 }
-                else{
-                    output +="\n命令执行时间过长，终止shell失败";
+                else
+                {
+                    output += "\n命令执行时间过长，终止shell失败";
                 }
             }
             if (_process.HasExited)
             {
                 RestartProcess();
-                output +="\nProcess Exited. Restarting...";
+                output += "\nProcess Exited. Restarting...";
             }
             return output;
         }
-        catch (Exception e) {
+        catch (Exception e)
+        {
             return $"Error:{e.Message}";
         }
         finally
@@ -191,10 +199,11 @@ public partial class Terminal : IDisposable
             return false;
         }
     }
-    private static async Task<(string content,bool isCancelled)> _readOutput(StreamReader reader,string endMarker,CancellationToken token)
+    private static async Task<(string content, bool isCancelled)> _readOutput(StreamReader reader, string endMarker, CancellationToken token)
     {
         var sb = new StringBuilder();
-        try{
+        try
+        {
             while (true)
             {
                 string? line = await reader.ReadLineAsync(token);
@@ -210,11 +219,12 @@ public partial class Terminal : IDisposable
 
                 sb.AppendLine(line);
             }
-        }catch(OperationCanceledException)
-        {
-            return (sb.ToString(),true);
         }
-        return (sb.ToString(),false);
+        catch (OperationCanceledException)
+        {
+            return (sb.ToString(), true);
+        }
+        return (sb.ToString(), false);
     }
 
     public void Dispose()

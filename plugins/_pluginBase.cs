@@ -3,10 +3,6 @@ using NapcatClient;
 using NapcatClient.Action;
 using NapcatClient.EventType;
 using NapcatClient.MessageType;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
 
 namespace BotPlugin;
 
@@ -74,8 +70,8 @@ public abstract class Plugin : IDisposable
     /// <returns></returns>
     public static bool IsStartsWith(IEnumerable<TypedMessage> chain, string prefix)
     {
-        var first= chain.FirstOrDefault();
-        if (first!=null && first is TextData textData)
+        var first = chain.FirstOrDefault();
+        if (first != null && first is TextData textData)
         {
             string text = textData.Text;
             text = text.Trim();
@@ -104,7 +100,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到通知事件时调用
     /// </summary>
@@ -113,7 +109,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群文件上传事件时调用
     /// </summary>
@@ -122,7 +118,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群管理员变动事件时调用
     /// </summary>
@@ -131,7 +127,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群成员减少事件时调用
     /// </summary>
@@ -140,7 +136,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群成员增加事件时调用
     /// </summary>
@@ -149,7 +145,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群禁言事件时调用
     /// </summary>
@@ -158,7 +154,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到新添加好友事件时调用
     /// </summary>
@@ -167,7 +163,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群消息撤回事件时调用
     /// </summary>
@@ -176,7 +172,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到好友消息撤回事件时调用
     /// </summary>
@@ -185,7 +181,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到戳一戳事件时调用
     /// </summary>
@@ -194,7 +190,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到运气王事件时调用
     /// </summary>
@@ -203,7 +199,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到荣誉变更事件时调用
     /// </summary>
@@ -212,7 +208,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群表情回应事件时调用
     /// </summary>
@@ -221,7 +217,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群精华事件时调用
     /// </summary>
@@ -230,7 +226,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     /// <summary>
     /// 当收到群名片变更事件时调用
     /// </summary>
@@ -239,7 +235,7 @@ public abstract class Plugin : IDisposable
     {
 
     }
-    
+
     public virtual Task OnLoaded()
     {
         return Task.CompletedTask;
@@ -247,6 +243,6 @@ public abstract class Plugin : IDisposable
 
     public virtual void Dispose()
     {
-        
+
     }
 }

@@ -1,19 +1,11 @@
-using CommonLib;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
-using System.Threading.Tasks;
 
 namespace ZhipuClient;
 
@@ -27,7 +19,7 @@ public partial class ZhipuAi : IDisposable
     HttpClient client = new HttpClient();
     private List<ToolDef> Tools { get; set; } = new();
     private Dictionary<string, FunctionDef> functionMapper = new();
-    
+
     readonly string prompt;
     private readonly Browser browser = new();
     public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null)
@@ -242,7 +234,8 @@ public partial class ZhipuAi : IDisposable
             {
                 var aiResponse = await Request(currentHistory, specialTag);
                 var msg = aiResponse.Choices[0].Message;
-                if (msg.Content.StartsWith("<think>")){
+                if (msg.Content.StartsWith("<think>"))
+                {
                     var cotEndIndex = msg.Content.IndexOf("</think>");
                     if (cotEndIndex >= 0)
                     {

@@ -1,5 +1,4 @@
-﻿using NapcatClient;
-using CommonLib;
+﻿using CommonLib;
 
 namespace MerryBot;
 

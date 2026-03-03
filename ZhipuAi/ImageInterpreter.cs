@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using OpenAI;
+﻿using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
 
@@ -19,16 +16,16 @@ public class ImageInterpreter
 
         client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions
         {
-             Endpoint = new Uri(modelPreset.url)
+            Endpoint = new Uri(modelPreset.url)
         });
         chatClient = client.GetChatClient(modelPreset.model);
     }
-        
+
     public async Task<string> Interpret(string imageUrl)
     {
         var chatOptions = new ChatCompletionOptions
         {
-            Temperature=0
+            Temperature = 0
         };
 
         var messages = new List<ChatMessage>

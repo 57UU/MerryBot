@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using OpenQA.Selenium.Chrome;
 using System.Text.Json.Serialization;
 using System.Timers;
-using OpenQA.Selenium.Chrome;
 
 namespace ZhipuClient;
 
@@ -147,26 +144,26 @@ public static class ChromeOptionsExtensions
 
         // 基础配置
         options.AddArgument("--window-size=1920,1080");
-        
+
         // 增强爬虫隐身性的核心参数
         options.AddArgument("--disable-blink-features=AutomationControlled");
         options.AddExcludedArgument("enable-automation");
-        
+
         // 性能和稳定性优化
         options.AddArgument("--no-sandbox");
         options.AddArgument("--disable-dev-shm-usage");
-        
+
         // 隐私和隐身模式
         options.AddArgument("--incognito");
         options.AddArgument("--disable-extensions");
         options.AddArgument("--disable-plugins-discovery");
-        
+
         // 减少干扰
         options.AddArgument("--disable-popup-blocking");
         options.AddArgument("--disable-notifications");
         options.AddArgument("--no-first-run");
         options.AddArgument("--no-default-browser-check");
-        
+
         // 安全相关设置
         options.AddArgument("--ignore-certificate-errors");
         options.AddArgument("--disable-web-security");
@@ -190,7 +187,7 @@ public static class ChromeOptionsExtensions
 
         options.AddArgument("--headless");
         options.AddArgument("--disable-gpu");
-        
+
         return options;
     }
 }

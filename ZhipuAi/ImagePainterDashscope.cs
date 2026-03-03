@@ -1,10 +1,7 @@
-﻿using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace ZhipuClient;
 
@@ -78,7 +75,7 @@ public class ImagePainterDashscope
         {
             var firstChoice = responseObj.Output.Choices[0];
             var imageUrl = firstChoice.Message?.Content?.FirstOrDefault()?.Image;
-            return imageUrl 
+            return imageUrl
                 ?? throw new InvalidOperationException("Image URL is null");
         }
 
