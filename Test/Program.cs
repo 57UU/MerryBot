@@ -84,7 +84,10 @@ public static class Program
         string imageUrl = await painter.DrawImage(prompt, negativePrompt, 1664, 928);
         Console.WriteLine($"图片生成成功: {imageUrl}");
     }
-
+    class Data
+    {
+        public long Value;
+    }
     public static async Task TestPluginStorageDatabase()
     {
         string testDbPath = "test_plugin_data.db";
@@ -92,15 +95,16 @@ public static class Program
         {
             File.Delete(testDbPath);
         }
+        const string TEST_PLUGIN = "TestPlugin";
 
-        var testData = new { Name = "TestPlugin", Version = "1.0.0", Settings = new { Enabled = true, Timeout = 30 } };
+        var testData = new Data { Value = 114514 };
 
         using (var db = new PluginStorageDatabase(testDbPath))
         {
-            await db.StorePluginData("TestPlugin", testData);
+            await db.StorePluginData(TEST_PLUGIN, testData);
             Console.WriteLine("数据已存储");
 
-            var retrieved = await db.GetPluginData("TestPlugin");
+            Data retrieved = (await db.GetPluginData(TEST_PLUGIN) as Data)!;
             Console.WriteLine($"数据已取出: {retrieved}");
 
             if (retrieved == null)
@@ -110,7 +114,7 @@ public static class Program
             }
 
             var retrievedObj = (dynamic)retrieved;
-            if (retrievedObj.Name != "TestPlugin" || retrievedObj.Version != "1.0.0")
+            if (retrievedObj.Value != 114514)
             {
                 Console.WriteLine("测试失败: 数据不匹配");
                 return;
@@ -122,7 +126,7 @@ public static class Program
 
         using (var db2 = new PluginStorageDatabase(testDbPath))
         {
-            var retrieved2 = await db2.GetPluginData("TestPlugin");
+            Data retrieved2 = (await db2.GetPluginData(TEST_PLUGIN) as Data)!;
             Console.WriteLine($"重新打开后数据: {retrieved2}");
 
             if (retrieved2 == null)
@@ -131,13 +135,22 @@ public static class Program
                 return;
             }
 
-            var retrievedObj2 = (dynamic)retrieved2;
-            if (retrievedObj2.Name != "TestPlugin" || retrievedObj2.Version != "1.0.0")
+            Data retrievedObj2 = (Data)retrieved2;
+            if (retrievedObj2.Value != 114514)
             {
                 Console.WriteLine("测试失败: 重新打开后数据不匹配");
                 return;
             }
             Console.WriteLine("持久化测试通过");
+            //modify
+            retrievedObj2.Value = 1919810;
+            await db2.StorePluginData(TEST_PLUGIN, retrievedObj2);
+            if (((Data)(await db2.GetPluginData(TEST_PLUGIN))!).Value != 1919810)
+            {
+                Console.WriteLine("测试失败: not match");
+                return;
+            }
+            Console.WriteLine("modify测试通过");
         }
 
         if (File.Exists(testDbPath))

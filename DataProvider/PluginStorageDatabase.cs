@@ -10,7 +10,12 @@ public partial class PluginStorageDatabase : IDisposable
 
     public PluginStorageDatabase(string databasePath = "plugin_data.db")
     {
-        _db = new LiteDatabaseAsync(databasePath);
+        var mapper = new BsonMapper
+        {
+            IncludeFields = true
+        };
+
+        _db = new LiteDatabaseAsync(databasePath, mapper);
         _collection = _db.GetCollection<PluginData>("Plugin_Data_Table");
         _ = _collection.EnsureIndexAsync(x => x.Id);
     }
