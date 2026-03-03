@@ -1,4 +1,5 @@
-﻿using BotPlugin;
+using BotPlugin;
+using DataProvider;
 using DataService;
 using MerryBot;
 using System;
@@ -13,7 +14,7 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         Config.SettingFile = Path.Combine(dataPath, "setting.json");
         Config.Initialize().Wait();
-        await TestZhipuAi();
+        await TestPluginStorageDatabase();
     }
 
 
@@ -85,5 +86,67 @@ public static class Program
         Console.WriteLine("开始生成图片...");
         string imageUrl = await painter.DrawImage(prompt, negativePrompt, 1664, 928);
         Console.WriteLine($"图片生成成功: {imageUrl}");
+    }
+
+    public static async Task TestPluginStorageDatabase()
+    {
+        string testDbPath = "test_plugin_data.db";
+        if (File.Exists(testDbPath))
+        {
+            File.Delete(testDbPath);
+        }
+
+        var testData = new { Name = "TestPlugin", Version = "1.0.0", Settings = new { Enabled = true, Timeout = 30 } };
+
+        using (var db = new PluginStorageDatabase(testDbPath))
+        {
+            await db.StorePluginData("TestPlugin", testData);
+            Console.WriteLine("数据已存储");
+
+            var retrieved = await db.GetPluginData("TestPlugin");
+            Console.WriteLine($"数据已取出: {retrieved}");
+
+            if (retrieved == null)
+            {
+                Console.WriteLine("测试失败: 数据为空");
+                return;
+            }
+
+            var retrievedObj = (dynamic)retrieved;
+            if (retrievedObj.Name != "TestPlugin" || retrievedObj.Version != "1.0.0")
+            {
+                Console.WriteLine("测试失败: 数据不匹配");
+                return;
+            }
+            Console.WriteLine("第一次测试通过");
+        }
+
+        Console.WriteLine("数据库已关闭");
+
+        using (var db2 = new PluginStorageDatabase(testDbPath))
+        {
+            var retrieved2 = await db2.GetPluginData("TestPlugin");
+            Console.WriteLine($"重新打开后数据: {retrieved2}");
+
+            if (retrieved2 == null)
+            {
+                Console.WriteLine("测试失败: 重新打开后数据为空");
+                return;
+            }
+
+            var retrievedObj2 = (dynamic)retrieved2;
+            if (retrievedObj2.Name != "TestPlugin" || retrievedObj2.Version != "1.0.0")
+            {
+                Console.WriteLine("测试失败: 重新打开后数据不匹配");
+                return;
+            }
+            Console.WriteLine("持久化测试通过");
+        }
+
+        if (File.Exists(testDbPath))
+        {
+            File.Delete(testDbPath);
+        }
+        Console.WriteLine("所有测试通过!");
     }
 }

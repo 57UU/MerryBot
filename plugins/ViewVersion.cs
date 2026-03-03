@@ -30,7 +30,7 @@ public partial class ViewVersion : Plugin
     }
     public async override Task OnLoaded()
     {
-        data=await Interop.PluginStorage.Load<Data>(new Data());
+        data=await Interop.PluginStorage.Load<Data>() ??new Data();
         Logger.Debug("data loaded");
         //if  contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)

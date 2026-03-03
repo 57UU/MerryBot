@@ -41,6 +41,12 @@ public class PluginStorage
     }
     private readonly ObjectSaver Saver;
     private readonly ObjectGetter Getter;
+    public async Task<T?> Load<T>() where T : class
+    {
+        var data = await Getter();
+        if(data is null) return null;
+        return (T)data;
+    }
     public async Task<T> Load<T>(T defaultValue) where T : class
     {
         var data = await Getter();
