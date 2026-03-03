@@ -42,6 +42,7 @@ public partial class PluginStorageDatabase : IDisposable
         _db?.Dispose();
     }
 
+#pragma warning disable CS8618 
     private class PluginData
     {
         [BsonId]
@@ -51,3 +52,5 @@ public partial class PluginStorageDatabase : IDisposable
         public object Value { get; set; }
     }
 }
+
+#pragma warning restore CS8618 

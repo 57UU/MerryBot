@@ -41,6 +41,7 @@ internal class PluginInitializer<T>
         this.nodes.Add(type);
     }
     private Dictionary<Type, T> instances = new();
+    private List<T> initOrder = new();
     private object? _getInstance(Type requireType,Type currentType)
     {
         var actualType = Nullable.GetUnderlyingType(requireType) ?? requireType;
@@ -65,6 +66,16 @@ internal class PluginInitializer<T>
     public T? GetInstance(Type type)
     {
         return instances.GetValueOrDefault(type);
+    }
+    /// <summary>
+    /// get all dispose actions by inversed dependency order
+    /// </summary>
+    /// <returns></returns>
+    public IEnumerable<Action> GetDisposeActions(){
+        return initOrder
+            .OfType<IDisposable>()
+            .Reverse()
+            .Select(d => (Action)(d.Dispose));
     }
 
     private bool IsNullableParameter(ParameterInfo param)
@@ -91,6 +102,7 @@ internal class PluginInitializer<T>
             }
             var instance = constructor.Invoke(parameters.ToArray());
             instances[type] = (T)instance;
+            initOrder.Add((T)instance);
         }
         catch (PluginNotUsableException ex)
         {

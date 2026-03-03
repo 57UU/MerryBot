@@ -1,4 +1,4 @@
-﻿using BotPlugin;
+﻿﻿using BotPlugin;
 using CommonLib;
 using DataProvider;
 using NapcatClient;
@@ -16,7 +16,7 @@ using System.Xml.Linq;
 
 namespace MerryBot;
 
-internal class Logic
+internal partial class Logic
 {
     readonly BotClient botClient;
     private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase;
@@ -138,63 +138,7 @@ internal class Logic
         }
         OnGroupMessage(groupId, span, data);
     }
-    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
-    {
-        foreach(var i in plugins)
-        {
-            if (!i.Instance.IsEnable)
-            {
-                //if the plugin is not enable, skip it
-                continue;
-            }
-            try
-            {
-                i.Instance.OnGroupMessageMentioned(groupId, chain, data);
-            }
-            catch (Exception e) { 
-                logger.Warn(e);
-            }
-            
-        }
-    }
-    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
-    {
-        foreach (var i in plugins)
-        {
-            if (!i.Instance.IsEnable)
-            {
-                //if the plugin is not enable, skip it
-                continue;
-            }
-            try
-            {
-                i.Instance.OnGroupMessageNotMentioned(groupId, chain, data);
-            }
-            catch (Exception e)
-            {
-                logger.Warn(e);
-            }
-        }
-    }
-    private void OnGroupMessage(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
-    {
-        foreach (var i in plugins)
-        {
-            if (!i.Instance.IsEnable)
-            {
-                //if the plugin is not enable, skip it
-                continue;
-            }
-            try
-            {
-                i.Instance.OnGroupMessage(groupId, chain, data);
-            }
-            catch (Exception e)
-            {
-                logger.Warn(e);
-            }
-        }
-    }
+
     private static List<(Type type, PluginTag attribute)> FindPlugins()
     {
         List<(Type type, PluginTag attribute)> list = [];
@@ -209,6 +153,7 @@ internal class Logic
         }
         return list;
     }
+    private IEnumerable<Action>? _pluginsDisposeActions;
     private void LoadPlugins()
     {
         var allPlugins= FindPlugins();
@@ -263,17 +208,18 @@ internal class Logic
         {
             logger.Fatal(e);
         }
+        _pluginsDisposeActions = pluginInitializer.GetDisposeActions();
         IEnumerable<(Plugin? pluginInstance, PluginTag attribute)> allPluginInstance 
             = allPlugins.Select(p => (pluginInitializer.GetInstance(p.type), p.attribute));
-        foreach(var i in allPluginInstance)
+        foreach(var (pluginInstance, attribute) in allPluginInstance)
         {
-            if (i.pluginInstance != null)
+            if (pluginInstance != null)
             {
                 plugins.Add(
                     new PluginInfo(
-                    i.pluginInstance,
-                    i.attribute,
-                    pluginInteropMap[i.pluginInstance.GetType()]
+                    pluginInstance,
+                    attribute,
+                    pluginInteropMap[pluginInstance.GetType()]
                     )
                 );
             }
@@ -298,182 +244,13 @@ internal class Logic
     /// </summary>
     public void Shutdown(int exitCode=0)
     {
-        //close plugin
-        foreach (var i in plugins)
+        foreach (var dispose in _pluginsDisposeActions!)
         {
-            i.Instance.Dispose();
+            dispose();
         }
         PluginStorageDatabase.Dispose();
         botClient.Close();
         NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);
-    }
-    
-    private void OnNoticeEventReceived(NapcatClient.EventType.NoticeEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnNoticeEvent(eventData);
-        }
-    }
-    
-    private void OnGroupUploadEventReceived(NapcatClient.EventType.GroupUploadEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupUploadEvent(eventData);
-        }
-    }
-    
-    private void OnGroupAdminEventReceived(NapcatClient.EventType.GroupAdminEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupAdminEvent(eventData);
-        }
-    }
-    
-    private void OnGroupDecreaseEventReceived(NapcatClient.EventType.GroupDecreaseEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupDecreaseEvent(eventData);
-        }
-    }
-    
-    private void OnGroupIncreaseEventReceived(NapcatClient.EventType.GroupIncreaseEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupIncreaseEvent(eventData);
-        }
-    }
-    
-    private void OnGroupBanEventReceived(NapcatClient.EventType.GroupBanEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupBanEvent(eventData);
-        }
-    }
-    
-    private void OnFriendAddEventReceived(NapcatClient.EventType.FriendAddEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnFriendAddEvent(eventData);
-        }
-    }
-    
-    private void OnGroupRecallEventReceived(NapcatClient.EventType.GroupRecallEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupRecallEvent(eventData);
-        }
-    }
-    
-    private void OnFriendRecallEventReceived(NapcatClient.EventType.FriendRecallEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnFriendRecallEvent(eventData);
-        }
-    }
-    
-    private void OnPokeEventReceived(NapcatClient.EventType.PokeEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnPokeEvent(eventData);
-        }
-    }
-    
-    private void OnLuckyKingEventReceived(NapcatClient.EventType.LuckyKingEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnLuckyKingEvent(eventData);
-        }
-    }
-    
-    private void OnHonorEventReceived(NapcatClient.EventType.HonorEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnHonorEvent(eventData);
-        }
-    }
-    
-    private void OnGroupMsgEmojiLikeEventReceived(NapcatClient.EventType.GroupMsgEmojiLikeEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupMsgEmojiLikeEvent(eventData);
-        }
-    }
-    
-    private void OnEssenceEventReceived(NapcatClient.EventType.EssenceEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnEssenceEvent(eventData);
-        }
-    }
-    
-    private void OnGroupCardEventReceived(NapcatClient.EventType.GroupCardEvent eventData)
-    {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupCardEvent(eventData);
-        }
-    }
-}
-class PluginLogger(string tag) : ISimpleLogger
-{
-    private readonly NLog.Logger _logger = NLog.LogManager.GetLogger($"plugin:{tag}");
-
-    public void Debug(string message)
-    {
-        _logger.Debug(message);
-    }
-    public void Trace(string message)
-    {
-        _logger.Trace(message);
-    }
-
-    public void Error(string message)
-    {
-        _logger.Error(message);
-    }
-
-    public void Fatal(string message)
-    {
-        _logger.Fatal(message);
-    }
-
-    public void Info(string message)
-    {
-        _logger.Info(message);
-    }
-
-    public void Warn(string message)
-    {
-        _logger.Warn(message);
     }
 }
