@@ -25,7 +25,7 @@ public static class Program
 
         PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
 
-        var aiVars = config.Variables[tag.Name];
+        var aiVars = config.Variables[tag.Id];
         string token = aiVars[token_key].GetString()!;
         string prompt = aiVars["ai-prompt"].GetString()!;
         ZhipuAi zhipu = new ZhipuAi(token, prompt, model);
@@ -72,8 +72,8 @@ public static class Program
     public static async Task TestImagePainterDashscope()
     {
         var model = DashscopeModelPreset.QwenImageMax;
-        // 使用 "AI机器人" 插件的命名空间
-        var aiVars = Config.Instance.Variables["AI机器人"];
+        // 使用 "ai-message" 插件的命名空间
+        var aiVars = Config.Instance.Variables["ai-message"];
         string? token = aiVars.TryGetValue(model.ApiTokenDictKey, out var tokenElem) ? tokenElem.GetString() : null;
         if (string.IsNullOrEmpty(token))
         {

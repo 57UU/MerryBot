@@ -2,7 +2,7 @@
 
 namespace BotPlugin;
 
-[PluginTag("About", "使用 /about 来查看关于", isIgnore: true)]
+[PluginTag("about", "About", "使用 /about 来查看关于", isIgnore: true)]
 public class About : Plugin
 {
     private const string aboutMessage =

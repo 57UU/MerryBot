@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace BotPlugin;
 
-[PluginTag("shell", "使用 /sh 运行终端命令")]
+[PluginTag("run-command", "Shell", "使用 /sh 运行终端命令")]
 public class RunCommand : Plugin
 {
     long authorized;

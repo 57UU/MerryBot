@@ -4,7 +4,7 @@ using ZhipuClient;
 
 namespace BotPlugin;
 
-[PluginTag("AiDialog", "使用 /dialog 来查看AI历史")]
+[PluginTag("view-dialog", "AiDialog", "使用 /dialog 来查看AI历史")]
 public class ViewDialog : Plugin
 {
     public ViewDialog(PluginInterop interop, AiMessage aiMessage) : base(interop)

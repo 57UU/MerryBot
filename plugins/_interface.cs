@@ -161,6 +161,7 @@ public enum PluginType
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class PluginTag : Attribute
 {
+    public readonly string Id;
     public readonly string Name;
     public readonly string Description;
     /// <summary>
@@ -175,11 +176,13 @@ public class PluginTag : Attribute
     /// <summary>
     /// 插件的tag，用于标记插件
     /// </summary>
+    /// <param name="id">标识ID</param>
     /// <param name="name">名称</param>
     /// <param name="description">描述</param>
     /// <param name="isIgnore">加载插件时是否忽略这个插件</param>
-    public PluginTag(string name, string description, bool isIgnore = false, int priority = 0, PluginType type = PluginType.Interactive)
+    public PluginTag(string id, string name, string description, bool isIgnore = false, int priority = 0, PluginType type = PluginType.Interactive)
     {
+        Id = id;
         Name = name;
         Description = description;
         IsIgnore = isIgnore;

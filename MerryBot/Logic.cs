@@ -157,24 +157,24 @@ internal partial class Logic
         });
         PluginInitializer<Plugin> pluginInitializer = new();
         Dictionary<Type, PluginInterop> pluginInteropMap = new();
-        logger.Debug($"find plugin: {string.Join(",", allPlugins.Select(p => p.attribute.Name))}");
+        logger.Debug($"find plugin: {string.Join(",", allPlugins.Select(p => p.attribute.Id))}");
         foreach (var (type, attribute) in allPlugins)
         {
             try
             {
                 // 获取或创建该插件的命名空间字典
-                if (!Config.Instance.Variables.TryGetValue(attribute.Name, out var pluginVars))
+                if (!Config.Instance.Variables.TryGetValue(attribute.Id, out var pluginVars))
                 {
                     pluginVars = new Dictionary<string, JsonElement>();
-                    Config.Instance.Variables[attribute.Name] = pluginVars;
+                    Config.Instance.Variables[attribute.Id] = pluginVars;
                 }
                 var interop = new PluginInterop(
-                        new PluginLogger(attribute.Name),
+                        new PluginLogger(attribute.Id),
                         QqGroupIDs,
                         () => plugins,
                         new PluginStorage(
-                            (s) => PluginStorageDatabase.StorePluginData(attribute.Name, s),
-                            () => PluginStorageDatabase.GetPluginData(attribute.Name)
+                            (s) => PluginStorageDatabase.StorePluginData(attribute.Id, s),
+                            () => PluginStorageDatabase.GetPluginData(attribute.Id)
                             ),
                         botClient,
                         pluginVars,
@@ -198,7 +198,7 @@ internal partial class Logic
             }
             catch (Exception ex)
             {
-                logger.Error(ex, $"the plugin {attribute.Name} can not be loaded");
+                logger.Error(ex, $"the plugin {attribute.Id} can not be loaded");
             }
         }
         //initialize
@@ -236,7 +236,7 @@ internal partial class Logic
             {
                 if (task.Exception != null)
                 {
-                    logger.Error($"the plugin {i.PluginTag.Name} OnLoaded failed: {task.Exception}");
+                    logger.Error($"the plugin {i.PluginTag.Id} OnLoaded failed: {task.Exception}");
                 }
             });
         }

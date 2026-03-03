@@ -4,7 +4,7 @@ using System.Text;
 
 namespace BotPlugin;
 
-[PluginTag("version", "/version查看当前版本;/update更新软件", priority: 114514)]
+[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件", priority: 114514)]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;

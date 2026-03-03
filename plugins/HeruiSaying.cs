@@ -2,7 +2,7 @@
 
 namespace BotPlugin;
 
-[PluginTag("锐言锐语", "使用/hr来获取", isIgnore: true)]
+[PluginTag("herui-saying", "锐言锐语", "使用/hr来获取", isIgnore: true)]
 public class HeruiSaying : Plugin
 {
     private const string url = "https://the-brotherhood-of-scu.github.io/herui_saying_text/";

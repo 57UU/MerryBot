@@ -6,7 +6,7 @@ using NapcatClient.MessageType;
 
 namespace BotPlugin;
 
-[PluginTag("MessageRecorder", "自动记录所有群聊消息到 LiteDB 数据库", priority: 1000, type: PluginType.Background)]
+[PluginTag("message-recorder", "MessageRecorder", "自动记录所有群聊消息到 LiteDB 数据库", priority: 1000, type: PluginType.Background)]
 public class MessageRecorderPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;

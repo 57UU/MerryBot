@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Builder;
 
 namespace BotPlugin;
 
-[PluginTag("StorageManager", "管理AiMessageStorage、GroupHistoryRecorder和后台网站的生命周期", priority: 999, type: PluginType.Background)]
+[PluginTag("storage-manager", "StorageManager", "管理AiMessageStorage、GroupHistoryRecorder和后台网站的生命周期", priority: 999, type: PluginType.Background)]
 public class StorageManagerPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;
