@@ -2,35 +2,30 @@
 
 MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持插件化开发。
 
-# 配置文件`setting.json`
+# 配置文件 `setting.toml`
 
-```json
-{
-  "napcat_server": "ws://<address>:<port>", //napcat websocket地址
-  "napcat_token": "<token>", //napcat token
-  "qq_groups": [ //要监听的qq群号列表
+```toml
+napcat-server = "ws://<address>:<port>"  # napcat websocket地址
+napcat-token = "<token>"                  # napcat token
+qq-groups = [                             # 要监听的qq群号列表
     114514,
     1919810
-  ],
-  "authorized-user":114514,//授权用户qq号，插件可在高危操作时验证qq号
-  "variables": {
-    // 每个插件有独立的命名空间，key为插件id
-    "ai-message": {
-      "llm-model": "deepseek-chat",// 选择的llm模型
-      "ai-token-zhipu": "xxxxxxxxxx", //质谱api token
-      "ai-token-deepseek": "xxxxxxxxxx", //deepseek api token
-      "ai-prompt": "你是一个助人为乐的AI助手" //ai 提示词
-    },
-    "storage-manager": {
-      "machine-code": 0
-    }
-  }
-}
+]
+authorized-user = 114514                  # 授权用户qq号，插件可在高危操作时验证qq号
+
+[variables.agent]                         # 每个插件有独立的命名空间，表名为插件id
+llm-model = "deepseek-chat"               # 选择的llm模型
+ai-token-zhipu = "xxxxxxxxxx"             # 质谱api token
+ai-token-deepseek = "xxxxxxxxxx"          # deepseek api token
+ai-prompt = "你是一个助人为乐的AI助手"    # ai 提示词
+
+[variables.storage-manager]
+machine-code = 0
 ```
 
 note: 
-- `llm-model`支持的参数定义在`ZhipuAi/ModelPreset.cs`枚举中
-- `variables` 中的 key 是插件的 `id`，每个插件的配置项相互隔离
+- `llm-model` 支持的参数定义在 `ZhipuAi/ModelPreset.cs` 枚举中
+- `variables` 中的表名是插件的 `id`，每个插件的配置项相互隔离
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
 
