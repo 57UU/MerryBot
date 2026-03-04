@@ -108,9 +108,8 @@ public partial class AiMessage
     {
         try
         {
-            var anotherBot = Interop.GetJsonElement("bot-help")
+            long qq = Interop.GetStructVariable<long>("bot-help")
                 ?? throw new Exception("please specific bot-help in variables");
-            long qq = anotherBot.GetInt64();
             var solver = new ToolDef();
             solver.Function.Name = "turn_to";
             solver.Function.Description = "让智能AI处理某问题";
@@ -156,7 +155,7 @@ public partial class AiMessage
     {
         var model = DashscopeModelPreset.QwenImageMax;
         var token_key = model.ApiTokenDictKey;
-        var token = Interop.GetVariable<string>(token_key);
+        var token = Interop.GetClassVariable<string>(token_key);
         if (token == null)
         {
             Logger.Warn($"请在配置文件variable中设置{token_key}");

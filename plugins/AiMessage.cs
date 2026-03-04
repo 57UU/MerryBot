@@ -24,17 +24,17 @@ public partial class AiMessage : Plugin
         //display available model
         //ModelPreset.DisplayAllModels();
         var model = ModelPreset.GetModelByName(
-            interop.GetVariable<string>(LLM_KEY)
+            interop.GetClassVariable<string>(LLM_KEY)
             );
         if (model == null)
         {
             Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
             model = ModelPreset.Glm_4_5_Free;
         }
-        useFunctionCallToReply = interop.GetJsonElement("use_function_call_reply")?.GetBoolean() ?? false;
+        useFunctionCallToReply = interop.GetStructVariable<bool>("use_function_call_reply") ?? false;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key = model.ApiTokenDictKey;
-        var token = interop.GetVariable<string>(token_key)
+        var token = interop.GetClassVariable<string>(token_key)
             ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
         //image interpreter
         {
@@ -42,7 +42,7 @@ public partial class AiMessage : Plugin
             foreach (var model_image in imageInterpreterModels)
             {
                 var token_key_image = model_image.ApiTokenDictKey;
-                var token_image = interop.GetVariable<string>(token_key_image);
+                var token_image = interop.GetClassVariable<string>(token_key_image);
                 if (token_image == null)
                 {
                     Logger.Warn($"请在配置文件variable中设置{token_key_image}");
@@ -57,7 +57,7 @@ public partial class AiMessage : Plugin
                 ImageInterpreterPool = new ImageInterpreterPool(imageInterpreters);
             }
         }
-        var prompt = interop.GetVariable("ai-prompt", "你是乐于助人的助手");
+        var prompt = interop.GetVariableOrSetDefault("ai-prompt", "你是乐于助人的助手");
 
         ZhipuClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
         {
@@ -139,7 +139,7 @@ public partial class AiMessage : Plugin
             if (model != null)
             {
                 //access token
-                string? token = Interop.GetVariable<string>(model.ApiTokenDictKey);
+                string? token = Interop.GetClassVariable<string>(model.ApiTokenDictKey);
                 if (token != null)
                 {
                     //valid
@@ -188,7 +188,7 @@ public partial class AiMessage : Plugin
             }
             else if (text.StartsWith("/getllm"))
             {
-                _ = Actions.ReplyGroupMessage(groupId, messageId, $"current llm: {aiClient.ModelPreset.model}\n{ModelPreset.AllModels()}");
+                _ = Actions.ReplyGroupMessage(groupId, messageId, $"current llm: {aiClient.ModelPreset.model}\n{string.Join(", ", ModelPreset.AllModelsDict.Keys)}");
             }
             return;
         }

@@ -9,7 +9,7 @@ string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
 string logFileDir = "log";
 string dbPath = "plugin_data.db";
 
-Config.SettingFile = Path.Combine(dataPath, "setting.json");
+ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
 logFileDir = Path.Combine(dataPath, logFileDir);
 dbPath = Path.Combine(dataPath, dbPath);
 
@@ -23,7 +23,7 @@ if (Utils.CreateDirectory(logFileDir))
 }
 var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
-Config.Initialize().Wait();
+ConfigManager.Initialize().Wait();
 //init logger
 NLog.LogManager.Setup().LoadConfiguration(builder =>
 {
@@ -33,7 +33,7 @@ NLog.LogManager.Setup().LoadConfiguration(builder =>
 var currentLogger = LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
 
-var config = Config.Instance;
+var config = ConfigManager.Instance;
 if (config.AuthorizedUser < 0)
 {
     currentLogger.Warn("'authorized-user' is not valid");

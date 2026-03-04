@@ -3,6 +3,9 @@ using DataProvider;
 using MerryBot;
 using System.Reflection;
 using System.Text.Json;
+using Tomlyn;
+using Tomlyn.Model;
+using Tomlyn.Syntax;
 using ZhipuClient;
 
 public static class Program
@@ -10,15 +13,15 @@ public static class Program
     public static async Task Main(string[] args)
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        Config.SettingFile = Path.Combine(dataPath, "setting.json");
-        Config.Initialize().Wait();
-        await TestPluginStorageDatabase();
+        ConfigManager.SettingFile = Path.Combine(dataPath, "setting.json");
+        ConfigManager.Initialize().Wait();
+        TestStructNullable();
     }
 
 
     public static async Task TestZhipuAi()
     {
-        var config = Config.Instance;
+        var config = ConfigManager.Instance;
 
         var model = ModelPreset.MiniMax2_5;
         var token_key = model.ApiTokenDictKey;
@@ -26,8 +29,8 @@ public static class Program
         PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
 
         var aiVars = config.Variables[tag.Id];
-        string token = aiVars[token_key].GetString()!;
-        string prompt = aiVars["ai-prompt"].GetString()!;
+        string token = (string)aiVars[token_key];
+        string prompt = (string)aiVars["ai-prompt"];
         ZhipuAi zhipu = new ZhipuAi(token, prompt, model);
         while (true)
         {
@@ -72,9 +75,9 @@ public static class Program
     public static async Task TestImagePainterDashscope()
     {
         var model = DashscopeModelPreset.QwenImageMax;
-        // 使用 "ai-message" 插件的命名空间
-        var aiVars = Config.Instance.Variables["ai-message"];
-        string? token = aiVars.TryGetValue(model.ApiTokenDictKey, out var tokenElem) ? tokenElem.GetString() : null;
+        PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
+        var aiVars = ConfigManager.Instance.Variables[tag.Id];
+        string? token = aiVars.TryGetValue(model.ApiTokenDictKey, out var tokenElem) ? (string)tokenElem : null;
         if (string.IsNullOrEmpty(token))
         {
             Console.WriteLine("请设置环境变量 DASHSCOPE_API_KEY");
@@ -90,6 +93,29 @@ public static class Program
         Console.WriteLine("开始生成图片...");
         string imageUrl = await painter.DrawImage(prompt, negativePrompt, 1664, 928);
         Console.WriteLine($"图片生成成功: {imageUrl}");
+    }
+    public static void TestToml()
+    {
+        string tomlContent = @"
+id=2
+[Client]
+server_address = ""192.168.1.1""
+port = 80
+enabled = false
+";
+
+        var document = Toml.ToModel<TomlTable>(tomlContent);
+
+        // 从文档中获取值
+        var id = document["id"];
+
+        var childNode = (TomlTable)document["Client"];
+        var address = childNode["server_address"];
+        var port = childNode["port"];
+        var enabled = childNode["enabled"];
+
+
+        Console.WriteLine($"Address: {address}, Port: {port}, Enabled: {enabled}");
     }
     class Data
     {
@@ -165,5 +191,20 @@ public static class Program
             File.Delete(testDbPath);
         }
         Console.WriteLine("所有测试通过!");
+    }
+    static T? NullableFunction<T>() where T : struct
+    {
+        return default;
+    }
+    static T? NullableFunction2<T>()
+    {
+        return default;
+    }
+    static void TestStructNullable()
+    {
+        var value = NullableFunction<int>(); //int?
+        var value2 = NullableFunction2<int>();//int
+        Console.WriteLine(value==null);
+        Console.WriteLine(value2.GetType());
     }
 }

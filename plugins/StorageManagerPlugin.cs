@@ -26,7 +26,7 @@ public class StorageManagerPlugin : Plugin
         Logger.Info($"StorageManagerPlugin 初始化完成，群历史数据库路径: {dbPath}, 存储路径: {storagePath}");
 
 
-        var _machineCode = interop.GetJsonElement(machineCodeKey);
+        var _machineCode = interop.GetStructVariable<int>(machineCodeKey);
         if (_machineCode == null)
         {
             //gen
@@ -36,7 +36,7 @@ public class StorageManagerPlugin : Plugin
         }
         else
         {
-            machineCode = _machineCode.Value.GetInt32();
+            machineCode = _machineCode.Value;
         }
         webApplication = HistoryWebFrontend.Program.CreateApp(historyRecorder);
         _ = webApplication.RunAsync();

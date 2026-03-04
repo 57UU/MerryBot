@@ -30,7 +30,7 @@ internal class MainPlugin : Plugin
                 return;
             }
             Logger.Info($"execute activating on {groupId}");
-            var group = Config.Instance.QqGroups;
+            var group = ConfigManager.Instance.QqGroups;
             if (group.Contains(groupId))
             {
                 _ = Actions.ReplyGroupMessage(groupId, data.message_id, "error: already active");
@@ -39,7 +39,7 @@ internal class MainPlugin : Plugin
             group.Add(groupId);
             Task.Run(async () =>
             {
-                await Config.Save();
+                await ConfigManager.Save();
                 await Actions.ReplyGroupMessage(groupId, data.message_id, $"active on {groupId}");
             });
         }
@@ -53,10 +53,10 @@ internal class MainPlugin : Plugin
                 return;
             }
             Logger.Info($"execute deactivating on {groupId}");
-            var result = Config.Instance.QqGroups.Remove(groupId);
+            var result = ConfigManager.Instance.QqGroups.Remove(groupId);
             Task.Run(async () =>
             {
-                await Config.Save();
+                await ConfigManager.Save();
                 if (!result)
                 {
                     await Actions.ReplyGroupMessage(groupId, data.message_id, "error: not active");

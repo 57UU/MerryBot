@@ -5,6 +5,7 @@ using NapcatClient.MessageType;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Tomlyn.Model;
 
 namespace MerryBot;
 
@@ -14,7 +15,7 @@ internal partial class Logic
     private readonly DataProvider.PluginStorageDatabase PluginStorageDatabase;
     private readonly List<PluginInfo> plugins = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-    public static long AuthorizedUser { get { return Config.Instance.AuthorizedUser; } }
+    public static long AuthorizedUser { get { return ConfigManager.Instance.AuthorizedUser; } }
     readonly string[] CommandLineArguments = Environment.GetCommandLineArgs();
     private MainPlugin? mainPlugin;
 
@@ -22,7 +23,7 @@ internal partial class Logic
     {
         get
         {
-            return Config.Instance.QqGroups;
+            return ConfigManager.Instance.QqGroups;
         }
     }
     public Logic(BotClient botClient, string dbPath)
@@ -163,10 +164,10 @@ internal partial class Logic
             try
             {
                 // 获取或创建该插件的命名空间字典
-                if (!Config.Instance.Variables.TryGetValue(attribute.Id, out var pluginVars))
+                if (!ConfigManager.Instance.Variables.TryGetValue(attribute.Id, out var pluginVars))
                 {
-                    pluginVars = new Dictionary<string, JsonElement>();
-                    Config.Instance.Variables[attribute.Id] = pluginVars;
+                    pluginVars = new TomlTable();
+                    ConfigManager.Instance.Variables[attribute.Id] = pluginVars;
                 }
                 var interop = new PluginInterop(
                         new PluginLogger(attribute.Id),
@@ -181,7 +182,7 @@ internal partial class Logic
                         Shutdown,
                         AuthorizedUser,
                         CommandLineArguments,
-                        Config.Save,
+                        ConfigManager.Save,
                         botClient.PathPrefix,
                         f => OnRawGroupMessageReceived += f
                         );

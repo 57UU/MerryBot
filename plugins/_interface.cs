@@ -72,7 +72,7 @@ public record PluginInterop(
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
     BotClient BotClient,
-    Dictionary<string, JsonElement> Variables,
+    IDictionary<string, object> Variables,
     Action<int> Shutdown,
     long AuthorizedUser,
     string[] CommandLineArguments,
@@ -95,59 +95,60 @@ public record PluginInterop(
         return this.PluginInfoGetter().FirstOrDefault(i => i.Instance is T)?.Instance as T;
     }
     /// <summary>
-    /// 尝试在配置文件的变量中查找
+    /// 尝试在配置文件的变量中查找，如果没有找到，那就存储并返回默认值。处于性能考量，保存会异步执行。
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
     /// <param name="defaultValue"></param>
     /// <returns></returns>
-    internal T GetVariable<T>(string key, T defaultValue)
+    internal T GetVariableOrSetDefault<T>(string key, T defaultValue)
     {
         if (!Variables.TryGetValue(key, out var value))
         {
+            //save it
+            SetVarible(key, defaultValue);
+            _ = SaveConfig();
             return defaultValue;
         }
-        return value.Deserialize<T>()!;
-    }
-    internal JsonElement? GetJsonElement(string key)
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-        return value;
-    }
-    internal Nullable<long> GetLongVariable(string key)
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-        return value.Deserialize<long>()!;
+        return (T)value;
     }
     /// <summary>
-    /// 在配置文件的变量中查找
+    /// try get config value
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
+    /// <param name="value"></param>
     /// <returns></returns>
-    internal T? GetVariable<T>(string key)
+    internal bool TryGetVariable<T>(string key, out T? value)
+    {
+        if (!Variables.TryGetValue(key, out var rawValue) || rawValue == null)
+        {
+            value = default(T?);
+            return false;
+        }
+        value = (T?)rawValue;
+        return true;
+    }
+    internal T? GetStructVariable<T>(string key) where T : struct
     {
         if (!Variables.TryGetValue(key, out var value))
         {
             return default;
         }
-        return value.Deserialize<T>();
+        return (T)Convert.ChangeType(value, typeof(T));
     }
-    internal void SetVarible<T>(string key, T value)
+    internal T? GetClassVariable<T>(string key) where T : class
     {
-        JsonElement node = JsonSerializer.SerializeToElement<T>(value);
-        SetVarible(key, node);
+        if (!Variables.TryGetValue(key, out var value))
+        {
+            return default;
+        }
+        return (T)value;
     }
 
-    internal void SetVarible(string key, JsonElement value)
+    internal void SetVarible<T>(string key, T value)
     {
-        Variables[key] = value;
+        Variables[key] = value!;
     }
     internal async Task SaveConfig()
     {

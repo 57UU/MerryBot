@@ -1,0 +1,72 @@
+﻿using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Unicode;
+using Tomlyn;
+using Tomlyn.Model;
+
+namespace MerryBot;
+
+public static class ConfigManager
+{
+    public static string SettingFile = "setting.toml";
+    public static Config Instance
+    {
+        get
+        {
+            if (field == null)
+            {
+                throw new Exception("Config is not initialized!");
+            }
+            return field;
+        }
+        private set { field = value; }
+    }
+    public async static Task Initialize()
+    {
+        try
+        {
+            await Load();
+            await Save();
+        }
+        catch (Exception)
+        {
+            Instance = new Config();
+            Save().Wait();
+        }
+    }
+    private static TomlModelOptions _tomlModelOptions = new()
+    {
+
+    };
+    public async static Task Save()
+    {
+
+        var toml = Toml.FromModel(Instance, options: _tomlModelOptions);
+        await Utils.write(SettingFile, toml);
+    }
+    public async static Task Load()
+    {
+
+        var json = await Utils.read(SettingFile);
+        Config i = Toml.ToModel<Config>(json!, options: _tomlModelOptions)!;
+        Instance = i;
+
+    }
+}
+public class Config : ITomlMetadataProvider
+{
+    [TomlPropertyName("napcat-server")]
+    public string NapcatServer { set; get; } = "ws://<host>:<port>/";
+    [TomlPropertyName("napcat-token")]
+    public string NapcatToken { set; get; } = "napcat";
+    [TomlPropertyName("qq-groups")]
+    public List<long> QqGroups { set; get; } = [];
+    [TomlPropertyName("authorized-user")]
+    public long AuthorizedUser { set; get; } = -1;
+    [TomlPropertyName("variables")]
+    public Dictionary<string, TomlTable> Variables { set; get; } = new();
+
+    // storage for comments and whitespace
+    TomlPropertiesMetadata? ITomlMetadataProvider.PropertiesMetadata { get; set; }
+}

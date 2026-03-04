@@ -157,7 +157,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |bool IsEnable {set;protected get;}|是否启用|无论是否启用，插件都会被加载，当为假时OnMessageReceived函数不会被调用
 |string? StartsWith {set;get;}|该项是属性，若设置，那么只有以`StartsWith`开头的消息会触发`OnMessageReceived`函数
 |ISimpleLogger logger {get;}|获取`logger`，用于记录日志
-|Interop interop {get;}|获取互操作性|
+|Interop interop {get;}|获取互操作性（查找插件、数据持久化、使用Core功能）|
 
 ### 互操作性-interop
 **注意** 对于互操作性，请不要在构造函数中使用（此时插件没有加载完），建议在`OnLoaded`函数中使用
@@ -181,7 +181,7 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### 插件存储-PluginStorage
 
-对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件id），以字符串为单位进行储存于读取，现阶段的实现依赖于`LiteDB`（一种高性能NoSQL数据库）
+对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件id），以字符串为单位进行储存于读取，现阶段的实现依赖于`SQLite3`
 
 |API|Description|
 |:---:|:---|
@@ -212,8 +212,8 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 构造函数为`(string id, string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
 
 参数说明：
-- `id` - 插件标识符，用于配置文件命名空间隔离
-- `name` - 插件名称，用于显示
+- `id` - 插件标识符（英文），用于配置文件命名空间隔离
+- `name` - 插件名称（可中文），用于显示
 - `description` - 插件描述
 - `isIgnore` - 是否忽略加载
 - `priority` - 插件优先级，决定加载顺序。值越小，优先级越高
