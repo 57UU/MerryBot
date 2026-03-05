@@ -75,7 +75,7 @@ public partial class AiMessage : Plugin
         // turn to another bot
         //AddBotForHelp();
         RegisterImagePainter();
-        RegisterFileSenderTool();
+        RegisterShellTool();
     }
 
 
@@ -83,7 +83,7 @@ public partial class AiMessage : Plugin
 
     public async override Task OnLoaded()
     {
-        RegisterShellTool();
+        
     }
     internal ZhipuAi aiClient;
     static bool IsContainsNew(string message)

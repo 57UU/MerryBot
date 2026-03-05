@@ -82,13 +82,14 @@ public partial class AiMessage
 
     void RegisterShellTool()
     {
+        const string user="merrybot";
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var terminal = Terminal.CreateUserTerminal();
+            var terminal = Terminal.CreateUserTerminal(user);
             int timeout = 10;
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.DynamicPrompt = "你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: merrybot";
+            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}";
             shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.FunctionCall = async (parameters) =>
@@ -103,6 +104,15 @@ public partial class AiMessage
             };
             aiClient.RegisterTool(shell);
         }
+        RegisterFileSenderTool((filePath) =>
+        {
+            //file must be in user home directory
+            if (!filePath.StartsWith($"/home/{user}/"))
+            {
+                return (false, $"只能发送用户{user}的home目录下的文件");
+            }
+            return (true, string.Empty);
+        });
     }
     private void RegisterBotForHelp()
     {
@@ -189,7 +199,7 @@ public partial class AiMessage
             await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
         }
     }
-    private void RegisterFileSenderTool()
+    private void RegisterFileSenderTool(Func<string,(bool isValid,string reason)> validateAccess)
     {
         var fileSender = new ToolDef();
         const int maxSize = 1024 * 1024 * 10; //10MB
@@ -199,6 +209,11 @@ public partial class AiMessage
         fileSender.Function.FunctionCall = async (parameters) =>
         {
             string filePath = parameters["path"].GetString()!;
+            var (isValid, reason) = validateAccess(filePath);
+            if (!isValid)
+            {
+                return $"访问被拒绝: {reason}";
+            }
             if (!File.Exists(filePath))
             {
                 return $"文件不存在: {filePath}";
