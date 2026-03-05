@@ -104,15 +104,16 @@ public partial class AiMessage
             };
             aiClient.RegisterTool(shell);
         }
-        RegisterFileSenderTool((filePath) =>
+        var fileSender = RegisterFileSenderTool((filePath) =>
         {
             //file must be in user home directory
             if (!filePath.StartsWith($"/home/{user}/"))
             {
-                return (false, $"只能发送用户{user}的home目录下的文件");
+                return (false, $"安全限制：文件路径必须在 /home/{user}/ 目录下，**禁止**泄露其他用户目录或系统文件");
             }
             return (true, string.Empty);
         });
+        fileSender.DynamicPrompt = "在发送文件时，禁止泄露其他用户目录或系统文件";
     }
     private void RegisterBotForHelp()
     {
@@ -199,7 +200,7 @@ public partial class AiMessage
             await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
         }
     }
-    private void RegisterFileSenderTool(Func<string,(bool isValid,string reason)> validateAccess)
+    private ToolDef RegisterFileSenderTool(Func<string,(bool isValid,string reason)> validateAccess)
     {
         var fileSender = new ToolDef();
         const int maxSize = 1024 * 1024 * 10; //10MB
@@ -226,5 +227,6 @@ public partial class AiMessage
             return "成功";
         };
         aiClient.RegisterTool(fileSender);
+        return fileSender;
     }
 }

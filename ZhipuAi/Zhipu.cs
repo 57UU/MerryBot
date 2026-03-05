@@ -259,7 +259,9 @@ public partial class ZhipuAi : IDisposable
                         });
                     }
                     currentHistory.Add(assistantMessage);
-                    HistoryRecorder?.Invoke(id, assistantMessage.Role, $"{assistantMessage.Content}:" + string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})")));
+                    var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
+                    HistoryRecorder?.Invoke(id, assistantMessage.Role,
+                        string.IsNullOrWhiteSpace(assistantMessage.Content) ? toolCallsStr : $"{assistantMessage.Content}:{toolCallsStr}");
                     //tool call
                     List<Task<ToolMessage>> tasks = new();
                     foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
