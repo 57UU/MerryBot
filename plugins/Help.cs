@@ -39,6 +39,22 @@ public class Help : Plugin
                 sb.AppendLine($"{count++}. {i.PluginTag.Name} : {i.PluginTag.Description}");
             }
         }
+        //display admin plugins for admin user
+        sb.AppendLine("- 管理员插件：");  
+        if (data.self_id == Interop.AuthorizedUser)
+        {
+            foreach (var i in pluginTags)
+            {
+                if (i.PluginTag.Type == PluginType.Admin)
+                {
+                    if (!i.Instance.IsEnable)
+                    {
+                        sb.Append("[已停用]");
+                    }
+                    sb.AppendLine($"{count++}. {i.PluginTag.Name} : {i.PluginTag.Description}");
+                }
+            }
+        }
         var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
         _ = Actions.SendGroupMessage(groupId, help);
     }
