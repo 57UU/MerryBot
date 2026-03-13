@@ -1,4 +1,5 @@
-﻿using BotPlugin;
+using BotPlugin;
+using CommonLib;
 using DataProvider;
 using NapcatClient;
 using NapcatClient.MessageType;
@@ -255,5 +256,10 @@ internal partial class Logic
         botClient.Close();
         NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);
+    }
+    public void Reload()
+    {
+        logger.Info("Reloading application...");
+        Shutdown(ExitCode.RELOAD);
     }
 }

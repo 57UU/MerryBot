@@ -1,4 +1,4 @@
-﻿using BotPlugin;
+using BotPlugin;
 using NapcatClient;
 using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 
@@ -46,12 +46,12 @@ internal class MainPlugin : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
+        if (!VerifyAuthority(groupId, data))
+        {
+            return;
+        }
         if (IsStartsWith(chain, "/deactivate"))
         {
-            if (!VerifyAuthority(groupId, data))
-            {
-                return;
-            }
             Logger.Info($"execute deactivating on {groupId}");
             var result = ConfigManager.Instance.QqGroups.Remove(groupId);
             Task.Run(async () =>
@@ -65,6 +65,15 @@ internal class MainPlugin : Plugin
                 {
                     await Actions.ReplyGroupMessage(groupId, data.message_id, $"inactive on {groupId}");
                 }
+            });
+        }
+        else if (IsStartsWith(chain, "/reload"))
+        {
+            Logger.Info($"execute reload");
+            _ = Actions.ReplyGroupMessage(groupId, data.message_id, "Reloading...");
+            Task.Run(() =>
+            {
+                logic.Reload();
             });
         }
     }
