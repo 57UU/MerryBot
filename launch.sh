@@ -1,6 +1,7 @@
 #!/bin/bash
 
 restart_code=101
+reload_code=102
 
 case $(uname -m) in
     x86_64)
@@ -28,7 +29,6 @@ while true; do
         -r $runtime \
         --self-contained false \
         -p:PublishTrimmed=false \
-        -p:TrimMode=link \
         -p:PublishSingleFile=false \
         -p:EnableCompressionInSingleFile=false \
         -p:PublishReadyToRun=false \
@@ -76,18 +76,23 @@ while true; do
     # 运行应用程序
     echo "启动应用程序..."
     cd MerryBot/bin/Release/net10.0/$runtime/publish
-    ./MerryBot
-    exit_code=$?
+    
+    while true; do
+        ./MerryBot
+        exit_code=$?
 
-    # 检查退出码
-    if [ $exit_code -eq $restart_code ]; then
-        echo "程序退出码为 $exit_code，等于重启码，准备重新编译并启动..."
-        cd "$project_dir"
-        # 添加短暂延迟确保资源释放
-        sleep 1
-        continue  # 继续循环，重新编译并启动
-    else
-        echo "程序退出码为 $exit_code，不等于重启码，退出脚本"
-        break  # 退出循环
-    fi
+        if [ $exit_code -eq $restart_code ]; then
+            echo "程序退出码为 $exit_code，等于重启码，准备重新编译并启动..."
+            cd "$project_dir"
+            sleep 1
+            break
+        elif [ $exit_code -eq $reload_code ]; then
+            echo "程序退出码为 $exit_code，等于重载码，直接重启（不重新编译）..."
+            sleep 1
+            continue
+        else
+            echo "程序退出码为 $exit_code，退出脚本"
+            exit 0
+        fi
+    done
 done
