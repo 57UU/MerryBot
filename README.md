@@ -176,14 +176,12 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### 插件存储-PluginStorage
 
-对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件id），以字符串为单位进行储存于读取，现阶段的实现依赖于`SQLite3`
+对于每个插件，都会分配一个独立的存储服务（依赖PluginTag设置的插件id），以object为单位进行储存于读取，现阶段的实现依赖于NoSQL
 
 |API|Description|
 |:---:|:---|
-|Task Saver(string data)|异步存储字符串|
-|Task<string> Getter()|异步读取字符串|
-|Task\<T\> Load\<T\>(T defaultValue)|异步加载并反序列化对象，如果不存在则返回默认值|
-|Task Save\<T\>(T data)|异步存储并序列化对象|
+|Task\<T\> Load\<T\>(T defaultValue)|异步加载对象，如果不存在则返回默认值|
+|Task Save\<T\>(T data)|异步存储对象|
 
 ### 工具类-`MessageUtils`
 |API|Description|
