@@ -192,7 +192,7 @@ public class FaceData : TypedMessage
             return true;
         }
         var other = (FaceData)obj;
-        return Id == other.Id && ResultId == other.ResultId && ChainCount == other.ChainCount && object.Equals(Raw, other.Raw);
+        return Id == other.Id && ResultId == other.ResultId && ChainCount == other.ChainCount;
     }
 
     public override int GetHashCode()
