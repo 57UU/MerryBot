@@ -46,7 +46,7 @@ internal class MainPlugin : Plugin
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
-        if (!VerifyAuthority(groupId, data))
+        if (data.sender.user_id != Interop.AuthorizedUser)
         {
             return;
         }
