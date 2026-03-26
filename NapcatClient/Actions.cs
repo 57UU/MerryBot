@@ -157,7 +157,15 @@ public class Actions
         messages.Add(TextData.FromText(text));
         return await SendGroupMessage(groupId, messages);
     }
+    public async Task<ResponseRootObject> ReplyGroupMessageWithMention(long groupId,string qq,string text){
+        List<TypedMessage> messages = [
+            AtData.FromAt(qq),
+            TextData.FromText(text)
+        ];
+        return await SendGroupMessage(groupId, messages);
+    }
     public int PartLength { set; get; } = 500;
+    private const int LineSearchRadius = 10;
     public string DefaultNickname { get; set; } = "曼瑞";
     /// <summary>
     /// 在QQ群中选择最合适的回复方式（长：转发消息；短：直接回复）
@@ -166,19 +174,19 @@ public class Actions
     /// <param name="messageId">要回复的消息的ID</param>
     /// <param name="text">文本</param>
     /// <returns></returns>
-    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, long messageId, string text)
+    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, string qq, string text)
     {
-        return ChooseBestReplyMethod(groupId, messageId, text, DefaultNickname);
+        return ChooseBestReplyMethod(groupId, qq, text, DefaultNickname);
     }
     /// <summary>
     /// 在QQ群中选择最合适的回复方式（长：转发消息；短：直接回复）
     /// </summary>
     /// <param name="groupId">QQ群号</param>
-    /// <param name="messageId">要回复的消息的ID</param>
+    /// <param name="qq">target qq</param>
     /// <param name="text">文本</param>
     /// <param name="nickname">昵称</param>
     /// <returns></returns>
-    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, long messageId, string text, string nickname)
+    public Task<ResponseRootObject> ChooseBestReplyMethod(long groupId, string qq, string text, string nickname)
     {
         if (text.Length > PartLength)
         {
@@ -186,7 +194,7 @@ public class Actions
         }
         else
         {
-            return ReplyGroupMessage(groupId, messageId, text);
+            return ReplyGroupMessageWithMention(groupId, qq, text);
         }
     }
     /// <summary>
@@ -199,20 +207,43 @@ public class Actions
     public Task<ResponseRootObject> SendLongMessage(string groupId, string text, string nickname)
     {
         var fowardChain = new GroupForwardChain.Builder(bot.SelfId.ToString(), nickname, groupId);
-        var text_char = text.ToCharArray();
 
-        for (int i = 0; i <= text_char.Length / PartLength; i++)
+        int i = 0;
+        while (i < text.Length)
         {
-            int start = i * PartLength;
-            int end = (i + 1) * PartLength;
+            int end = Math.Min(i + PartLength, text.Length);
 
-            if (end < text_char.Length)
+            if (end < text.Length)
             {
-                fowardChain.AddText(new string(text_char, start, PartLength));
+                int cut = end;
+                int searchStart = Math.Max(i, end - LineSearchRadius);
+                int searchEnd = Math.Min(text.Length, end + LineSearchRadius);
+                for (int j = end - 1; j >= searchStart; j--)
+                {
+                    if (text[j] == '\n')
+                    {
+                        cut = j + 1;
+                        break;
+                    }
+                }
+                if (cut == end)
+                {
+                    for (int j = end; j < searchEnd; j++)
+                    {
+                        if (text[j] == '\n')
+                        {
+                            cut = j;
+                            break;
+                        }
+                    }
+                }
+                fowardChain.AddText(text[i..cut]);
+                i = cut;
             }
             else
             {
-                fowardChain.AddText(new string(text_char, start, text_char.Length - start));
+                fowardChain.AddText(text[i..]);
+                break;
             }
         }
         Act act = new("send_group_forward_msg", fowardChain.Build());

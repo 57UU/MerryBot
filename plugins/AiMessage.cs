@@ -210,7 +210,7 @@ public partial class AiMessage : Plugin
         {
             if (!useFunctionCallToReply && !string.IsNullOrWhiteSpace(result))
             {
-                await Actions.ChooseBestReplyMethod(groupId, messageId, result);
+                await Actions.ChooseBestReplyMethod(groupId, sender, result);
             }
         }
     }

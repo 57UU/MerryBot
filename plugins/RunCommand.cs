@@ -50,11 +50,11 @@ public class RunCommand : Plugin
             {
                 text = text[1..];
             }
-            _ = HandleCommand(text, groupId, data.message_id, isAuthorized);
+            _ = HandleCommand(text, groupId, data.sender.user_id, isAuthorized);
         }
     }
     internal Terminal terminal;
-    async Task HandleCommand(string command, long groupId, long messageId, bool isAuthorized = false)
+    async Task HandleCommand(string command, long groupId, long sender, bool isAuthorized = false)
     {
         string result;
         try
@@ -68,7 +68,7 @@ public class RunCommand : Plugin
 
         result = PluginUtils.ConstraintLength(result, 3000);
 
-        await Actions.ChooseBestReplyMethod(groupId, messageId, result);
+        await Actions.ChooseBestReplyMethod(groupId, sender.ToString(), result);
     }
 
 }
