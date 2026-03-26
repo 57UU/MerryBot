@@ -160,7 +160,7 @@ public class Actions
     public async Task<ResponseRootObject> ReplyGroupMessageWithMention(long groupId,string qq,string text){
         List<TypedMessage> messages = [
             AtData.FromAt(qq),
-            TextData.FromText(text)
+            TextData.FromText(" "+text)
         ];
         return await SendGroupMessage(groupId, messages);
     }
