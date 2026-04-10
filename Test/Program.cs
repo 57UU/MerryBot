@@ -13,7 +13,7 @@ public static class Program
     public static async Task Main(string[] args)
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        ConfigManager.SettingFile = Path.Combine(dataPath, "setting.json");
+        ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
         ConfigManager.Initialize().Wait();
         TestStructNullable();
     }
@@ -104,7 +104,7 @@ port = 80
 enabled = false
 ";
 
-        var document = Toml.ToModel<TomlTable>(tomlContent);
+        var document = TomlSerializer.Deserialize<TomlTable>(tomlContent);
 
         // 从文档中获取值
         var id = document["id"];

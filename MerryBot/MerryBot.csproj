@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="NLog" Version="6.1.2" />
-    <PackageReference Include="Tomlyn.Signed" Version="0.20.0" />
+    <PackageReference Include="Tomlyn.Signed" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>

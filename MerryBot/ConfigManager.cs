@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Tomlyn;
 using Tomlyn.Model;
+using Tomlyn.Serialization;
 
 namespace MerryBot;
 
@@ -35,26 +36,26 @@ public static class ConfigManager
             Save().Wait();
         }
     }
-    private static TomlModelOptions _tomlModelOptions = new()
-    {
-
+    private static TomlMetadataStore configTomlMetadata = new TomlMetadataStore();
+    private static TomlSerializerOptions _tomlModelOptions = new() { 
+        MetadataStore = configTomlMetadata 
     };
     public async static Task Save()
     {
 
-        var toml = Toml.FromModel(Instance, options: _tomlModelOptions);
+        var toml = TomlSerializer.Serialize(Instance, options: _tomlModelOptions);
         await Utils.write(SettingFile, toml);
     }
     public async static Task Load()
     {
 
         var json = await Utils.read(SettingFile);
-        Config i = Toml.ToModel<Config>(json!, options: _tomlModelOptions)!;
+        Config i = TomlSerializer.Deserialize<Config>(json!, options: _tomlModelOptions)!;
         Instance = i;
 
     }
 }
-public class Config : ITomlMetadataProvider
+public class Config
 {
     [TomlPropertyName("napcat-server")]
     public string NapcatServer { set; get; } = "ws://<host>:<port>/";
@@ -66,7 +67,4 @@ public class Config : ITomlMetadataProvider
     public long AuthorizedUser { set; get; } = -1;
     [TomlPropertyName("variables")]
     public Dictionary<string, TomlTable> Variables { set; get; } = new();
-
-    // storage for comments and whitespace
-    TomlPropertiesMetadata? ITomlMetadataProvider.PropertiesMetadata { get; set; }
 }
