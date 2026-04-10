@@ -201,16 +201,16 @@ public partial class AiMessage : Plugin
                 Logger.Info("[New] " + text);
                 aiClient.Reset(groupId);
             }
-            _ = HandleMessage(groupId, text, messageId, nickname);
+            _ = HandleMessage(groupId, text, messageId, nickname,data.sender.user_id);
         }
     }
-    async Task HandleMessage(long groupId, string message, long messageId, string sender)
+    async Task HandleMessage(long groupId, string message, long messageId, string sender,long senderQq)
     {
         await foreach (var result in aiClient.Ask(message, groupId, sender, groupId))
         {
             if (!useFunctionCallToReply && !string.IsNullOrWhiteSpace(result))
             {
-                await Actions.ChooseBestReplyMethod(groupId, messageId, result);
+                await Actions.ChooseBestReplyMethod(groupId, senderQq.ToString(), result);
             }
         }
     }
