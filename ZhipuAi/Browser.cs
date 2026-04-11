@@ -31,10 +31,10 @@ public record BrowserOptions
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? binaryPath { get; init; } = null;
     public void AdaptSystem(){
+        Width /= (int)DeviceScaleFactor;
+        Height /= (int)DeviceScaleFactor;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Width /= (int)DeviceScaleFactor;
-            Height /= (int)DeviceScaleFactor;
             ActualPixelScaleFator = DeviceScaleFactor;
         }
     }
