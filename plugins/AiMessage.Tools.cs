@@ -11,6 +11,7 @@ public partial class AiMessage
     {
         var voiceSender = new ToolDef();
         voiceSender.Function.Name = "send_voice";
+        voiceSender.HideOutputOnInvoking = true;
         voiceSender.Function.Description = "发送语音/唱歌";
         voiceSender.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要发送成语言的内容" });
         voiceSender.Function.FunctionCall = async (parameters) =>
@@ -40,6 +41,7 @@ public partial class AiMessage
         replyTool.Function.Name = "reply";
         replyTool.Function.Description = "回复消息";
         replyTool.DynamicPrompt = "需要发送消息时，使用reply工具";
+        replyTool.HideOutputOnInvoking = true;
         replyTool.Function.Parameters.AddRequired("text", new ParameterProperty() { Type = "string", Description = "要回复的内容" });
         replyTool.Function.FunctionCall = async (parameters) =>
         {
@@ -234,6 +236,7 @@ public partial class AiMessage
         var mdSender=new ToolDef();
         mdSender.Function.Name = "send_markdown";
         mdSender.Function.Description = "";
+        mdSender.HideOutputOnInvoking = true;
         mdSender.DynamicPrompt="当你需要发送长篇报告时，请发送markdown";
         mdSender.Function.Parameters.AddRequired("md", new ParameterProperty() { Type = "string", Description = "需要发送的Markdown文本" });
         mdSender.Function.FunctionCall = async (parameters) =>
