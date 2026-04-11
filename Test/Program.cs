@@ -74,7 +74,7 @@ public class MerryBot
 
 
 ";
-        using Browser browser = new Browser();
+        using Browser browser = new Browser(new BrowserOptions(){binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
 
         var img = await browser.TakeMarkdownScreenshot(md);
         string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_md.png");

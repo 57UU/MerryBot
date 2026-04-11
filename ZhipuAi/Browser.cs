@@ -25,6 +25,7 @@ public record BrowserOptions
     /// </summary>
     public double DeviceScaleFactor { get; init; } = 2;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
+    public string? binaryPath { get; init; } = null;
 }
 
 class DriverPack
@@ -94,7 +95,7 @@ public partial class Browser : IDisposable
         {
             options.EnableHeadlessMode();
         }
-        options.BinaryLocation = @"D:\Chrome\App\chrome.exe";
+        options.BinaryLocation = this.browserOptions.binaryPath;
         options.ApplyStealth();
 
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
