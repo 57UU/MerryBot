@@ -1,4 +1,4 @@
-﻿using NapcatClient;
+using NapcatClient;
 
 namespace BotPlugin;
 

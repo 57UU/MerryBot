@@ -1,4 +1,4 @@
-﻿using BotPlugin;
+using BotPlugin;
 using System.Reflection;
 
 namespace MerryBot;

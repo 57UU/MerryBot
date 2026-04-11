@@ -2,10 +2,8 @@ using BotPlugin;
 using DataProvider;
 using MerryBot;
 using System.Reflection;
-using System.Text.Json;
 using Tomlyn;
 using Tomlyn.Model;
-using Tomlyn.Syntax;
 using ZhipuClient;
 
 public static class Program
@@ -204,7 +202,7 @@ enabled = false
     {
         var value = NullableFunction<int>(); //int?
         var value2 = NullableFunction2<int>();//int
-        Console.WriteLine(value==null);
+        Console.WriteLine(value == null);
         Console.WriteLine(value2.GetType());
     }
 }

@@ -1,4 +1,4 @@
-﻿using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Chrome;
 using System.Text.Json.Serialization;
 using System.Timers;
 

@@ -83,7 +83,7 @@ public partial class AiMessage : Plugin
 
     public async override Task OnLoaded()
     {
-        
+
     }
     internal ZhipuAi aiClient;
     static bool IsContainsNew(string message)
@@ -201,10 +201,10 @@ public partial class AiMessage : Plugin
                 Logger.Info("[New] " + text);
                 aiClient.Reset(groupId);
             }
-            _ = HandleMessage(groupId, text, messageId, nickname,data.sender.user_id);
+            _ = HandleMessage(groupId, text, messageId, nickname, data.sender.user_id);
         }
     }
-    async Task HandleMessage(long groupId, string message, long messageId, string sender,long senderQq)
+    async Task HandleMessage(long groupId, string message, long messageId, string sender, long senderQq)
     {
         await foreach (var result in aiClient.Ask(message, groupId, sender, groupId))
         {

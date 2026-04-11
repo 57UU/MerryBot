@@ -1,4 +1,4 @@
-﻿using NapcatClient;
+using NapcatClient;
 using NapcatClient.MessageType;
 using System.Runtime.InteropServices;
 

@@ -1,4 +1,4 @@
-﻿using HWT;
+using HWT;
 using NapcatClient.MessageType;
 
 namespace BotPlugin;

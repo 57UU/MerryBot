@@ -1,4 +1,4 @@
-﻿using IdGen;
+using IdGen;
 
 namespace DataService;
 

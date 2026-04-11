@@ -82,7 +82,7 @@ public partial class AiMessage
 
     void RegisterShellTool()
     {
-        const string user="merrybot";
+        const string user = "merrybot";
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var terminal = Terminal.CreateUserTerminal(user);
@@ -200,7 +200,7 @@ public partial class AiMessage
             await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
         }
     }
-    private ToolDef RegisterFileSenderTool(Func<string,(bool isValid,string reason)> validateAccess)
+    private ToolDef RegisterFileSenderTool(Func<string, (bool isValid, string reason)> validateAccess)
     {
         var fileSender = new ToolDef();
         const int maxSize = 1024 * 1024 * 10; //10MB

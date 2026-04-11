@@ -3,7 +3,6 @@ using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 
 namespace BotPlugin;
 

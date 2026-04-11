@@ -1,7 +1,3 @@
-﻿using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Tomlyn;
 using Tomlyn.Model;
 using Tomlyn.Serialization;
@@ -37,8 +33,9 @@ public static class ConfigManager
         }
     }
     private static TomlMetadataStore configTomlMetadata = new TomlMetadataStore();
-    private static TomlSerializerOptions _tomlModelOptions = new() { 
-        MetadataStore = configTomlMetadata 
+    private static TomlSerializerOptions _tomlModelOptions = new()
+    {
+        MetadataStore = configTomlMetadata
     };
     public async static Task Save()
     {

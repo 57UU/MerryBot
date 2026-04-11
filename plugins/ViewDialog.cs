@@ -1,4 +1,4 @@
-﻿using NapcatClient;
+using NapcatClient;
 using System.Text;
 using ZhipuClient;
 

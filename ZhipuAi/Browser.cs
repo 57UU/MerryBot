@@ -1,5 +1,6 @@
 ﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.Extensions;
 using OpenQA.Selenium.Support.UI;
 using SeleniumStealth.NET.Clients;
 using SeleniumStealth.NET.Clients.Extensions;
@@ -191,6 +192,61 @@ public partial class Browser : IDisposable
                 return t.Result;
             }
             return $"调用失败 {t.Exception}";
+        });
+    }
+    public async Task<byte[]> TakeScreenshot(string html)
+    {
+        await UseBrowser();
+        var task = Task.Run(async () =>
+        {
+            await mutex.WaitAsync();
+            await driver!.Navigate().GoToUrlAsync("about:blank");
+            ((IJavaScriptExecutor)driver!).ExecuteScript("document.open(); document.write(arguments[0]); document.close();", html);
+            await Task.Delay(ExecuteScriptDelayTime);
+            await EnsurePageLoaded();
+
+            Screenshot screenshot = driver!.TakeScreenshot();
+
+            return screenshot.AsByteArray;
+        });
+
+
+        return await task.ContinueWith((t) =>
+        {
+            _ = GotoBlankPage();
+            mutex.Release();
+            if (t.Status == TaskStatus.RanToCompletion)
+            {
+                return t.Result;
+            }
+            throw t.Exception ?? new Exception("failed");
+        });
+    }
+    public async Task<byte[]> TakeScreenshot(Uri url)
+    {
+        await UseBrowser();
+        var task = Task.Run(async () =>
+        {
+            await mutex.WaitAsync();
+            await driver!.Navigate().GoToUrlAsync(url);
+            await Task.Delay(ExecuteScriptDelayTime);
+            await EnsurePageLoaded();
+
+            Screenshot screenshot = driver!.TakeScreenshot();
+
+            return screenshot.AsByteArray;
+        });
+
+
+        return await task.ContinueWith((t) =>
+        {
+            _ = GotoBlankPage();
+            mutex.Release();
+            if (t.Status == TaskStatus.RanToCompletion)
+            {
+                return t.Result;
+            }
+            throw t.Exception ?? new Exception("failed");
         });
     }
     public int ExecuteScriptDelayTime { set; get; } = 50;

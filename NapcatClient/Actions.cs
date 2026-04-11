@@ -1,4 +1,4 @@
-﻿using CommonLib;
+using CommonLib;
 using NapcatClient.MessageType;
 using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
@@ -157,7 +157,8 @@ public class Actions
         messages.Add(TextData.FromText(text));
         return await SendGroupMessage(groupId, messages);
     }
-    public async Task<ResponseRootObject> ReplyGroupMessageWithMention(long groupId,string qq,string text){
+    public async Task<ResponseRootObject> ReplyGroupMessageWithMention(long groupId, string qq, string text)
+    {
         List<TypedMessage> messages = [
             AtData.FromAt(qq),
             TextData.FromText(" "+text)

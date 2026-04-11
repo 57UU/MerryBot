@@ -1,4 +1,4 @@
-﻿using NapcatClient.EventType;
+using NapcatClient.EventType;
 using NapcatClient.MessageType;
 
 namespace NapcatClient;

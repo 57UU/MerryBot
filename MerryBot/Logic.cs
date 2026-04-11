@@ -5,7 +5,6 @@ using NapcatClient;
 using NapcatClient.MessageType;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using Tomlyn.Model;
 
 namespace MerryBot;

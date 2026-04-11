@@ -1,4 +1,4 @@
-﻿using CommonLib;
+using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Text;

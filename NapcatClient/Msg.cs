@@ -1,4 +1,4 @@
-﻿global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
+global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using NapcatClient.MessageType;
 using System.Text.Json;
 using System.Text.Json.Serialization;

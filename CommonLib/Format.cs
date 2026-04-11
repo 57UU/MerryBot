@@ -1,4 +1,4 @@
-﻿namespace CommonLib;
+namespace CommonLib;
 
 public static class Format
 {

@@ -1,4 +1,4 @@
-﻿using NapcatClient;
+using NapcatClient;
 using System.Text;
 
 namespace BotPlugin;
@@ -40,7 +40,7 @@ public class Help : Plugin
             }
         }
         //display admin plugins for admin user
-        sb.AppendLine("- 管理员插件：");  
+        sb.AppendLine("- 管理员插件：");
         if (data.self_id == Interop.AuthorizedUser)
         {
             foreach (var i in pluginTags)
