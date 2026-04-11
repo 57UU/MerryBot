@@ -240,7 +240,7 @@ public partial class AiMessage
         {
             var markdown = parameters["md"];
             string base64=Convert.ToBase64String(await aiClient.browser.TakeMarkdownScreenshot(markdown.GetString()!));
-            await Actions.SendGroupMessage(parameters.SpecialTag, [new ImageData { File = base64, Summary = "" }]);
+            await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(base64)]);
             return "done";
         };
         aiClient.RegisterTool(mdSender);

@@ -409,7 +409,7 @@ public class PokeData : TypedMessage
 public class ImageData : TypedMessage
 {
     /// <summary>
-    /// 图片文件路径、URL 或 Base64 编码
+    /// 图片文件路径、URL 或 Base64 编码(base64://)
     /// </summary>
     [JsonPropertyName("file")]
     public string File { get; set; }
@@ -490,6 +490,10 @@ public class ImageData : TypedMessage
     public override string ToString()
     {
         return $"image {File}";
+    }
+    public static ImageData FromBinary(byte[] data)
+    {
+        return new ImageData { File = $"base64://{Convert.ToBase64String(data)}" };
     }
 }
 
