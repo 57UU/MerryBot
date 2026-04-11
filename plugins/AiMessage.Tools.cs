@@ -239,8 +239,8 @@ public partial class AiMessage
         mdSender.Function.FunctionCall = async (parameters) =>
         {
             var markdown = parameters["md"];
-            string base64=Convert.ToBase64String(await aiClient.browser.TakeMarkdownScreenshot(markdown.GetString()!));
-            await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(base64)]);
+            byte[] img=await aiClient.browser.TakeMarkdownScreenshot(markdown.GetString()!);
+            await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(img)]);
             return "done";
         };
         aiClient.RegisterTool(mdSender);

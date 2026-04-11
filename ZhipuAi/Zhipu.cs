@@ -21,7 +21,7 @@ public partial class ZhipuAi : IDisposable
     private Dictionary<string, FunctionDef> functionMapper = new();
 
     readonly string prompt;
-    public readonly Browser browser = new();
+    public readonly Browser browser = new(new BrowserOptions { binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
     public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null)
     {
         this.token = token;
