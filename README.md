@@ -51,6 +51,17 @@ note:
 - linux终端
 
 *: 网络访问相关funtion call 通过seleium操纵chrome（需要提前安装）实现。
+如果是命令行环境，需要为chrome(chromium)安装字体支持
+```bash
+sudo apt-get update
+# 安装彩色 Emoji 字体
+sudo apt-get install -y fonts-noto-color-emoji
+# 安装 Google 诺托字体
+sudo apt-get install -y fonts-noto-cjk
+# 刷新字体缓存
+sudo fc-cache -fv
+```
+
 
 ## 锐言锐语
 随机返回一句herui老师的谆谆教诲
