@@ -229,4 +229,20 @@ public partial class AiMessage
         aiClient.RegisterTool(fileSender);
         return fileSender;
     }
+    private void RegisterMarkdownSender()
+    {
+        var mdSender=new ToolDef();
+        mdSender.Function.Name = "send_markdown";
+        mdSender.Function.Description = "";
+        mdSender.DynamicPrompt="当你需要发送长篇报告时，请发送markdown";
+        mdSender.Function.Parameters.AddRequired("md", new ParameterProperty() { Type = "string", Description = "需要发送的Markdown文本" });
+        mdSender.Function.FunctionCall = async (parameters) =>
+        {
+            var markdown = parameters["md"];
+            string base64=Convert.ToBase64String(await aiClient.browser.TakeMarkdownScreenshot(markdown.GetString()!));
+            await Actions.SendGroupMessage(parameters.SpecialTag, [new ImageData { File = base64, Summary = "" }]);
+            return "done";
+        };
+        aiClient.RegisterTool(mdSender);
+    }
 }

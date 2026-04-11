@@ -76,6 +76,7 @@ public partial class AiMessage : Plugin
         //AddBotForHelp();
         RegisterImagePainter();
         RegisterShellTool();
+        RegisterMarkdownSender();
     }
 
 
