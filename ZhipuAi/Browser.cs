@@ -23,7 +23,7 @@ namespace ZhipuClient;
 public record BrowserOptions
 {
     public bool Headless { get; init; } = true;
-    public int Width { get; set; } = 800;
+    public int Width { get; set; } = 600;
     public int Height { get; set; } = 720;
     public bool AutoHeight { get; init; } = true;
     public double DeviceScaleFactor { get; init; } = 2;
@@ -31,8 +31,6 @@ public record BrowserOptions
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? binaryPath { get; init; } = null;
     public void AdaptSystem(){
-        Width /= (int)DeviceScaleFactor;
-        Height /= (int)DeviceScaleFactor;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             ActualPixelScaleFator = DeviceScaleFactor;

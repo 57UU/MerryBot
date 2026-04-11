@@ -72,8 +72,8 @@ public class MerryBot
 > > - 引用中的列表项 1
 > > - 引用中的列表项 2
 
-
 ";
+        md=md+md;
         using Browser browser = new Browser(new BrowserOptions(){binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
 
         var img = await browser.TakeMarkdownScreenshot(md);
