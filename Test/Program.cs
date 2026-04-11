@@ -13,7 +13,73 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
         ConfigManager.Initialize().Wait();
-        TestStructNullable();
+        await TestMarkdownRender();
+    }
+    public static async Task TestMarkdownRender()
+    {
+        var md = @"
+# 🌙 MerryBot Markdown 全能测试报告
+
+> **时间**: 2026-04-11
+> **状态**: 测试中
+> **版本**: v1.0.0
+
+---
+
+## 🛠️ 核心功能展示
+
+### 1. 样式与格式
+你可以轻松地使用 **加粗**、*斜体*、~~删除线~~ 以及 `行内代码`。
+还可以通过以下列表组织内容：
+
+- [x] 自动高度截图
+- [x] 多级标题支持
+- [x] 实时代码高亮
+- [ ] 外部图片加载
+- [ ] 交互式图表 (计划中)
+
+---
+
+### 2. 结构化数据 (表格)
+
+| 功能模块 | 状态 | 优先级 | 备注 |
+| :--- | :---: | :---: | :--- |
+| 浏览器渲染 | ✅ 正常 | 高 | 支持 Chrome/Edge |
+| Markdown 转换 | ✅ 正常 | 高 | 基于 Markdig 引擎 |
+| 自动缩放 | ✅ 正常 | 中 | DeviceScaleFactor: 1.5 |
+| 高度自适应 | ✅ 正常 | 高 | 滚动高度计算 |
+
+---
+
+### 3. 代码块
+
+```csharp
+// C# 代码片段测试
+public class MerryBot
+{
+    public string Name { get; set; } = ""Merry"";
+    public async Task Greet()
+    {
+        Console.WriteLine($""Hello from {Name}!"");
+    }
+}
+```
+---
+### 4. 引用与嵌套
+> 这是一级引用
+> > 这是一个嵌套的二级引用
+> > 
+> > - 引用中的列表项 1
+> > - 引用中的列表项 2
+
+
+";
+        using Browser browser = new Browser();
+
+        var img = await browser.TakeMarkdownScreenshot(md);
+        string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_md.png");
+        await File.WriteAllBytesAsync(outputPath, img);
+        Console.WriteLine($"Markdown 渲染图片已保存至: {outputPath}");
     }
 
 

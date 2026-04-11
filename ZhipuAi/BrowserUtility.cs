@@ -142,8 +142,6 @@ public static class ChromeOptionsExtensions
             options.AddArgument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0");
         }
 
-        // 基础配置
-        options.AddArgument("--window-size=1920,1080");
 
         // 增强爬虫隐身性的核心参数
         options.AddArgument("--disable-blink-features=AutomationControlled");
@@ -185,7 +183,7 @@ public static class ChromeOptionsExtensions
             throw new ArgumentNullException(nameof(options));
         }
 
-        options.AddArgument("--headless");
+        options.AddArgument("--headless=new");
         options.AddArgument("--disable-gpu");
 
         return options;

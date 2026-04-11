@@ -1,5 +1,6 @@
 ﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Chromium;
 using OpenQA.Selenium.Support.Extensions;
 using OpenQA.Selenium.Support.UI;
 using SeleniumStealth.NET.Clients;
@@ -13,9 +14,22 @@ using System.Web;
 
 namespace ZhipuClient;
 
+public record BrowserOptions
+{
+    public bool Headless { get; init; } = true;
+    public int Width { get; init; } = 800;
+    public int Height { get; init; } = 720;
+    public bool AutoHeight { get; init; } = true;
+    /// <summary>
+    /// 缩放比例，1.0 为 100%
+    /// </summary>
+    public double DeviceScaleFactor { get; init; } = 2;
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
+}
+
 class DriverPack
 {
-    public ChromeDriver driver;
+    public ChromiumDriver driver;
     public WebDriverWait driverWait;
     public bool isSearchInitialized = false;
     public DriverPack(ChromeDriver driver)
@@ -31,28 +45,28 @@ class DriverPack
 public partial class Browser : IDisposable
 {
     DriverPack? driverPack;
-    ChromeDriver? driver { get { return driverPack?.driver; } }
+    ChromiumDriver? driver { get { return driverPack?.driver; } }
     ChromeOptions options = new();
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     string getSearchResult = null;
     string jsReader = null, preprocessWbHot = null, preprocessBingResult = null;
+    string markdownTemplate = null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     SemaphoreSlim mutex = new(1);
+    readonly BrowserOptions browserOptions;
+
     private static Task<string> LoadScript(string fileName)
     {
-        if (!fileName.EndsWith(".js"))
-        {
-            fileName += ".js";
-        }
         return File.ReadAllTextAsync("./javascript/" + fileName, Encoding.UTF8);
     }
     private async Task LoadScripts()
     {
         string[] scriptFiles = [
-            "readWeb",
-            "getSearchResult2",
-            "preprocessWbHot",
-            "preprocessBingResult"
+            "readWeb.js",
+            "getSearchResult2.js",
+            "preprocessWbHot.js",
+            "preprocessBingResult.js",
+            "markdownStyle.html"
             ];
         List<Task<string>> tasks = new();
         foreach (var file in scriptFiles)
@@ -64,20 +78,23 @@ public partial class Browser : IDisposable
         getSearchResult = tasks[1].Result;
         preprocessWbHot = tasks[2].Result;
         preprocessBingResult = tasks[3].Result;
+        markdownTemplate = tasks[4].Result;
     }
     readonly StealthInstanceSettings stealthInstanceSettings = new();
     readonly ResourceCountdown resourceCountdown;
-    public Browser(bool headless = true)
+
+    public Browser(BrowserOptions? browserOptions = null)
     {
+        this.browserOptions = browserOptions ?? new BrowserOptions();
         resourceCountdown = new(CloseBrowser);
 
         options.ConfigureForWebScraping();
 
-        if (headless)
+        if (this.browserOptions.Headless)
         {
             options.EnableHeadlessMode();
         }
-
+        options.BinaryLocation = @"D:\Chrome\App\chrome.exe";
         options.ApplyStealth();
 
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
@@ -90,13 +107,24 @@ public partial class Browser : IDisposable
 
         LoadScripts().Wait();
     }
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    public Browser(bool headless) : this(new BrowserOptions { Headless = headless })
+    {
+    }
+
     private async Task<ChromeDriver> LoadBrowser()
     {
         resourceCountdown.Start();
+
+        options.AddArgument($"--window-size={browserOptions.Width},{browserOptions.Height}");
+        if (browserOptions.DeviceScaleFactor != 1.0)
+        {
+            options.AddArgument($"--force-device-scale-factor={browserOptions.DeviceScaleFactor}");
+        }
+
         var driver = await Task.Run(() => Stealth.Instantiate(options, stealthInstanceSettings));
-        driver.Manage().Timeouts().PageLoad = Timeout;
-        driver.Manage().Timeouts().AsynchronousJavaScript = Timeout;
+        driver.Manage().Timeouts().PageLoad = browserOptions.Timeout;
+        driver.Manage().Timeouts().AsynchronousJavaScript = browserOptions.Timeout;
         driverPack = new(driver);
         return driver;
     }
@@ -194,6 +222,12 @@ public partial class Browser : IDisposable
             return $"调用失败 {t.Exception}";
         });
     }
+    public Task<byte[]> TakeMarkdownScreenshot(string md)
+    {
+        var html = Markdown2Html.MarkdownConverter.ToHtml(md);
+        var styledHtml = markdownTemplate.Replace("{{content}}", html);
+        return TakeScreenshot(styledHtml);
+    }
     public async Task<byte[]> TakeScreenshot(string html)
     {
         await UseBrowser();
@@ -204,6 +238,26 @@ public partial class Browser : IDisposable
             ((IJavaScriptExecutor)driver!).ExecuteScript("document.open(); document.write(arguments[0]); document.close();", html);
             await Task.Delay(ExecuteScriptDelayTime);
             await EnsurePageLoaded();
+
+            if (browserOptions.AutoHeight)
+            {
+                // 隐藏滚动条
+                ((IJavaScriptExecutor)driver!).ExecuteScript("document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden';");
+                
+                // 计算 inner 和 outer 的差距 (主要是标题栏和边框)
+                var offsetWidth = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerWidth/{browserOptions.DeviceScaleFactor} - window.innerWidth;"));
+                var offsetHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerHeight/{browserOptions.DeviceScaleFactor} - window.innerHeight;"));
+
+                // 获取内容真实高度
+                var contentHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);"));
+                
+                // 补偿后的窗口大小
+                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width + offsetWidth, contentHeight + offsetHeight);
+            }
+            else
+            {
+                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width, browserOptions.Height);
+            }
 
             Screenshot screenshot = driver!.TakeScreenshot();
 
@@ -231,6 +285,26 @@ public partial class Browser : IDisposable
             await driver!.Navigate().GoToUrlAsync(url);
             await Task.Delay(ExecuteScriptDelayTime);
             await EnsurePageLoaded();
+
+            if (browserOptions.AutoHeight)
+            {
+                // 隐藏滚动条
+                ((IJavaScriptExecutor)driver!).ExecuteScript("document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden';");
+                
+                // 计算 inner 和 outer 的差距 (主要是标题栏和边框)
+                var offsetWidth = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return window.outerWidth - window.innerWidth;"));
+                var offsetHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return window.outerHeight - window.innerHeight;"));
+
+                // 获取内容真实高度
+                var contentHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);"));
+                
+                // 补偿后的窗口大小
+                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width + offsetWidth, contentHeight + offsetHeight);
+            }
+            else
+            {
+                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width, browserOptions.Height);
+            }
 
             Screenshot screenshot = driver!.TakeScreenshot();
 
@@ -375,4 +449,3 @@ public partial class Browser : IDisposable
         GC.SuppressFinalize(this);
     }
 }
-
