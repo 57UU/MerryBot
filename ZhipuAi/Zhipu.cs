@@ -18,7 +18,7 @@ public partial class ZhipuAi : IDisposable
 
     HttpClient client = new HttpClient();
     private List<ToolDef> Tools { get; set; } = new();
-    private Dictionary<string, FunctionDef> functionMapper = new();
+    private Dictionary<string, ToolDef> functionMapper = new();
 
     readonly string prompt;
     public readonly Browser browser = new(new BrowserOptions { binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
@@ -68,7 +68,7 @@ public partial class ZhipuAi : IDisposable
     public void RegisterTool(ToolDef tool)
     {
         Tools.Add(tool);
-        functionMapper.Add(tool.Function.Name, tool.Function);
+        functionMapper.Add(tool.Function.Name, tool);
     }
     readonly Dictionary<long, List<ZhipuMessage>> history = new();
     readonly Dictionary<long, SemaphoreSlim> mutex = new();
@@ -191,6 +191,7 @@ public partial class ZhipuAi : IDisposable
         while (!done)
         {
             string response;
+            bool hideOutput = false;
             try
             {
                 var aiResponse = await Request(currentHistory, specialTag);
@@ -218,6 +219,10 @@ public partial class ZhipuAi : IDisposable
                             Id = i.Id,
                             Function = i.Function
                         });
+                        if (functionMapper.TryGetValue(i.Function.Name, out var toolDef) && toolDef.HideOutputOnInvoking)
+                        {
+                            hideOutput = true;
+                        }
                     }
                     currentHistory.Add(assistantMessage);
                     var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
@@ -254,7 +259,7 @@ public partial class ZhipuAi : IDisposable
                 done = true;
             }
 
-            if (!string.IsNullOrEmpty(response))
+            if (!hideOutput && !string.IsNullOrEmpty(response))
             {
                 yield return response.Trim();
             }
@@ -277,7 +282,7 @@ public partial class ZhipuAi : IDisposable
                 var args = JsonSerializer.Deserialize<FunctionCallArguments>(func.Arguments)
                     ?? throw new Exception("参数格式错误");
                 args.SpecialTag = specialTag;
-                message.Content = await tool.FunctionCall.Invoke(args);
+                message.Content = await tool.Function.FunctionCall.Invoke(args);
                 Logger.Info("function result:" + message.Content);
             }
             catch (Exception e)

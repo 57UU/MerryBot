@@ -13,7 +13,14 @@ public static class Program
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
         ConfigManager.Initialize().Wait();
-        await TestMarkdownRender();
+        await TestWebFetch();
+    }
+    static Browser browser = new Browser(new BrowserOptions() { binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
+    static async Task TestWebFetch()
+    {
+        var url = "https://scu.edu.cn/zzjg1/yxsz.htm";
+        var result=await browser.View(url);
+        Console.WriteLine(result);
     }
     public static async Task TestMarkdownRender()
     {

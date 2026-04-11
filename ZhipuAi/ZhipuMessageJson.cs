@@ -49,6 +49,8 @@ public class ToolDef
     public IsUseable isUseable = async (tag) => true;
     [JsonIgnore]
     public string? DynamicPrompt { get; set; }
+    [JsonIgnore]
+    public bool HideOutputOnInvoking = false;
 
 }
 
