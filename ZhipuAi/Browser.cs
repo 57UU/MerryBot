@@ -14,18 +14,30 @@ using System.Web;
 
 namespace ZhipuClient;
 
+/// <summary>
+/// 配置浏览器选项
+/// note: windows linux差异
+/// windows的实际width/height是乘上了DeviceScaleFactor
+/// linux的缩放不影响width/height
+/// </summary>
 public record BrowserOptions
 {
     public bool Headless { get; init; } = true;
-    public int Width { get; init; } = 800;
-    public int Height { get; init; } = 720;
+    public int Width { get; set; } = 800;
+    public int Height { get; set; } = 720;
     public bool AutoHeight { get; init; } = true;
-    /// <summary>
-    /// 缩放比例，1.0 为 100%
-    /// </summary>
     public double DeviceScaleFactor { get; init; } = 2;
+    public double ActualPixelScaleFator { get; private set; } = 1;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? binaryPath { get; init; } = null;
+    public void AdaptSystem(){
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Width /= (int)DeviceScaleFactor;
+            Height /= (int)DeviceScaleFactor;
+            ActualPixelScaleFator = DeviceScaleFactor;
+        }
+    }
 }
 
 class DriverPack
@@ -87,6 +99,7 @@ public partial class Browser : IDisposable
     public Browser(BrowserOptions? browserOptions = null)
     {
         this.browserOptions = browserOptions ?? new BrowserOptions();
+        this.browserOptions.AdaptSystem();
         resourceCountdown = new(CloseBrowser);
 
         options.ConfigureForWebScraping();
@@ -246,55 +259,8 @@ public partial class Browser : IDisposable
                 ((IJavaScriptExecutor)driver!).ExecuteScript("document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden';");
                 
                 // 计算 inner 和 outer 的差距 (主要是标题栏和边框)
-                var offsetWidth = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerWidth/{browserOptions.DeviceScaleFactor} - window.innerWidth;"));
-                var offsetHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerHeight/{browserOptions.DeviceScaleFactor} - window.innerHeight;"));
-
-                // 获取内容真实高度
-                var contentHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);"));
-                
-                // 补偿后的窗口大小
-                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width + offsetWidth, contentHeight + offsetHeight);
-            }
-            else
-            {
-                driver.Manage().Window.Size = new System.Drawing.Size(browserOptions.Width, browserOptions.Height);
-            }
-
-            Screenshot screenshot = driver!.TakeScreenshot();
-
-            return screenshot.AsByteArray;
-        });
-
-
-        return await task.ContinueWith((t) =>
-        {
-            _ = GotoBlankPage();
-            mutex.Release();
-            if (t.Status == TaskStatus.RanToCompletion)
-            {
-                return t.Result;
-            }
-            throw t.Exception ?? new Exception("failed");
-        });
-    }
-    public async Task<byte[]> TakeScreenshot(Uri url)
-    {
-        await UseBrowser();
-        var task = Task.Run(async () =>
-        {
-            await mutex.WaitAsync();
-            await driver!.Navigate().GoToUrlAsync(url);
-            await Task.Delay(ExecuteScriptDelayTime);
-            await EnsurePageLoaded();
-
-            if (browserOptions.AutoHeight)
-            {
-                // 隐藏滚动条
-                ((IJavaScriptExecutor)driver!).ExecuteScript("document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden';");
-                
-                // 计算 inner 和 outer 的差距 (主要是标题栏和边框)
-                var offsetWidth = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return window.outerWidth - window.innerWidth;"));
-                var offsetHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return window.outerHeight - window.innerHeight;"));
+                var offsetWidth = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerWidth/{browserOptions.ActualPixelScaleFator} - window.innerWidth;"));
+                var offsetHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript($"return window.outerHeight/{browserOptions.ActualPixelScaleFator} - window.innerHeight;"));
 
                 // 获取内容真实高度
                 var contentHeight = Convert.ToInt32(((IJavaScriptExecutor)driver!).ExecuteScript("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);"));
