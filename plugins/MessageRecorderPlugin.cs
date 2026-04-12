@@ -61,7 +61,7 @@ public class MessageRecorderPlugin : Plugin
 
             if (success)
             {
-                Logger.Debug($"记录消息: 群 {groupId}, 发送者 {data.sender.user_id}, 消息ID {data.message_id}");
+                Logger.Trace($"记录消息: 群 {groupId}, 发送者 {data.sender.user_id}, 消息ID {data.message_id}");
             }
             else
             {
