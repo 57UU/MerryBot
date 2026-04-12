@@ -91,9 +91,110 @@
         hr { height: 0.15em; padding: 0; margin: 10px 0; background-color: #e1e4e8; border: 0; }
         img { max-width: 100%; }
         li + li { margin-top: 0.1em; }
+
+        /* Mermaid 样式微调 */
+        .mermaid {
+            background-color: transparent !important;
+            border: none !important;
+            text-align: center;
+        }
+        /* 公式样式微调 */
+        .math {
+            font-size: 1.1em;
+            /* 避免公式在渲染前换行或显示不正常 */
+            display: inline-block;
+            white-space: nowrap;
+        }
+        .math-display {
+            display: block;
+            margin: 1em 0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     {{content}}
+    <script>
+        window.renderComplete = false;
+        // MathJax 配置
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            svg: {
+                fontCache: 'global' // 使用全局字体缓存，减小 SVG 体积
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                processHtmlClass: 'math|math-display'
+            }
+        };
+    </script>
+    <script>{{mermaidJs}}</script>
+    <script>{{mathJaxJs}}</script>
+    <script>
+        async function renderAll() {
+            // 1. 等待 MathJax 核心对象就绪
+            let waitCount = 0;
+            while (typeof MathJax === 'undefined' || !MathJax.startup || !MathJax.typesetPromise) {
+                await new Promise(r => setTimeout(r, 50));
+                if (waitCount++ > 100) break;
+            }
+
+            if (typeof MathJax !== 'undefined' && MathJax.startup && MathJax.startup.promise) {
+                await MathJax.startup.promise;
+            }
+
+            const promises = [];
+
+            // 2. Mermaid 渲染
+            if (typeof mermaid !== 'undefined') {
+                // 将代码块转换为 mermaid div
+                document.querySelectorAll('code.language-mermaid').forEach(code => {
+                    const pre = code.parentElement;
+                    if (pre && pre.tagName === 'PRE') {
+                        const div = document.createElement('div');
+                        div.className = 'mermaid';
+                        div.textContent = code.textContent;
+                        pre.parentNode.replaceChild(div, pre);
+                    }
+                });
+
+                mermaid.initialize({ 
+                    startOnLoad: false, 
+                    theme: 'default',
+                    securityLevel: 'loose'
+                });
+                promises.push(mermaid.run());
+            }
+
+            // 3. MathJax 渲染
+            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                // 强制对所有 .math 元素进行排版
+                // 我们不再手动修改内容，直接让 MathJax 处理
+                promises.push(MathJax.typesetPromise());
+            }
+
+            try {
+                await Promise.all(promises);
+            } catch (e) {
+                console.error("Rendering error:", e);
+            } finally {
+                // 给一点重绘时间
+                setTimeout(() => {
+                    window.renderComplete = true;
+                }, 150);
+            }
+        }
+
+        // 在页面加载完成后启动渲染
+        if (document.readyState === 'complete') {
+            renderAll();
+        } else {
+            window.addEventListener('load', renderAll);
+        }
+    </script>
 </body>
 </html>

@@ -69,6 +69,7 @@ public partial class Browser : IDisposable
     string getSearchResult = null;
     string jsReader = null, preprocessWbHot = null, preprocessBingResult = null;
     string markdownTemplate = null;
+    string mermaidJs = null, mathJaxJs = null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     SemaphoreSlim mutex = new(1);
     readonly BrowserOptions browserOptions;
@@ -84,7 +85,9 @@ public partial class Browser : IDisposable
             "getSearchResult2.js",
             "preprocessWbHot.js",
             "preprocessBingResult.js",
-            "markdownStyle.html"
+            "markdownStyle.html",
+            "mermaid.min.js",
+            "mathjax.min.js"
             ];
         List<Task<string>> tasks = new();
         foreach (var file in scriptFiles)
@@ -97,6 +100,8 @@ public partial class Browser : IDisposable
         preprocessWbHot = tasks[2].Result;
         preprocessBingResult = tasks[3].Result;
         markdownTemplate = tasks[4].Result;
+        mermaidJs = tasks[5].Result;
+        mathJaxJs = tasks[6].Result;
     }
     readonly StealthInstanceSettings stealthInstanceSettings = new();
     readonly ResourceCountdown resourceCountdown;
@@ -241,13 +246,16 @@ public partial class Browser : IDisposable
             return $"调用失败 {t.Exception}";
         });
     }
-    public Task<byte[]> TakeMarkdownScreenshot(string md)
+    public async Task<byte[]> TakeMarkdownScreenshot(string md)
     {
         var html = Markdown2Html.MarkdownConverter.ToHtml(md);
         var styledHtml = markdownTemplate
             .Replace("{{content}}", html)
-            .Replace("{{fontScale}}", browserOptions.FontScale.ToString());
-        return TakeScreenshot(styledHtml);
+            .Replace("{{fontScale}}", browserOptions.FontScale.ToString())
+            .Replace("{{mermaidJs}}", mermaidJs)
+            .Replace("{{mathJaxJs}}", mathJaxJs);
+
+        return await TakeScreenshot(styledHtml);
     }
     public async Task<byte[]> TakeScreenshot(string html)
     {
@@ -259,6 +267,20 @@ public partial class Browser : IDisposable
             ((IJavaScriptExecutor)driver!).ExecuteScript("document.open(); document.write(arguments[0]); document.close();", html);
             await Task.Delay(ExecuteScriptDelayTime);
             await EnsurePageLoaded();
+
+            // 等待 Mermaid 和 MathJax 等异步渲染完成
+            driverPack!.driverWait.Until(d =>
+            {
+                try
+                {
+                    var isComplete = ((IJavaScriptExecutor)d).ExecuteScript("return window.renderComplete !== false;");
+                    return isComplete != null && (bool)isComplete;
+                }
+                catch
+                {
+                    return true; // 发生错误或变量未定义，则视为完成
+                }
+            });
 
             if (browserOptions.AutoHeight)
             {
