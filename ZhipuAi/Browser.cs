@@ -36,7 +36,7 @@ public record BrowserOptions
     public double FontScale { get; init; } = 1.2;
     public double ActualPixelScaleFator { get; private set; } = 1;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
-    public string? binaryPath { get; init; } = null;
+    public string? BinaryPath { get; init; } = null;
     public void AdaptSystem(){
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -113,7 +113,7 @@ public partial class Browser : IDisposable
         {
             options.EnableHeadlessMode();
         }
-        options.BinaryLocation = this.browserOptions.binaryPath;
+        options.BinaryLocation = this.browserOptions.BinaryPath;
         options.ApplyStealth();
 
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;

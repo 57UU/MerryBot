@@ -15,7 +15,7 @@ public static class Program
         ConfigManager.Initialize().Wait();
         await TestMarkdownRender();
     }
-    static Browser browser = new Browser(new BrowserOptions() { binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
+    static Browser browser = new Browser(new BrowserOptions() { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
     static async Task TestWebFetch()
     {
         var url = "https://scu.edu.cn/zzjg1/yxsz.htm";
@@ -81,7 +81,7 @@ public class MerryBot
 
 ";
         md=md+md;
-        using Browser browser = new Browser(new BrowserOptions(){binaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
+        using Browser browser = new Browser(new BrowserOptions(){BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
 
         var img = await browser.TakeMarkdownScreenshot(md);
         string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_md.png");
