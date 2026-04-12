@@ -14,7 +14,7 @@ public class Program
         var app = CreateApp(historyRecorder);
         app.Run();
     }
-    public static WebApplication CreateApp(HistoryRecorder historyRecorder)
+    public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://0.0.0.0:5000")
     {
         var webAssembly = typeof(Program).Assembly;
 
@@ -51,7 +51,7 @@ public class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        app.Urls.Add("http://0.0.0.0:5000");
+        app.Urls.Add(webAddress);
 
         // 图片API
         app.MapGet("/api/image/{id}", async (long id, HistoryRecorder historyRecorder) =>

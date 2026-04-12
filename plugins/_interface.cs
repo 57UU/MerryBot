@@ -105,7 +105,7 @@ public record PluginInterop(
         if (!Variables.TryGetValue(key, out var value))
         {
             //save it
-            SetVarible(key, defaultValue);
+            SetVariable(key, defaultValue);
             _ = SaveConfig();
             return defaultValue;
         }
@@ -145,7 +145,7 @@ public record PluginInterop(
         return (T)value;
     }
 
-    internal void SetVarible<T>(string key, T value)
+    internal void SetVariable<T>(string key, T value)
     {
         Variables[key] = value!;
     }

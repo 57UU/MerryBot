@@ -31,14 +31,17 @@ public class StorageManagerPlugin : Plugin
         {
             //gen
             machineCode = (int)(new Random().NextSingle() * 32);
-            interop.SetVarible(machineCodeKey, machineCode);
+            interop.SetVariable(machineCodeKey, machineCode);
             interop.SaveConfig().Wait();
         }
         else
         {
             machineCode = _machineCode.Value;
         }
-        webApplication = HistoryWebFrontend.Program.CreateApp(historyRecorder);
+
+        var webAddress = interop.GetVariableOrSetDefault<string>("web-address","http://0.0.0.0:5000");
+        
+        webApplication = HistoryWebFrontend.Program.CreateApp(historyRecorder, webAddress);
         _ = webApplication.RunAsync();
 
     }

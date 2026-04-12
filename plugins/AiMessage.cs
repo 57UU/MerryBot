@@ -148,7 +148,7 @@ public partial class AiMessage : Plugin
                 {
                     //valid
                     aiClient.SetModelPreset(model, token);
-                    Interop.SetVarible(LLM_KEY, tag);
+                    Interop.SetVariable(LLM_KEY, tag);
                     await Interop.SaveConfig();
                     _ = Actions.ReplyGroupMessage(groupId, messageId, $"set model: {tag}");
                 }
