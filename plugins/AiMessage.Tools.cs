@@ -235,9 +235,9 @@ public partial class AiMessage
     {
         var mdSender=new ToolDef();
         mdSender.Function.Name = "send_markdown";
-        mdSender.Function.Description = "";
+        mdSender.Function.Description = "支持mermaid、latex公式";
         mdSender.HideOutputOnInvoking = true;
-        mdSender.DynamicPrompt="当你需要发送长篇报告时，请发送markdown";
+        mdSender.DynamicPrompt="当你需要发送长篇报告或其他类似内容时，请发送markdown。";
         mdSender.Function.Parameters.AddRequired("md", new ParameterProperty() { Type = "string", Description = "需要发送的Markdown文本" });
         mdSender.Function.FunctionCall = async (parameters) =>
         {
