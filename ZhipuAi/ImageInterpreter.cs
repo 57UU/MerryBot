@@ -26,12 +26,12 @@ public class ImageInterpreter
 
     public async Task<string> Interpret(string imageUrl, ImageInterpreterType type = ImageInterpreterType.Normal)
     {
-        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)), GetPrompt(type));
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)), GetPrompt(type), type);
     }
 
     public async Task<string> Interpret(byte[] image, ImageInterpreterType type = ImageInterpreterType.Normal)
     {
-        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"), GetPrompt(type));
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"), GetPrompt(type), type);
     }
 
     string GetPrompt(ImageInterpreterType type)
@@ -43,12 +43,16 @@ public class ImageInterpreter
         };
     }
 
-    async Task<string> InterpretInternal(ChatMessageContentPart imagePart, string prompt)
+    async Task<string> InterpretInternal(ChatMessageContentPart imagePart, string prompt, ImageInterpreterType type)
     {
         var chatOptions = new ChatCompletionOptions
         {
             Temperature = 0
         };
+        if (type == ImageInterpreterType.Quick)
+        {
+            chatOptions.MaxOutputTokenCount = 100;
+        }
 
         var messages = new List<ChatMessage>
         {
