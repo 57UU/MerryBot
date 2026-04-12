@@ -12,11 +12,12 @@ public partial class AiMessage
     {
         var limit = resourceLimit ?? new ResourceLimit();
         var items = chain as IList<TypedMessage> ?? chain.ToList();
-        var results = new string[items.Count];
+        var tasks = new Task<string>[items.Count];
         for (var i = items.Count - 1; i >= 0; i--)
         {
-            results[i] = await ProcessMessageItem(items[i], groupId, recursive, depth, limit);
+            tasks[i] = ProcessMessageItem(items[i], groupId, recursive, depth, limit);
         }
+        var results = await Task.WhenAll(tasks);
 
         StringBuilder sb = new();
         foreach (var result in results)
@@ -174,7 +175,7 @@ public partial class AiMessage
 
     async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)
     {
-        if ((depth == 0 || limit.ImageLimit > 0) && ImageInterpreterPool != null && imageData.Url != null)
+        if (ImageInterpreterPool != null && imageData.Url != null && limit.CanUseImageInterpreter(depth))
         {
             var imageUrl = imageData.Url;
             byte[]? imageBytes = null;
@@ -194,7 +195,10 @@ public partial class AiMessage
                 var description = imageBytes != null
                     ? await ImageInterpreterPool!.Interpret(imageBytes)
                     : await ImageInterpreterPool!.Interpret(imageUrl);
-                limit.ImageLimit--;
+                if (!limit.TryConsumeImageInterpreter(depth))
+                {
+                    return $"<image {imageData.Summary}/>";
+                }
                 return $"<image：{description}/>";
             }
             catch (Exception)
@@ -236,5 +240,42 @@ public partial class AiMessage
 
 internal class ResourceLimit
 {
-    public int ImageLimit { get; set; } = 3;
+    readonly object locker = new();
+    int imageLimit = 3;
+    public int ImageLimit
+    {
+        get
+        {
+            lock (locker)
+            {
+                return imageLimit;
+            }
+        }
+        set
+        {
+            lock (locker)
+            {
+                imageLimit = value;
+            }
+        }
+    }
+    public bool CanUseImageInterpreter(int depth)
+    {
+        lock (locker)
+        {
+            return depth == 0 || imageLimit > 0;
+        }
+    }
+    public bool TryConsumeImageInterpreter(int depth)
+    {
+        lock (locker)
+        {
+            if (depth != 0 && imageLimit <= 0)
+            {
+                return false;
+            }
+            imageLimit--;
+            return true;
+        }
+    }
 }
