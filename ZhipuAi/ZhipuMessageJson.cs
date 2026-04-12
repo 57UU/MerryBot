@@ -37,6 +37,29 @@ public class ToolCallSubMessage
 
 public delegate Task<bool> IsUseable(long specialTag);
 
+public enum ToolBehavior
+{
+    Normal,
+    /// <summary>
+    /// after using this tool, conversation will be stopped by a Exception
+    /// </summary>
+    ExitAfterUse
+}
+public class ExitAfterUseException : Exception
+{
+    public readonly string ToolName;
+    public ExitAfterUseException(string message, string toolName) : base(message)
+    {
+        ToolName = toolName;
+    }
+}
+public class NotAvailableException : Exception
+{
+    public NotAvailableException(string message) : base(message)
+    {
+    }
+}
+
 // 单个工具
 public class ToolDef
 {
@@ -51,6 +74,8 @@ public class ToolDef
     public string? DynamicPrompt { get; set; }
     [JsonIgnore]
     public bool HideOutputOnInvoking = false;
+    [JsonIgnore]
+    public ToolBehavior Behavior = ToolBehavior.Normal;
 
 }
 

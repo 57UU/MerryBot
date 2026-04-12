@@ -23,6 +23,16 @@ public class ImageInterpreter
 
     public async Task<string> Interpret(string imageUrl)
     {
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)));
+    }
+
+    public async Task<string> Interpret(byte[] image)
+    {
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"));
+    }
+
+    async Task<string> InterpretInternal(ChatMessageContentPart imagePart)
+    {
         var chatOptions = new ChatCompletionOptions
         {
             Temperature = 0
@@ -32,7 +42,7 @@ public class ImageInterpreter
         {
             new UserChatMessage(
                 ChatMessageContentPart.CreateTextPart(prompt),
-                ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)))
+                imagePart)
         };
 
         var response = await chatClient.CompleteChatAsync(messages, chatOptions);

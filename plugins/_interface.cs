@@ -94,7 +94,7 @@ public record PluginInterop(
         return this.PluginInfoGetter().FirstOrDefault(i => i.Instance is T)?.Instance as T;
     }
     /// <summary>
-    /// 尝试在配置文件的变量中查找，如果没有找到，那就存储并返回默认值。处于性能考量，保存会异步执行。
+    /// 尝试在配置文件的变量中查找，如果没有找到，那就存储并返回默认值。出于性能考量，保存会异步执行。
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="key"></param>
@@ -110,6 +110,17 @@ public record PluginInterop(
             return defaultValue;
         }
         return (T)value;
+    }
+    internal int GetIntVariableOrSetDefault(string key, int defaultValue)
+    {
+        if (!Variables.TryGetValue(key, out var value))
+        {
+            //save it
+            SetVariable(key, defaultValue);
+            _ = SaveConfig();
+            return defaultValue;
+        }
+        return Convert.ToInt32(value);
     }
     /// <summary>
     /// try get config value

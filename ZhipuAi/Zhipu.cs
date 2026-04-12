@@ -23,7 +23,7 @@ public partial class ZhipuAi : IDisposable
 
     readonly string prompt;
     public static readonly Browser browser = new(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null,bool useBuildinTools=true)
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true)
     {
         this.token = token;
         this.prompt = prompt;
@@ -36,7 +36,7 @@ public partial class ZhipuAi : IDisposable
         SetModelPreset(modelPreset, token);
         options.Converters.Add(new MessageConverter());
         //tools
-        if(useBuildinTools)
+        if (useBuildinTools)
         {
             AddBuiltInTools();
         }
@@ -114,6 +114,17 @@ public partial class ZhipuAi : IDisposable
     }
     public TimeSpan AutoNewSpan { get; set; } = TimeSpan.FromHours(12);
 
+    public void AddHistory(long id, ZhipuMessage message)
+    {
+        history.TryGetValue(id, out List<ZhipuMessage>? currentHistory);
+        if (currentHistory == null)
+        {
+            currentHistory = new List<ZhipuMessage>();
+            history.Add(id, currentHistory);
+        }
+        currentHistory.Add(message);
+    }
+
     /// <summary>
     /// 处理请求
     /// </summary>
@@ -128,10 +139,11 @@ public partial class ZhipuAi : IDisposable
         var mutex = EnsureMutexExists(id);
         if (!mutex.Wait(0))
         {
-            yield return "上一个请求尚未完成";
-            yield break;
+            throw new NotAvailableException("上一个请求尚未完成");
         }
-        bool done = false;
+        try
+        {
+            bool done = false;
         //if last message is too old, start a new conversation
         if (history.TryGetValue(id, out List<ZhipuMessage>? value))
         {
@@ -181,7 +193,7 @@ public partial class ZhipuAi : IDisposable
         var userQuery = new ZhipuMessage()
         {
             Role = USER,
-            Content = $"[用户:{sender}]{content}"
+            Content = $"{sender}{content}"
         };
         currentHistory.Add(userQuery);
         recorder(userQuery);
@@ -211,6 +223,7 @@ public partial class ZhipuAi : IDisposable
                 response = msg.Content;
                 if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
                 {
+                    ExitAfterUseException? exitMessage = null;
                     var assistantMessage = new AssistantMessage()
                     {
                         Role = msg.Role,
@@ -223,10 +236,18 @@ public partial class ZhipuAi : IDisposable
                             Id = i.Id,
                             Function = i.Function
                         });
-                        if (functionMapper.TryGetValue(i.Function.Name, out var toolDef) && toolDef.HideOutputOnInvoking)
+                        if (functionMapper.TryGetValue(i.Function.Name, out var toolDef))
                         {
-                            hideOutput = true;
+                            if (toolDef.HideOutputOnInvoking)
+                            {
+                                hideOutput = true;
+                            }
+                            if (toolDef.Behavior == ToolBehavior.ExitAfterUse)
+                            {
+                                exitMessage = new ExitAfterUseException($"after using {i.Function.Name}, conversation will be stopped", i.Function.Name);
+                            }
                         }
+
                     }
                     currentHistory.Add(assistantMessage);
                     var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
@@ -244,6 +265,10 @@ public partial class ZhipuAi : IDisposable
                         currentHistory.Add(i.Result);
                         recorder(i.Result);
                     }
+                    if (exitMessage != null)
+                    {
+                        throw exitMessage;
+                    }
                 }
                 else
                 {
@@ -257,6 +282,10 @@ public partial class ZhipuAi : IDisposable
                     done = true;
                 }
             }
+            catch (ExitAfterUseException)
+            {
+                throw;
+            }
             catch (Exception e)
             {
                 response = "Error: " + e.Message;
@@ -268,7 +297,11 @@ public partial class ZhipuAi : IDisposable
                 yield return response.Trim();
             }
         }
-        mutex.Release();
+        }
+        finally
+        {
+            mutex.Release();
+        }
 
 
     }

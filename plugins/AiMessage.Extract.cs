@@ -8,7 +8,7 @@ namespace BotPlugin;
 
 public partial class AiMessage
 {
-    async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit = null)
+    internal async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit = null)
     {
         StringBuilder sb = new();
         foreach (var item in chain)
@@ -100,30 +100,46 @@ public partial class AiMessage
     string AppendJsonData(JsonData jsonData)
     {
         JsonElement json = jsonData.Data;
-        if (json.TryGetProperty("meta", out var meta))
+        if (json.ValueKind == JsonValueKind.Undefined || json.ValueKind == JsonValueKind.Null)
         {
-            if (meta.TryGetProperty("news", out var news))
+            return "";
+        }
+        if (json.ValueKind == JsonValueKind.String)
+        {
+            var rawJson = json.GetString();
+            if (string.IsNullOrWhiteSpace(rawJson))
             {
-                try
-                {
-                    return
-                        $"描述:{news.GetProperty("desc").ToString()}\n" +
-                        $"URL:'{news.GetProperty("jumpUrl").ToString()}\n'";
-                }
-                catch (Exception)
-                {
-                    return news.ToString();
-                }
+                return "";
             }
-            else
+            try
             {
-                return meta.ToString();
+                using var parsedJson = JsonDocument.Parse(rawJson);
+                json = parsedJson.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                return rawJson;
             }
         }
-        else
+        if (json.ValueKind != JsonValueKind.Object)
         {
             return json.ToString();
         }
+        if (json.TryGetProperty("meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
+        {
+            if (meta.TryGetProperty("news", out var news) && news.ValueKind == JsonValueKind.Object)
+            {
+                if (news.TryGetProperty("desc", out var desc) && news.TryGetProperty("jumpUrl", out var jumpUrl))
+                {
+                    return
+                        $"描述:{desc}\n" +
+                        $"URL:'{jumpUrl}\n'";
+                }
+                return news.ToString();
+            }
+            return meta.ToString();
+        }
+        return json.ToString();
     }
 
     async Task<string> AppendForwardData(ForwardData forwardData, long groupId, int depth)
@@ -154,9 +170,23 @@ public partial class AiMessage
         if ((depth == 0 || limit.ImageLimit > 0) && ImageInterpreterPool != null && imageData.Url != null)
         {
             var imageUrl = imageData.Url;
+            byte[]? imageBytes = null;
+            if (!imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                if (long.TryParse(imageUrl, out var imageId))
+                {
+                    var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
+                    if (imageEntry != null)
+                    {
+                        imageBytes = await storageManager.GroupHistoryRecorder.GetImageDataAsync(imageEntry.Hash);
+                    }
+                }
+            }
             try
             {
-                var description = await ImageInterpreterPool!.Interpret(imageUrl);
+                var description = imageBytes != null
+                    ? await ImageInterpreterPool!.Interpret(imageBytes)
+                    : await ImageInterpreterPool!.Interpret(imageUrl);
                 limit.ImageLimit--;
                 return $"<image：{description}/>";
             }
@@ -169,6 +199,20 @@ public partial class AiMessage
         {
             return "<image/>";
         }
+    }
+
+    static string GetImageContentType(string url)
+    {
+        var extension = Path.GetExtension(url).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            _ => "image/jpeg"
+        };
     }
 
     string AppendFaceData(FaceData faceData)

@@ -19,6 +19,8 @@ public partial class AiMessage : Plugin
         ModelPreset.Glm_4_1V_Flash_Free,
         ModelPreset.Glm_4V_Flash_Free
         ];
+    internal string defaultToken;
+    internal ModelPreset defaultModel;
     public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
         this.storageManager = storageManager;
@@ -67,6 +69,8 @@ public partial class AiMessage : Plugin
         };
 
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
+        defaultToken = token;
+        defaultModel = model;
         aiClient.Logger = Logger;
         //tools
         RegisterVoiceTool();
@@ -210,12 +214,18 @@ public partial class AiMessage : Plugin
     }
     async Task HandleMessage(long groupId, string message, long messageId, string sender, long senderQq)
     {
-        await foreach (var result in aiClient.Ask(message, groupId, sender, groupId))
+        try{
+            await foreach (var result in aiClient.Ask(message, groupId, $"[user:{sender}]", groupId))
         {
             if (!useFunctionCallToReply && !string.IsNullOrWhiteSpace(result))
             {
                 await Actions.ChooseBestReplyMethod(groupId, senderQq.ToString(), result);
             }
+        }
+        }
+        catch (NotAvailableException)
+        {
+            await Actions.SendGroupMessage(groupId,$"请等待上一个请求完成哦");
         }
     }
     public override void Dispose()

@@ -51,7 +51,7 @@ public static partial class Program
         while (true)
         {
             Console.Write("User: ");
-            await foreach (var i in zhipu.Ask(Console.ReadLine()!, 114514, "default"))
+            await foreach (var i in zhipu.Ask(Console.ReadLine()!, 114514, "[default user]"))
             {
                 Console.WriteLine(i);
             }

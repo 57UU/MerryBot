@@ -15,11 +15,21 @@ public class ImageInterpreterPool
     }
     public async Task<string> Interpret(string imageUrl)
     {
+        return await InterpretCore(interpreter => interpreter.Interpret(imageUrl));
+    }
+
+    public async Task<string> Interpret(byte[] image)
+    {
+        return await InterpretCore(interpreter => interpreter.Interpret(image));
+    }
+
+    async Task<string> InterpretCore(Func<ImageInterpreter, Task<string>> execute)
+    {
         foreach (var interpreter in _imageInterpreters)
         {
             try
             {
-                return await interpreter.Interpret(imageUrl);
+                return await execute(interpreter);
             }
             catch (Exception ex)
             {
