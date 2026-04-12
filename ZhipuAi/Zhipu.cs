@@ -22,8 +22,8 @@ public partial class ZhipuAi : IDisposable
     private Dictionary<string, ToolDef> functionMapper = new();
 
     readonly string prompt;
-    public readonly Browser browser = new(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null)
+    public static readonly Browser browser = new(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null,bool useBuildinTools=true)
     {
         this.token = token;
         this.prompt = prompt;
@@ -36,7 +36,10 @@ public partial class ZhipuAi : IDisposable
         SetModelPreset(modelPreset, token);
         options.Converters.Add(new MessageConverter());
         //tools
-        AddBuiltInTools();
+        if(useBuildinTools)
+        {
+            AddBuiltInTools();
+        }
 
     }
     public void SetModelPreset(ModelPreset modelPreset, string token)

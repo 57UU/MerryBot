@@ -6,7 +6,7 @@ namespace ZhipuClient;
 
 public partial class ZhipuAi
 {
-    private void RegisterGetTime()
+    public void RegisterGetTime()
     {
         var watch = new ToolDef();
         watch.Function.Name = "get_time";
@@ -14,7 +14,7 @@ public partial class ZhipuAi
         watch.Function.FunctionCall = async (parameters) => "北京时间:" + DateTime.Now.ToString();
         RegisterTool(watch);
     }
-    private void RegisterBrowser()
+    public void RegisterBrowser()
     {
         var browserDef = new ToolDef();
         browserDef.Function.Name = "browse";
@@ -32,7 +32,7 @@ public partial class ZhipuAi
         };
         RegisterTool(browserDef);
     }
-    private void RegisterBingSearch()
+    public void RegisterBingSearch()
     {
         var bingSearch = new ToolDef();
         bingSearch.Function.Name = "search";
@@ -53,7 +53,7 @@ public partial class ZhipuAi
         bingSearch.DynamicPrompt = "网络搜索时，优先使用国内版。";
         RegisterTool(bingSearch);
     }
-    private void RegisterWeiboHot()
+    public void RegisterWeiboHot()
     {
         var weiboHot = new ToolDef();
         weiboHot.Function.Name = "view_weibo_hot";

@@ -242,7 +242,7 @@ public partial class AiMessage
         mdSender.Function.FunctionCall = async (parameters) =>
         {
             var markdown = parameters["md"];
-            byte[] img=await aiClient.browser.TakeMarkdownScreenshot(markdown.GetString()!);
+            byte[] img=await ZhipuAi.browser.TakeMarkdownScreenshot(markdown.GetString()!);
             await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(img)]);
             return "done";
         };

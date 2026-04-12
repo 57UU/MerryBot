@@ -176,7 +176,7 @@ port = 80
 enabled = false
 ";
 
-        var document = TomlSerializer.Deserialize<TomlTable>(tomlContent);
+        TomlTable document = TomlSerializer.Deserialize<TomlTable>(tomlContent)!;
 
         // 从文档中获取值
         var id = document["id"];
