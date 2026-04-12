@@ -1,9 +1,11 @@
 ﻿using NapcatClient;
 using NapcatClient.MessageType;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using ZhipuClient;
 
@@ -17,6 +19,7 @@ public class Highlights : Plugin
     private int count;
     private HighlightsData storageData = new();
     private StorageManagerPlugin storageManager;
+    private readonly ConcurrentDictionary<long, SemaphoreSlim> groupLocks = new();
 
     public Highlights(PluginInterop interop, AiMessage aiMessage, StorageManagerPlugin storageManager) : base(interop)
     {
@@ -89,8 +92,25 @@ public class Highlights : Plugin
             _ = GenerateHighlights(groupId);
         }
     }
+    async Task GenerateHighlights(long groupId){
+        var groupLock = groupLocks.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
+        if (!groupLock.Wait(0))
+        {
+            Logger.Info($"群 {groupId} 已有群刊生成任务在进行，跳过重复请求");
+            _ = Actions.SendGroupMessage(groupId, "群刊生成任务已在进行中，不要着急哦");
+            return;
+        }
+        try
+        {
+            await _generateHighlights(groupId);
+        }
+        finally
+        {
+            groupLock.Release();
+        }
+    }
 
-    async Task GenerateHighlights(long groupId)
+    async Task _generateHighlights(long groupId)
     {
         try
         {
