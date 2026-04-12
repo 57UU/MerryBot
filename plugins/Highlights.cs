@@ -115,7 +115,8 @@ public class Highlights : Plugin
             StringBuilder sb=new();
             foreach(var message in messages){
                 var nickname=string.IsNullOrEmpty(message.SenderGroupNickname) ? message.SenderNickname : message.SenderGroupNickname;
-                sb.Append($"[user:{nickname}]");
+                var timeStr=message.Time.ToString("yyyy-MM-dd HH:mm");
+                sb.Append($"{timeStr}[user:{nickname}]");
                 sb.AppendLine(await aiMessage.ExtractMessage(message.Messages, groupId,recursive:false));
             }
 
