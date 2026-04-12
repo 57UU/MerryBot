@@ -25,7 +25,7 @@ public static partial class Program
     }
     public static async Task TestMarkdownRender()
     {
-        var md = mathAndMermaidMarkdown;
+        var md = longLatex;
         using Browser browser = new Browser(new BrowserOptions(){BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
 
         var img = await browser.TakeMarkdownScreenshot(md);

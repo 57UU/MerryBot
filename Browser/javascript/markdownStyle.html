@@ -104,11 +104,21 @@
             /* 避免公式在渲染前换行或显示不正常 */
             display: inline-block;
             white-space: nowrap;
+            margin: 0 0.1em;
         }
         .math-display {
             display: block;
-            margin: 1em 0;
+            margin: 1.2em 0;
+            padding: 0.5em 0;
             text-align: center;
+            line-height: 1.6;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        /* MathJax 渲染后的容器样式 */
+        mjx-container[display="true"] {
+            margin: 1.5em 0 !important;
+            padding: 0.5em 0;
         }
     </style>
 </head>
