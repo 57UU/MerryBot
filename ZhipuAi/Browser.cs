@@ -1,4 +1,4 @@
-﻿using OpenQA.Selenium;
+using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Chromium;
 using OpenQA.Selenium.Support.Extensions;
@@ -26,7 +26,14 @@ public record BrowserOptions
     public int Width { get; set; } = 600;
     public int Height { get; set; } = 720;
     public bool AutoHeight { get; init; } = true;
+    /// <summary>
+    /// 设备缩放因子，值越大，图片会更清晰
+    /// </summary>
     public double DeviceScaleFactor { get; init; } = 2;
+    /// <summary>
+    /// 字体缩放因子，值越大，字体会更大
+    /// </summary>
+    public double FontScale { get; init; } = 1.2;
     public double ActualPixelScaleFator { get; private set; } = 1;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? binaryPath { get; init; } = null;
@@ -237,7 +244,9 @@ public partial class Browser : IDisposable
     public Task<byte[]> TakeMarkdownScreenshot(string md)
     {
         var html = Markdown2Html.MarkdownConverter.ToHtml(md);
-        var styledHtml = markdownTemplate.Replace("{{content}}", html);
+        var styledHtml = markdownTemplate
+            .Replace("{{content}}", html)
+            .Replace("{{fontScale}}", browserOptions.FontScale.ToString());
         return TakeScreenshot(styledHtml);
     }
     public async Task<byte[]> TakeScreenshot(string html)
