@@ -10,10 +10,17 @@ public partial class AiMessage
 {
     internal async Task<string> ExtractMessage(IEnumerable<TypedMessage> chain, long groupId, bool recursive = false, int depth = 0, ResourceLimit? resourceLimit = null)
     {
-        StringBuilder sb = new();
-        foreach (var item in chain)
+        var limit = resourceLimit ?? new ResourceLimit();
+        var items = chain as IList<TypedMessage> ?? chain.ToList();
+        var results = new string[items.Count];
+        for (var i = items.Count - 1; i >= 0; i--)
         {
-            var result = await ProcessMessageItem(item, groupId, recursive, depth, resourceLimit ?? new ResourceLimit());
+            results[i] = await ProcessMessageItem(items[i], groupId, recursive, depth, limit);
+        }
+
+        StringBuilder sb = new();
+        foreach (var result in results)
+        {
             if (!string.IsNullOrEmpty(result))
             {
                 sb.Append(result);
@@ -192,12 +199,12 @@ public partial class AiMessage
             }
             catch (Exception)
             {
-                return $"<image/>";
+                return $"<image {imageData.Summary}/>";
             }
         }
         else
         {
-            return "<image/>";
+            return $"<image {imageData.Summary}/>";
         }
     }
 
