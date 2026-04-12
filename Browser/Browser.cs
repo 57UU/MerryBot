@@ -12,7 +12,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 
-namespace ZhipuClient;
+namespace BrowserService;
 
 /// <summary>
 /// 配置浏览器选项

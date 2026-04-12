@@ -2,7 +2,7 @@ using OpenQA.Selenium.Chrome;
 using System.Text.Json.Serialization;
 using System.Timers;
 
-namespace ZhipuClient;
+namespace BrowserService;
 
 public class SearchResult
 {

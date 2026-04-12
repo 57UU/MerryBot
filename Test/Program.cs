@@ -1,4 +1,5 @@
 using BotPlugin;
+using BrowserService;
 using DataProvider;
 using MerryBot;
 using System.Reflection;

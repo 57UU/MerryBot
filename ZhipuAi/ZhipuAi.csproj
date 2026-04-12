@@ -10,45 +10,11 @@
 
   <ItemGroup>
     <PackageReference Include="OpenAI" Version="2.10.0" />
-    <PackageReference Include="Selenium.Support" Version="4.43.0" />
-    <PackageReference Include="Selenium.WebDriver" Version="4.43.0" />
-    <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="147.0.7727.5600" />
-    <PackageReference Include="SeleniumStealth.NET" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Browser\Browser.csproj" />
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
-    <ProjectReference Include="..\Markdown2Html\Markdown2Html.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="javascipt\getSearchResult.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascipt\preprocessWbHot.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascipt\readWeb.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\getSearchResult.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\getSearchResult2.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\preprocessBingResult.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\preprocessWbHot.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\readWeb.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="javascript\markdownStyle.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>
