@@ -86,11 +86,20 @@ public class Highlights : Plugin
         }
         else if (IsStartsWith(chain, "/highlights flush"))
         {
+            if (IsGeneratingHighlights(groupId))
+            {
+                _ = Actions.SendGroupMessage(groupId, "群刊生成任务已在进行中，不要着急哦");
+                return;
+            }
             _ = Actions.SendGroupMessage(groupId, $"正在编写群刊...");
             storageData.GroupMessageCount[groupId] = 0;
             _ = Interop.PluginStorage.Save(storageData);
             _ = GenerateHighlights(groupId);
         }
+    }
+    bool IsGeneratingHighlights(long groupId)
+    {
+        return groupLocks.TryGetValue(groupId, out var groupLock) && groupLock.CurrentCount == 0;
     }
     async Task GenerateHighlights(long groupId){
         var groupLock = groupLocks.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
