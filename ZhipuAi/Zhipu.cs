@@ -1,4 +1,5 @@
 using BrowserService;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
@@ -74,9 +75,8 @@ public partial class ZhipuAi : IDisposable
         Tools.Add(tool);
         functionMapper.Add(tool.Function.Name, tool);
     }
-    readonly Dictionary<long, List<ZhipuMessage>> history = new();
-    readonly Dictionary<long, SemaphoreSlim> mutex = new();
-    readonly Lock mutexMutex = new();
+    readonly ConcurrentDictionary<long, List<ZhipuMessage>> history = new();
+    readonly ConcurrentDictionary<long, SemaphoreSlim> mutex = new();
     public ReadOnlySpan<ZhipuMessage> GetDialogHistory(long uid)
     {
         history.TryGetValue(uid, out var dialog);
@@ -88,17 +88,7 @@ public partial class ZhipuAi : IDisposable
     }
     SemaphoreSlim EnsureMutexExists(long groupId)
     {
-        if (!mutex.ContainsKey(groupId))
-        {
-            lock (mutexMutex)
-            {
-                if (!mutex.ContainsKey(groupId))
-                {
-                    mutex.Add(groupId, new SemaphoreSlim(1));
-                }
-            }
-        }
-        return mutex[groupId];
+        return mutex.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
     }
     private ZhipuMessage SystemPrompt;
     /// <summary>
@@ -109,19 +99,14 @@ public partial class ZhipuAi : IDisposable
     {
         var mutex = EnsureMutexExists(id);
         mutex.Wait();
-        history.Remove(id);
+        history.TryRemove(id, out _);
         mutex.Release();
     }
     public TimeSpan AutoNewSpan { get; set; } = TimeSpan.FromHours(12);
 
     public void AddHistory(long id, ZhipuMessage message)
     {
-        history.TryGetValue(id, out List<ZhipuMessage>? currentHistory);
-        if (currentHistory == null)
-        {
-            currentHistory = new List<ZhipuMessage>();
-            history.Add(id, currentHistory);
-        }
+        var currentHistory = history.GetOrAdd(id, _ => new List<ZhipuMessage>());
         currentHistory.Add(message);
     }
 
@@ -152,7 +137,7 @@ public partial class ZhipuAi : IDisposable
             {
                 if (DateTime.Now - lastMessage.time > AutoNewSpan)
                 {
-                    history.Remove(id);
+                    history.TryRemove(id, out _);
                 }
             }
         }
@@ -161,7 +146,7 @@ public partial class ZhipuAi : IDisposable
         {
             //if currentHistory is null, create a new one
             currentHistory = new List<ZhipuMessage>();
-            history.Add(id, currentHistory);
+            history.TryAdd(id, currentHistory);
             ZhipuMessage prompt;
 
             if (UseDynamicPrompt)
@@ -186,7 +171,7 @@ public partial class ZhipuAi : IDisposable
             {
                 prompt = SystemPrompt;
             }
-            history[id].Add(prompt);
+            currentHistory.Add(prompt);
             recorder(prompt);
         }
 
