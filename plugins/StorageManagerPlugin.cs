@@ -43,6 +43,19 @@ public class StorageManagerPlugin : Plugin
 
     }
 
+    public async Task<string> GetContext(long groupId,int count=5)
+    {
+        var messages = await historyRecorder.GetMessagesByGroupIdAsync(groupId, count);
+        messages.Reverse();
+        var context = string.Join("\n", messages.Select(m =>
+        {
+            var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
+            var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
+            var content = string.Join("", m.Messages.Select(tm => tm.ToString()));
+            return $"[{timeStr}] {name}: {content}";
+        }));
+        return context;
+    }
 
     public override void Dispose()
     {

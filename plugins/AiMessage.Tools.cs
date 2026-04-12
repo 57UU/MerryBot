@@ -248,4 +248,16 @@ public partial class AiMessage
         };
         aiClient.RegisterTool(mdSender);
     }
+    private void RegisterContextTool(){
+        var contextTool=new ToolDef();
+        contextTool.Function.Name = "get_context";
+        contextTool.Function.Description = "获取上下文";
+        contextTool.DynamicPrompt="如果你不能理解用户的问题，请使用工具获取上下文。";
+        contextTool.Function.FunctionCall = async (parameters) =>
+        {
+            string context = await storageManager.GetContext(parameters.SpecialTag);
+            return context;
+        };
+        aiClient.RegisterTool(contextTool);
+    }
 }

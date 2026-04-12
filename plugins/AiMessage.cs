@@ -13,6 +13,7 @@ public partial class AiMessage : Plugin
     const string LLM_KEY = "llm-model";
     private DataService.HistoryRecorder aiMessageStorage;
     private readonly ImageInterpreterPool? ImageInterpreterPool;
+    private readonly StorageManagerPlugin storageManager;
     private readonly ModelPreset[] imageInterpreterModels = [
         ModelPreset.GLM_4_6V_Flash_Free,
         ModelPreset.Glm_4_1V_Flash_Free,
@@ -20,6 +21,7 @@ public partial class AiMessage : Plugin
         ];
     public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
+        this.storageManager = storageManager;
         this.aiMessageStorage = storageManager.AiMessageStorage;
         //display available model
         //ModelPreset.DisplayAllModels();
@@ -77,6 +79,7 @@ public partial class AiMessage : Plugin
         RegisterImagePainter();
         RegisterShellTool();
         RegisterMarkdownSender();
+        RegisterContextTool();
     }
 
 
