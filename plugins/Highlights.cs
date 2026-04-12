@@ -142,7 +142,7 @@ public class Highlights : Plugin
             //     return $"[{timeStr}] {name}: {content}";
             // }));
             StringBuilder sb=new();
-            var limit = new ResourceLimit { ImageLimit = 3 };
+            var limit = new ResourceLimit { ImageLimit = 3, ImageInterpreterType = ImageInterpreterType.Quick };
             var extractTasks = messages.Select(async (message, index) =>
             {
                 var nickname=string.IsNullOrEmpty(message.SenderGroupNickname) ? message.SenderNickname : message.SenderGroupNickname;

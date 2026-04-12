@@ -3,13 +3,16 @@ using OpenAI.Chat;
 using System.ClientModel;
 
 namespace ZhipuClient;
-
+public enum ImageInterpreterType{
+    Normal,Quick
+}
 public class ImageInterpreter
 {
     private readonly ModelPreset modelPreset;
     private readonly OpenAIClient client;
     private readonly ChatClient chatClient;
-    const string prompt = "描述图片内容";
+    const string normalPrompt = "描述图片内容";
+    const string quickPrompt = "简要描述图片大致内容";
     public ImageInterpreter(ModelPreset modelPreset, string apiKey)
     {
         this.modelPreset = modelPreset;
@@ -21,17 +24,26 @@ public class ImageInterpreter
         chatClient = client.GetChatClient(modelPreset.model);
     }
 
-    public async Task<string> Interpret(string imageUrl)
+    public async Task<string> Interpret(string imageUrl, ImageInterpreterType type = ImageInterpreterType.Normal)
     {
-        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)));
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new Uri(imageUrl)), GetPrompt(type));
     }
 
-    public async Task<string> Interpret(byte[] image)
+    public async Task<string> Interpret(byte[] image, ImageInterpreterType type = ImageInterpreterType.Normal)
     {
-        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"));
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"), GetPrompt(type));
     }
 
-    async Task<string> InterpretInternal(ChatMessageContentPart imagePart)
+    string GetPrompt(ImageInterpreterType type)
+    {
+        return type switch
+        {
+            ImageInterpreterType.Quick => quickPrompt,
+            _ => normalPrompt
+        };
+    }
+
+    async Task<string> InterpretInternal(ChatMessageContentPart imagePart, string prompt)
     {
         var chatOptions = new ChatCompletionOptions
         {

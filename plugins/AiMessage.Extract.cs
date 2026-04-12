@@ -3,6 +3,7 @@ using NapcatClient;
 using NapcatClient.MessageType;
 using System.Text;
 using System.Text.Json;
+using ZhipuClient;
 
 namespace BotPlugin;
 
@@ -193,8 +194,8 @@ public partial class AiMessage
             try
             {
                 var description = imageBytes != null
-                    ? await ImageInterpreterPool!.Interpret(imageBytes)
-                    : await ImageInterpreterPool!.Interpret(imageUrl);
+                    ? await ImageInterpreterPool!.Interpret(imageBytes, limit.ImageInterpreterType)
+                    : await ImageInterpreterPool!.Interpret(imageUrl, limit.ImageInterpreterType);
                 if (!limit.TryConsumeImageInterpreter(depth))
                 {
                     return $"<image {imageData.Summary}/>";
@@ -278,4 +279,5 @@ internal class ResourceLimit
             return true;
         }
     }
+    public ImageInterpreterType ImageInterpreterType { get; set; } = ImageInterpreterType.Normal;
 }
