@@ -133,14 +133,18 @@ public class Highlights : Plugin
             //     return $"[{timeStr}] {name}: {content}";
             // }));
             StringBuilder sb=new();
-            ResourceLimit limit=new(){
-                ImageLimit=3,
-            };
-            foreach(var message in messages){
+            var limit = new ResourceLimit { ImageLimit = 3 };
+            var extractTasks = messages.Select(async (message, index) =>
+            {
                 var nickname=string.IsNullOrEmpty(message.SenderGroupNickname) ? message.SenderNickname : message.SenderGroupNickname;
                 var timeStr=message.Time.ToString("yyyy-MM-dd HH:mm");
-                sb.Append($"{timeStr}[user:{nickname}]");
-                sb.AppendLine(await aiMessage.ExtractMessage(message.Messages, groupId,recursive:false,resourceLimit:limit));
+                var extracted = await aiMessage.ExtractMessage(message.Messages, groupId, recursive:false, resourceLimit:limit);
+                return new { time = message.Time, index, line = $"{timeStr}[user:{nickname}]{extracted}\n" };
+            });
+            var extractedLines = await Task.WhenAll(extractTasks);
+            foreach (var item in extractedLines.OrderBy(i => i.time).ThenBy(i => i.index))
+            {
+                sb.Append(item.line);
             }
 
 
