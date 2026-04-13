@@ -32,7 +32,7 @@ public partial class AiMessage : Plugin
         var token = Interop.GetClassVariable<string>(token_key);
         return token;
     }
-    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
+    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, ExtraModels __) : base(interop)
     {
         this.storageManager = storageManager;
         this.aiMessageStorage = storageManager.AiMessageStorage;
