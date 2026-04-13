@@ -110,6 +110,7 @@ public class ModelPreset
             "https://api.deepseek.com",
             "deepseek"
         );
+    public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.With(model:"deepseek-reasoner");
     public static readonly ModelPreset Qwen3Max = new(
             "qwen3-max",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",

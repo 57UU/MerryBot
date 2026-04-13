@@ -19,8 +19,12 @@ public partial class AiMessage : Plugin
         ModelPreset.Glm_4_1V_Flash_Free,
         ModelPreset.Glm_4V_Flash_Free
         ];
-    internal string defaultToken;
     internal ModelPreset defaultModel;
+    internal string? GetToken(ModelPreset modelPreset){
+        var token_key = modelPreset.ApiTokenDictKey;
+        var token = Interop.GetClassVariable<string>(token_key);
+        return token;
+    }
     public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
         this.storageManager = storageManager;
@@ -38,7 +42,7 @@ public partial class AiMessage : Plugin
         useFunctionCallToReply = interop.GetStructVariable<bool>("use_function_call_reply") ?? false;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token_key = model.ApiTokenDictKey;
-        var token = interop.GetClassVariable<string>(token_key)
+        var token = GetToken(model)
             ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
         //image interpreter
         {
@@ -69,7 +73,6 @@ public partial class AiMessage : Plugin
         };
 
         aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
-        defaultToken = token;
         defaultModel = model;
         aiClient.Logger = Logger;
         //tools
