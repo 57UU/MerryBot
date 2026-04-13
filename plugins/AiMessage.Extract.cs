@@ -13,16 +13,10 @@ public partial class AiMessage
     {
         var limit = resourceLimit ?? new ResourceLimit();
         var items = chain as IList<TypedMessage> ?? chain.ToList();
-        var tasks = new Task<string>[items.Count];
-        for (var i = items.Count - 1; i >= 0; i--)
-        {
-            tasks[i] = ProcessMessageItem(items[i], groupId, recursive, depth, limit);
-        }
-        var results = await Task.WhenAll(tasks);
-
         StringBuilder sb = new();
-        foreach (var result in results)
+        foreach (var item in items)
         {
+            var result = await ProcessMessageItem(item, groupId, recursive, depth, limit);
             if (!string.IsNullOrEmpty(result))
             {
                 sb.Append(result);
