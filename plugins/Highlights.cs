@@ -27,7 +27,8 @@ public class Highlights : Plugin
         this.storageManager = storageManager;
         string prompt = interop.GetVariableOrSetDefault("highlights-prompt", "你是一个专业的群刊编辑，负责编辑群刊的高亮内容。");
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
-        var model=ModelPreset.DeepSeekReasoner;
+        float temperature = interop.GetStructVariable<float>("temperature") ?? 1.3f;
+        var model = ModelPreset.DeepSeekReasoner.With(temperature: temperature);
         aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false);
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();

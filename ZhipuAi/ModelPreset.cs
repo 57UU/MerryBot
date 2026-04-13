@@ -13,6 +13,7 @@ public class ModelPreset
     public readonly string url;
     public readonly string provider;
     public readonly bool supportImageInput;
+    public readonly float? temperature;
     public readonly ImmutableDictionary<string, object> extraBody;
     private static ImmutableDictionary<string, object> Empty = ImmutableDictionary<string, object>.Empty;
 
@@ -27,7 +28,8 @@ public class ModelPreset
         string provider,
         ImmutableDictionary<string, object>? extraBody = null,
         bool enableSearch = true,
-        bool supportImageInput = false
+        bool supportImageInput = false,
+        float? temperature = null
         )
     {
         this.model = model;
@@ -36,6 +38,7 @@ public class ModelPreset
         this.extraBody = extraBody ?? Empty;
         this.enableSearch = enableSearch;
         this.supportImageInput = supportImageInput;
+        this.temperature = temperature;
         modelsByName[model] = this;
     }
     public ModelPreset With(
@@ -44,7 +47,8 @@ public class ModelPreset
         string? provider = null,
         ImmutableDictionary<string, object>? extraBody = null,
         bool? enableSearch = null,
-        bool? supportImageInput = null
+        bool? supportImageInput = null,
+        float? temperature = null
         )
     {
         return new(
@@ -53,7 +57,8 @@ public class ModelPreset
              provider ?? this.provider,
              extraBody ?? this.extraBody,
              enableSearch ?? this.enableSearch,
-             supportImageInput ?? this.supportImageInput
+             supportImageInput ?? this.supportImageInput,
+             temperature ?? this.temperature
              );
 
     }

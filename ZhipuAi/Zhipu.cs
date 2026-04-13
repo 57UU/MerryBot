@@ -352,6 +352,10 @@ public partial class ZhipuAi : IDisposable
             {"messages",messages },
             {"tools",usableFunctionCall},
         };
+        if (ModelPreset.temperature != null)
+        {
+            requestData.Add("temperature", ModelPreset.temperature);
+        }
         requestData = requestData.Concat(ModelPreset.extraBody).ToDictionary();
 
         var req = new HttpRequestMessage(HttpMethod.Post, ModelPreset.CompletionUrl);
