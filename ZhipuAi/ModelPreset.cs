@@ -42,9 +42,10 @@ public class ModelPreset
         this.temperature = temperature;
         if (storeInDict == true)
         {
-            modelsByName[$"{provider}/{model}"] = this;
+            modelsByName[ModelTag] = this;
         }
     }
+    public string ModelTag=>$"{provider}/{model}";
     public ModelPreset With(
         string? model = null,
         string? url = null,

@@ -33,8 +33,10 @@ highlights-prompt = """你是一个有趣的群刊编辑[曼瑞]，负责整理�
 6. 语气要活泼有趣，可以用表情符号
 7. 适当总结群里的热点话题
 """
-message-count = 500 #群刊包含的消息数量
-section-count = 3 #群刊包含的栏目数量
+message-count = 500 # 群刊包含的消息数量
+section-count = 3 # 群刊包含的栏目数量
+temperature = 1.2999999523162842 # 温度参数，控制生成文本的随机性
+llm = "deepseek/deepseek-reasoner" # 选择的llm模型
 ```
 
 note: 

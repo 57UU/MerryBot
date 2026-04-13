@@ -30,8 +30,17 @@ public class Highlights : Plugin
         string prompt = interop.GetVariableOrSetDefault("highlights-prompt", "你是一个专业的群刊编辑，负责编辑群刊的高亮内容。");
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
         sectionCount = Math.Max(1, interop.GetIntVariableOrSetDefault("section-count", 3));
-        float temperature = interop.GetStructVariable<float>("temperature") ?? 1.3f;
-        var model = ModelPreset.DeepSeekReasoner.With(temperature: temperature);
+        float temperature = interop.GetStructVariableOrSetDefault("temperature", 1.3f);
+        ModelPreset model=ModelPreset.DeepSeekReasoner;
+        var modelStr = interop.GetVariableOrSetDefault("llm",model.ModelTag);
+        if(!string.IsNullOrWhiteSpace(modelStr)){
+            var tmp =ModelPreset.GetModelByName(modelStr);
+            if(tmp!=null){
+                model=tmp;
+            }
+        }
+        //modify temperature
+        model=model.With(temperature: temperature);
         aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false, browser: aiMessage.browser);
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();

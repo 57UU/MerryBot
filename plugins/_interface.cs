@@ -147,6 +147,17 @@ public record PluginInterop(
         }
         return (T)Convert.ChangeType(value, typeof(T));
     }
+    internal T GetStructVariableOrSetDefault<T>(string key, T defaultValue) where T : struct
+    {
+        if (!Variables.TryGetValue(key, out var value))
+        {
+            //save it
+            SetVariable(key, defaultValue);
+            _ = SaveConfig();
+            return defaultValue;
+        }
+        return (T)Convert.ChangeType(value, typeof(T));
+    }
     internal T? GetClassVariable<T>(string key) where T : class
     {
         if (!Variables.TryGetValue(key, out var value))
