@@ -12,7 +12,7 @@ using ZhipuClient;
 
 namespace BotPlugin;
 
-[PluginTag("highlights", "Highlights", "群刊插件/highlights status/flush", priority: 1001, type: PluginType.Interactive, isIgnore: false)]
+[PluginTag("highlights", "Highlights", "群刊插件/highlights", priority: 1001, type: PluginType.Interactive, isIgnore: false)]
 public class Highlights : Plugin
 {
     private readonly AiMessage aiMessage;
@@ -82,6 +82,20 @@ public class Highlights : Plugin
             storageData.GroupMessageCount[groupId] = 0;
             _ = Interop.PluginStorage.Save(storageData);
             _ = GenerateHighlights(groupId, count);
+        }
+        else if (IsStartsWith(chain, "/highlights reset"))
+        {
+            storageData.GroupMessageCount[groupId] = 0;
+            _ = Interop.PluginStorage.Save(storageData);
+            _ = Actions.SendGroupMessage(groupId, "群聊消息计数已重置。");
+        }
+        else if (IsStartsWith(chain, "/highlights"))
+        {
+            int current = storageData.GroupMessageCount.GetValueOrDefault(groupId, 0);
+            _ = Actions.SendGroupMessage(groupId, $"群刊插件帮助（当前计数：{current}/{count}）：\n" +
+                "/highlights status - 查看当前计数\n" +
+                "/highlights flush - 立即生成群刊\n" +
+                "/highlights reset - 重置当前计数");
         }
     }
 
