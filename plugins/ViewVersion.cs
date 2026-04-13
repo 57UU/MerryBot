@@ -191,7 +191,7 @@ public partial class ViewVersion : Plugin
         //await Actions.SendGroupMessage(groupId, "reloading...\nrestarting...");
         data.ReloadByGroupId = groupId;
         await Interop.PluginStorage.Save(data);
-        Interop.Shutdown(CommonLib.ExitCode.RESTART);
+        Interop.Shutdown(CommonLib.ExitCode.RELOAD);
     }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
