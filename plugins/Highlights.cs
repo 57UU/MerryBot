@@ -29,6 +29,7 @@ public class Highlights : Plugin
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
         var model=ModelPreset.DeepSeekReasoner;
         aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false);
+        aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
         RegisterMarkdownTool();
