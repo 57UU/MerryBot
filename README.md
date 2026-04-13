@@ -21,6 +21,20 @@ ai-prompt = "你是一个助人为乐的AI助手"    # ai 提示词
 
 [variables.storage-manager]
 machine-code = 0
+web-address = "http://0.0.0.0:5000" #后台监听地址
+[variables.highlights]
+highlights-prompt = """你是一个有趣的群刊编辑[曼瑞]，负责整理群聊消息并生成有趣的群刊。
+群刊要求：
+1. 标题要吸引眼球，可以用夸张或幽默的方式
+2. 内容要有趣，可以狠狠调侃群友
+3. 可以引用群友的原话，但要标注来源
+4. 可以对群友进行有趣的评价或\"颁奖\"，比如什么\"搬屎王\"之类的抽象头衔
+5. 发现群里的有趣话题、猎奇内容、搞笑对话
+6. 语气要活泼有趣，可以用表情符号
+7. 适当总结群里的热点话题
+"""
+message-count = 500 #群刊包含的消息数量
+section-count = 3 #群刊包含的栏目数量
 ```
 
 note: 
@@ -40,7 +54,7 @@ note:
 # 主要内置插件
 
 ## AI机器人
-使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。
+使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。另外，可以通过`extra-models.toml`添加自定义Openai-compatible模型。
 
 内置了如下function call:
 - bing搜索
@@ -48,7 +62,8 @@ note:
 - 查看时间
 - 发送语音
 - 查看微博热搜
-- linux终端
+- linux bash终端
+- Markdown 功能，使用Chrome将Md渲染为图片后发送（latex,mermaid supported）
 
 *: 网络访问相关funtion call 通过seleium操纵chrome（需要提前安装）实现。
 如果是命令行环境，需要为chrome(chromium)安装字体支持
@@ -58,13 +73,29 @@ sudo apt-get update
 sudo apt-get install -y fonts-noto-color-emoji
 # 安装 Google 诺托字体
 sudo apt-get install -y fonts-noto-cjk
+# 其他生僻字 optional
+sudo apt install fonts-noto-cjk-extra fonts-hanazono
 # 刷新字体缓存
 sudo fc-cache -fv
 ```
 
 
-## 锐言锐语
-随机返回一句herui老师的谆谆教诲
+## 群刊
+当群聊消息达到一定数量（默认 500 条）时，自动调用 AI 生成一份幽默、戏剧性强的群聊周刊/日报。
+
+AI 会分析聊天记录中的梗和热点，自动提取目录并生成包含前言、正文章节和结语的完整内容，最后通过浏览器渲染为精美的 Markdown 图片发送。
+
+支持以下命令：
+- `/highlights status` - 查看当前群聊的消息计数进度
+- `/highlights flush` - 立即强制生成一份当前的消息群刊
+- `/highlights reset` - 重置当前的消息计数
+- `/highlights` - 显示插件帮助信息及当前进度
+
+可在配置文件中通过以下变量进行自定义：
+- `message-count`: 触发生成的自动阈值（默认 500）
+- `section-count`: 生成的章节数量（默认 3）
+- `highlights-prompt`: AI 生成风格的系统提示词
+
 
 ## 自动加一
 当有刷屏消息时，自动发送刷屏信息。
