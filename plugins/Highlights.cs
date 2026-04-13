@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ZhipuClient;
@@ -33,27 +34,7 @@ public class Highlights : Plugin
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
-        RegisterMarkdownTool();
     }
-    private void RegisterMarkdownTool()
-    {
-        var mdSender = new ToolDef();
-        mdSender.Function.Name = "send_markdown";
-        mdSender.Function.Description = "支持mermaid、latex公式";
-        mdSender.HideOutputOnInvoking = true;
-        mdSender.DynamicPrompt = "当你完成信息检阅，有足够丰富的思路后，请使用send_markdown工具发送群刊。";
-        mdSender.Function.Parameters.AddRequired("md", new ParameterProperty() { Type = "string", Description = "需要发送的Markdown文本" });
-        mdSender.Function.FunctionCall = async (parameters) =>
-        {
-            var markdown = parameters["md"];
-            byte[] img = await ZhipuAi.browser.TakeMarkdownScreenshot(markdown.GetString()!);
-            await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(img)]);
-            return "done";
-        };
-        mdSender.Behavior = ToolBehavior.ExitAfterUse;
-        aiClient.RegisterTool(mdSender);
-    }
-
     public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
@@ -160,41 +141,97 @@ public class Highlights : Plugin
             }
 
 
-            aiClient.AddHistory(groupId, new ZhipuMessage { Role = ZhipuAi.USER, Content = $"以下是群聊消息内容：\n{sb}" });
+            aiClient.AddHistory(groupId, new ZhipuMessage { Role = ZhipuAi.USER, Content = $"以下是需要分析的群聊消息内容：\n{sb}" });
 
-            bool useFallback = false;
-            const string instruction = "请根据以上提供的群聊消息生成一份有趣的群刊，并使用 send_markdown 工具发送。";
-            string resultText = "";
+            // 第一步：生成目录 (TOC)
+            const string tocInstruction = "请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 3-5 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";
+            string tocJson = "";
+            await foreach (var chunk in aiClient.Ask(tocInstruction, groupId, "", groupId))
+            {
+                tocJson = chunk;
+            }
 
+            // 处理可能包含 ```json ... ``` 的情况
+            if (tocJson.Contains("```json"))
+            {
+                tocJson = tocJson.Split("```json")[1].Split("```")[0];
+            }
+            else if (tocJson.Contains("```"))
+            {
+                var split = tocJson.Split("```");
+                if (split.Length >= 2)
+                {
+                    tocJson = split[1];
+                }
+            }
+            tocJson = tocJson.Trim();
+
+            List<string> toc = new();
             try
             {
-                await foreach (var chunk in aiClient.Ask(instruction, groupId, "", groupId))
-                {
-                    resultText = chunk;
-                }
-                // 如果 Ask 正常结束且未触发 ExitAfterUseException，说明 AI 可能没有按预期使用工具
-                useFallback = true;
+                toc = JsonSerializer.Deserialize<List<string>>(tocJson) ?? new List<string>();
             }
-            catch (ExitAfterUseException ex)
+            catch (Exception)
             {
-                Logger.Info($"群 {groupId} 生成群刊时使用了工具 {ex.ToolName}，流程正常结束");
-                return; // 工具已经发送了图片，直接退出
+                // Fallback: 如果 JSON 解析失败，尝试按行解析
+                toc = tocJson.Split('\n', '\r')
+                    .Select(s => s.Trim('-',' ','\r','1','2','3','4','5','.','*'))
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
             }
 
-            // 回退逻辑：如果 AI 没有调用工具，则直接发送文本结果
-            if (useFallback && !string.IsNullOrWhiteSpace(resultText))
+            if (toc.Count == 0)
             {
-                Logger.Warn($"群 {groupId} 的 AI 未使用 send_markdown 工具，改为直接发送文本内容");
-                await Actions.SendGroupMessage(groupId, resultText);
+                Logger.Warn($"群 {groupId} 目录生成失败，尝试直接生成全文...");
+                const string fallbackInstruction = "请根据以上提供的群聊消息生成一份完整的、有趣的群刊，要求使用 Markdown 语法排版。";
+                string fullMarkdown = "";
+                await foreach (var chunk in aiClient.Ask(fallbackInstruction, groupId, "", groupId))
+                {
+                    fullMarkdown = chunk;
+                }
+                if (!string.IsNullOrWhiteSpace(fullMarkdown))
+                {
+                    byte[] fallbackImg = await ZhipuAi.browser.TakeMarkdownScreenshot(fullMarkdown);
+                    await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(fallbackImg)]);
+                }
+                return;
             }
+
+            // 第二步：逐章节生成内容
+            StringBuilder finalMarkdown = new();
+            finalMarkdown.AppendLine("# 群刊高亮内容\n");
+            
+            foreach (var item in toc)
+            {
+                string sectionContent = "";
+                string sectionTitle = item.Split(':').First().Trim();
+                string sectionInstruction = $"现在请为目录项 '{item}' 编写详细的群刊章节内容。要求风格幽默、戏剧性强，充分挖掘群聊中的梗，并适当使用 Markdown 语法进行排版。只需返回该章节的内容，不要包含标题、前言或总结。";
+                
+                await foreach (var chunk in aiClient.Ask(sectionInstruction, groupId, "", groupId))
+                {
+                    sectionContent = chunk;
+                }
+                finalMarkdown.AppendLine($"## {sectionTitle}");
+                finalMarkdown.AppendLine(sectionContent);
+                finalMarkdown.AppendLine("\n---\n");
+            }
+
+            // 第三步：最终渲染发送
+            Logger.Info($"群 {groupId} 群刊内容生成完毕，正在进行最终渲染...");
+            byte[] img = await ZhipuAi.browser.TakeMarkdownScreenshot(finalMarkdown.ToString());
+            await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
         }
         catch (NotAvailableException)
         {
-            _ = Actions.SendGroupMessage(groupId,"正在生成中，不要着急哦");
+            _ = Actions.SendGroupMessage(groupId, "正在生成中，不要着急哦");
+        }
+        catch (ExitAfterUseException ex)
+        {
+            Logger.Info($"群 {groupId} 在回退或过程中使用了工具 {ex.ToolName}，流程已由工具接管并结束");
         }
         catch (Exception ex)
         {
-            Logger.Error($"生成群刊失败: {ex.Message}");
+            Logger.Error($"生成群刊失败: {ex.Message}\n{ex.StackTrace}");
             _ = Actions.SendGroupMessage(groupId, $"生成群刊失败: {ex.Message}");
         }
         finally

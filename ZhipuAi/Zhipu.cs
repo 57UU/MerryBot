@@ -147,8 +147,11 @@ public partial class ZhipuAi : IDisposable
             //if currentHistory is null, create a new one
             currentHistory = new List<ZhipuMessage>();
             history.TryAdd(id, currentHistory);
-            ZhipuMessage prompt;
+        }
 
+        if (currentHistory.Count == 0 || currentHistory[0].Role != SYSTEM)
+        {
+            ZhipuMessage prompt;
             if (UseDynamicPrompt)
             {
                 StringBuilder sb = new(SystemPrompt.Content);
@@ -171,7 +174,7 @@ public partial class ZhipuAi : IDisposable
             {
                 prompt = SystemPrompt;
             }
-            currentHistory.Add(prompt);
+            currentHistory.Insert(0, prompt);
             recorder(prompt);
         }
 
