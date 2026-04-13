@@ -86,6 +86,16 @@ public partial class ZhipuAi : IDisposable
         }
         return CollectionsMarshal.AsSpan(dialog);
     }
+    public void SetDialogHistory(long uid, IEnumerable<ZhipuMessage> messages)
+    {
+        history[uid] = messages.ToList();
+    }
+    public void AppendDialogHistory(long uid, IEnumerable<ZhipuMessage> messages)
+    {
+        var currentHistory = history.GetOrAdd(uid, _ => new List<ZhipuMessage>());
+        currentHistory.AddRange(messages);
+    }
+    public string SystemPromptContent => SystemPrompt.Content!;
     SemaphoreSlim EnsureMutexExists(long groupId)
     {
         return mutex.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
