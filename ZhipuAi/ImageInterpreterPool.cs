@@ -23,6 +23,11 @@ public class ImageInterpreterPool
         return await InterpretCore(interpreter => interpreter.Interpret(image, type));
     }
 
+    public async Task<string> Interpret(byte[] image, string contentType, ImageInterpreterType type = ImageInterpreterType.Normal)
+    {
+        return await InterpretCore(interpreter => interpreter.Interpret(image, contentType, type));
+    }
+
     async Task<string> InterpretCore(Func<ImageInterpreter, Task<string>> execute)
     {
         foreach (var interpreter in _imageInterpreters)

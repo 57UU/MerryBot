@@ -31,7 +31,12 @@ public class ImageInterpreter
 
     public async Task<string> Interpret(byte[] image, ImageInterpreterType type = ImageInterpreterType.Normal)
     {
-        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), "image/jpeg"), GetPrompt(type), type);
+        return await Interpret(image, "image/jpeg", type);
+    }
+
+    public async Task<string> Interpret(byte[] image, string contentType, ImageInterpreterType type = ImageInterpreterType.Normal)
+    {
+        return await InterpretInternal(ChatMessageContentPart.CreateImagePart(new BinaryData(image), contentType), GetPrompt(type), type);
     }
 
     string GetPrompt(ImageInterpreterType type)

@@ -175,6 +175,7 @@ public partial class AiMessage
             await limit.ImageInterpreterSemaphore.WaitAsync();
             var imageUrl = imageData.Url;
             byte[]? imageBytes = null;
+            var imageType = GetImageContentType(imageData.File);
             if (!imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
                 if (long.TryParse(imageUrl, out var imageId))
@@ -189,7 +190,7 @@ public partial class AiMessage
             try
             {
                 var description = imageBytes != null
-                    ? await ImageInterpreterPool!.Interpret(imageBytes, limit.ImageInterpreterType)
+                    ? await ImageInterpreterPool!.Interpret(imageBytes, imageType, limit.ImageInterpreterType)
                     : await ImageInterpreterPool!.Interpret(imageUrl, limit.ImageInterpreterType);
                 if (!limit.TryConsumeImageInterpreter(depth))
                 {
@@ -212,9 +213,9 @@ public partial class AiMessage
         }
     }
 
-    static string GetImageContentType(string url)
+    static string GetImageContentType(string fileName)
     {
-        var extension = Path.GetExtension(url).ToLowerInvariant();
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
         return extension switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",
