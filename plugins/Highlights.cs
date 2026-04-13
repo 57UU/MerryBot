@@ -18,6 +18,7 @@ public class Highlights : Plugin
     private readonly AiMessage aiMessage;
     private ZhipuAi aiClient;
     private int count;
+    private int sectionCount;
     private HighlightsData storageData = new();
     private StorageManagerPlugin storageManager;
     private readonly ConcurrentDictionary<long, SemaphoreSlim> groupLocks = new();
@@ -28,6 +29,7 @@ public class Highlights : Plugin
         this.storageManager = storageManager;
         string prompt = interop.GetVariableOrSetDefault("highlights-prompt", "你是一个专业的群刊编辑，负责编辑群刊的高亮内容。");
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
+        sectionCount = Math.Max(1, interop.GetIntVariableOrSetDefault("section-count", 3));
         float temperature = interop.GetStructVariable<float>("temperature") ?? 1.3f;
         var model = ModelPreset.DeepSeekReasoner.With(temperature: temperature);
         aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false, browser: aiMessage.browser);
@@ -165,7 +167,7 @@ public class Highlights : Plugin
             aiClient.AddHistory(groupId, new ZhipuMessage { Role = ZhipuAi.USER, Content = $"以下是需要分析的群聊消息内容：\n{sb}" });
 
             // 第一步：生成目录 (TOC)
-            const string tocInstruction = "请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 3-5 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";
+            string tocInstruction = $"请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 {sectionCount} 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";
             string tocJson = "";
             await foreach (var chunk in aiClient.Ask(tocInstruction, groupId, "", groupId))
             {
@@ -216,6 +218,10 @@ public class Highlights : Plugin
                     await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(fallbackImg)]);
                 }
                 return;
+            }
+            if(toc.Count>sectionCount)
+            {
+                toc=toc[..sectionCount];
             }
 
             // 获取 TOC 生成后的历史作为基础

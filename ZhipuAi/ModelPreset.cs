@@ -29,7 +29,8 @@ public class ModelPreset
         ImmutableDictionary<string, object>? extraBody = null,
         bool enableSearch = true,
         bool supportImageInput = false,
-        float? temperature = null
+        float? temperature = null,
+        bool? storeInDict = true
         )
     {
         this.model = model;
@@ -39,7 +40,10 @@ public class ModelPreset
         this.enableSearch = enableSearch;
         this.supportImageInput = supportImageInput;
         this.temperature = temperature;
-        modelsByName[model] = this;
+        if (storeInDict == true)
+        {
+            modelsByName[model] = this;
+        }
     }
     public ModelPreset With(
         string? model = null,
@@ -48,7 +52,8 @@ public class ModelPreset
         ImmutableDictionary<string, object>? extraBody = null,
         bool? enableSearch = null,
         bool? supportImageInput = null,
-        float? temperature = null
+        float? temperature = null,
+        bool? storeInDict = true
         )
     {
         return new(
@@ -58,7 +63,29 @@ public class ModelPreset
              extraBody ?? this.extraBody,
              enableSearch ?? this.enableSearch,
              supportImageInput ?? this.supportImageInput,
-             temperature ?? this.temperature
+             temperature ?? this.temperature,
+             storeInDict ?? false
+             );
+
+    }
+    public ModelPreset SavedWith(
+        string? model = null,
+        string? url = null,
+        string? provider = null,
+        ImmutableDictionary<string, object>? extraBody = null,
+        bool? enableSearch = null,
+        bool? supportImageInput = null,
+        float? temperature = null
+        )
+    {
+        return With(model,
+             url,
+             provider,
+             extraBody,
+             enableSearch,
+             supportImageInput,
+             temperature,
+             storeInDict: true
              );
 
     }
@@ -104,25 +131,25 @@ public class ModelPreset
             provider: "zhipu",
             extraBody: Empty.Add("thinking", Empty.Add("type", "enabled"))
         );
-    public static readonly ModelPreset GLM_4_6V_Flash_Free = Glm_4_5_Free.With("GLM-4.6V-Flash", supportImageInput: true);
-    public static readonly ModelPreset Glm_4V_Flash_Free = GLM_4_6V_Flash_Free.With("GLM-4V-Flash");
-    public static readonly ModelPreset Glm_4_1V_Flash_Free = Glm_4V_Flash_Free.With("GLM-4.1V-Thinking-Flash");
-    public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.With("GLM-4-Flash-250414");
-    public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.With("GLM-4.7", extraBody: Empty);
-    public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.With("glm-4.7-flash");
+    public static readonly ModelPreset GLM_4_6V_Flash_Free = Glm_4_5_Free.SavedWith("GLM-4.6V-Flash", supportImageInput: true);
+    public static readonly ModelPreset Glm_4V_Flash_Free = GLM_4_6V_Flash_Free.SavedWith("GLM-4V-Flash");
+    public static readonly ModelPreset Glm_4_1V_Flash_Free = Glm_4V_Flash_Free.SavedWith("GLM-4.1V-Thinking-Flash");
+    public static readonly ModelPreset Glm_4_Free = Glm_4_5_Free.SavedWith("GLM-4-Flash-250414");
+    public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.SavedWith("GLM-4.7", extraBody: Empty);
+    public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.SavedWith("glm-4.7-flash");
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
             "deepseek-chat",
             "https://api.deepseek.com",
             "deepseek"
         );
-    public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.With(model:"deepseek-reasoner");
+    public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.SavedWith(model: "deepseek-reasoner");
     public static readonly ModelPreset Qwen3Max = new(
             "qwen3-max",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "ali",
             Empty.Add("enable_search", true)
         );
-    public static readonly ModelPreset Qwen3Plus = Qwen3Max.With("qwen-plus-latest");
+    public static readonly ModelPreset Qwen3Plus = Qwen3Max.SavedWith("qwen-plus-latest");
     public static readonly ModelPreset XiaomiMimoV2 = new(
         "mimo-v2-flash",
         "https://api.xiaomimimo.com/v1",

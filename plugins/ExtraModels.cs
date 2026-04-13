@@ -59,7 +59,7 @@ public class ExtraModels : Plugin
                 {
                     if (item.IsEnabled)
                     {
-                        new ModelPreset(
+                        _ = new ModelPreset(
                             model: item.Model,
                             url: item.Url,
                             provider: item.Provider,
