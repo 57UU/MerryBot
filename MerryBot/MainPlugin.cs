@@ -7,10 +7,8 @@ namespace MerryBot;
 [PluginTag("main-plugin", "MainPlugin", "特权插件，用于管理bot", priority: 1919810, type: PluginType.Admin)]
 internal class MainPlugin : Plugin
 {
-    private Logic logic;
-    public MainPlugin(PluginInterop interop, Logic logic) : base(interop)
+    public MainPlugin(PluginInterop interop, Logic _) : base(interop)
     {
-        this.logic = logic;
     }
     bool VerifyAuthority(long groupId, ReceivedGroupMessage data)
     {
@@ -65,15 +63,6 @@ internal class MainPlugin : Plugin
                 {
                     await Actions.ReplyGroupMessage(groupId, data.message_id, $"inactive on {groupId}");
                 }
-            });
-        }
-        else if (IsStartsWith(chain, "/reload"))
-        {
-            Logger.Info($"execute reload");
-            _ = Actions.ReplyGroupMessage(groupId, data.message_id, "Reloading...");
-            Task.Run(() =>
-            {
-                logic.Reload();
             });
         }
     }

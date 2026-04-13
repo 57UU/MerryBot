@@ -1,10 +1,10 @@
-﻿using NapcatClient;
+using NapcatClient;
 using System.Diagnostics;
 using System.Text;
 
 namespace BotPlugin;
 
-[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件", priority: 114514)]
+[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件;/reload重启程序", priority: 114514)]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;
@@ -27,11 +27,22 @@ public partial class ViewVersion : Plugin
     {
         data = await Interop.PluginStorage.Load<Data>() ?? new Data();
         Logger.Debug("data loaded");
-        //if  contains update flag, then reply update info
+        bool changed = false;
+        //if contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
         {
             await Actions.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
             data.UpdateByGroupId = -1;
+            changed = true;
+        }
+        if (data.ReloadByGroupId > 0)
+        {
+            await Actions.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
+            data.ReloadByGroupId = -1;
+            changed = true;
+        }
+        if (changed)
+        {
             await Interop.PluginStorage.Save(data);
         }
 
@@ -175,6 +186,13 @@ public partial class ViewVersion : Plugin
         Interop.Shutdown(CommonLib.ExitCode.RESTART);
 
     }
+    private async Task Reload(long groupId)
+    {
+        //await Actions.SendGroupMessage(groupId, "reloading...\nrestarting...");
+        data.ReloadByGroupId = groupId;
+        await Interop.PluginStorage.Save(data);
+        Interop.Shutdown(CommonLib.ExitCode.RESTART);
+    }
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         if (IsStartsWith(chain, "/version"))
@@ -192,10 +210,22 @@ public partial class ViewVersion : Plugin
                 _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
+        else if (IsStartsWith(chain, "/reload"))
+        {
+            if (authorized == data.sender.user_id)
+            {
+                _ = Reload(groupId);
+            }
+            else
+            {
+                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+            }
+        }
     }
     class Data
     {
         public long UpdateByGroupId = -1;
+        public long ReloadByGroupId = -1;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]")]

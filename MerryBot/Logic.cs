@@ -256,9 +256,4 @@ internal partial class Logic
         NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);
     }
-    public void Reload()
-    {
-        logger.Info("Reloading application...");
-        Shutdown(ExitCode.RELOAD);
-    }
 }
