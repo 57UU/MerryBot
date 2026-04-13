@@ -42,7 +42,7 @@ public class ModelPreset
         this.temperature = temperature;
         if (storeInDict == true)
         {
-            modelsByName[model] = this;
+            modelsByName[$"{provider}/{model}"] = this;
         }
     }
     public ModelPreset With(
@@ -89,6 +89,11 @@ public class ModelPreset
              );
 
     }
+    /// <summary>
+    /// 根据模型名称获取模型预设
+    /// </summary>
+    /// <param name="name">模型名称，格式为 provider/model</param>
+    /// <returns>模型预设</returns>
     public static ModelPreset? GetModelByName(string? name)
     {
         if (name == null)
@@ -106,7 +111,7 @@ public class ModelPreset
         Console.WriteLine("Available Models");
         foreach (var item in modelsByName)
         {
-            Console.Write($"{item.Key} By {item.Value.provider};");
+            Console.Write($"{item.Value.model} By {item.Value.provider};");
         }
         Console.WriteLine();
     }
@@ -115,7 +120,7 @@ public class ModelPreset
         StringBuilder sb = new();
         foreach (var item in modelsByName)
         {
-            sb.Append($"{item.Key} By {item.Value.provider};");
+            sb.Append($"{item.Value.model} By {item.Value.provider};");
         }
         sb.AppendLine();
         return sb.ToString();
