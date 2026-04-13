@@ -55,6 +55,14 @@ public class Actions
     {
         return _SendAction(act.ToAct(), cacheKey, expiration);
     }
+    private static string ConstraintLength(string s, int lengthConstraint=1000, string prompt = "...")
+    {
+        if (s.Length > lengthConstraint)
+        {
+            s = string.Concat(s.AsSpan(0, lengthConstraint), prompt);
+        }
+        return s;
+    }
     public async Task<ResponseRootObject> _SendAction(Act act, string? cacheKey = null, TimeSpan? expiration = null)
     {
         if (cacheKey != null && requestCaching.TryGetCache(cacheKey, out ResponseRootObject? cacheRes))
@@ -75,7 +83,7 @@ public class Actions
         try
         {
             var json = BotUtils.Serialize(act);
-            Logger.Info($"sending: {json}");
+            Logger.Debug($"sending: {ConstraintLength(json)}]");
 
             await Task.Run(() => WebSocket.Send(json));
 
@@ -99,7 +107,7 @@ public class Actions
     }
     internal void AddResponse(string echo, ResponseRootObject response)
     {
-        Logger.Info($"return: {echo}");
+        Logger.Trace($"return: {echo}");
 
         if (_pendingResponses.TryRemove(echo, out var tcs))
         {
