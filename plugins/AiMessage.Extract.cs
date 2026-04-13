@@ -172,6 +172,7 @@ public partial class AiMessage
     {
         if (ImageInterpreterPool != null && imageData.Url != null && limit.CanUseImageInterpreter(depth))
         {
+            await limit.ImageInterpreterSemaphore.WaitAsync();
             var imageUrl = imageData.Url;
             byte[]? imageBytes = null;
             if (!imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
@@ -199,6 +200,10 @@ public partial class AiMessage
             catch (Exception)
             {
                 return $"<image {imageData.Summary}/>";
+            }
+            finally
+            {
+                limit.ImageInterpreterSemaphore.Release();
             }
         }
         else
@@ -236,6 +241,7 @@ public partial class AiMessage
 internal class ResourceLimit
 {
     readonly object locker = new();
+    public SemaphoreSlim ImageInterpreterSemaphore { get; } = new(5);
     int imageLimit = 3;
     public int ImageLimit
     {
