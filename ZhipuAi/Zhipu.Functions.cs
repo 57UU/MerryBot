@@ -16,6 +16,7 @@ public partial class ZhipuAi
     }
     public void RegisterBrowser()
     {
+        if (browser == null) return;
         var browserDef = new ToolDef();
         browserDef.Function.Name = "browse";
         browserDef.Function.Description = "浏览网页";
@@ -34,6 +35,7 @@ public partial class ZhipuAi
     }
     public void RegisterBingSearch()
     {
+        if (browser == null) return;
         var bingSearch = new ToolDef();
         bingSearch.Function.Name = "search";
         bingSearch.Function.Description = "使用Bing搜索";
@@ -55,6 +57,7 @@ public partial class ZhipuAi
     }
     public void RegisterWeiboHot()
     {
+        if (browser == null) return;
         var weiboHot = new ToolDef();
         weiboHot.Function.Name = "view_weibo_hot";
         weiboHot.Function.Description = "查看微博热搜";

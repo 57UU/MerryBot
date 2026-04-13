@@ -30,7 +30,7 @@ public class Highlights : Plugin
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
         float temperature = interop.GetStructVariable<float>("temperature") ?? 1.3f;
         var model = ModelPreset.DeepSeekReasoner.With(temperature: temperature);
-        aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false);
+        aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false, browser: aiMessage.browser);
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
@@ -89,7 +89,8 @@ public class Highlights : Plugin
             aiMessage.GetToken(modelPreset)!,
             systemPrompt,
             modelPreset,
-            useBuildinTools: false
+            useBuildinTools: false,
+            browser: aiMessage.browser
         );
         sectionAiClient.Logger = Logger;
         sectionAiClient.RegisterBingSearch();
@@ -211,7 +212,7 @@ public class Highlights : Plugin
                 }
                 if (!string.IsNullOrWhiteSpace(fullMarkdown))
                 {
-                    byte[] fallbackImg = await ZhipuAi.browser.TakeMarkdownScreenshot(fullMarkdown);
+                    byte[] fallbackImg = await aiMessage.browser.TakeMarkdownScreenshot(fullMarkdown);
                     await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(fallbackImg)]);
                 }
                 return;
@@ -315,7 +316,7 @@ public class Highlights : Plugin
 
             // 第三步：最终渲染发送
             Logger.Info($"群 {groupId} 群刊内容生成完毕，正在进行最终渲染...");
-            byte[] img = await ZhipuAi.browser.TakeMarkdownScreenshot(finalMarkdown.ToString());
+            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(finalMarkdown.ToString());
             await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
         }
         catch (NotAvailableException)

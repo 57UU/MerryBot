@@ -1,3 +1,4 @@
+using BrowserService;
 using NapcatClient;
 using NapcatClient.MessageType;
 using ZhipuClient;
@@ -20,6 +21,12 @@ public partial class AiMessage : Plugin
         ModelPreset.Glm_4V_Flash_Free
         ];
     internal ModelPreset defaultModel;
+
+    /// <summary>
+    /// Browser 实例，由 AiMessage 插件管理生命周期，可注入到其他需要的组件
+    /// </summary>
+    public readonly Browser browser;
+
     internal string? GetToken(ModelPreset modelPreset){
         var token_key = modelPreset.ApiTokenDictKey;
         var token = Interop.GetClassVariable<string>(token_key);
@@ -29,6 +36,9 @@ public partial class AiMessage : Plugin
     {
         this.storageManager = storageManager;
         this.aiMessageStorage = storageManager.AiMessageStorage;
+
+        // 初始化 Browser 实例
+        browser = new Browser(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
         //display available model
         //ModelPreset.DisplayAllModels();
         var model = ModelPreset.GetModelByName(
@@ -72,7 +82,7 @@ public partial class AiMessage : Plugin
             _ = aiMessageStorage.RecordAiMessageAsync(groupId, messageType, content);
         };
 
-        aiClient = new ZhipuAi(token, prompt, model, historyRecorder);
+        aiClient = new ZhipuAi(token, prompt, model, historyRecorder, browser: browser);
         defaultModel = model;
         aiClient.Logger = Logger;
         //tools
@@ -234,6 +244,7 @@ public partial class AiMessage : Plugin
     public override void Dispose()
     {
         aiClient.Dispose();
+        browser.Dispose();
 
         // AiMessageStorage 由 StorageManagerPlugin 负责释放
 

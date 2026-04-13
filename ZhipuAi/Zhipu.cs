@@ -23,11 +23,16 @@ public partial class ZhipuAi : IDisposable
     private Dictionary<string, ToolDef> functionMapper = new();
 
     readonly string prompt;
-    public static readonly Browser browser = new(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true)
+    /// <summary>
+    /// Browser 实例，由外部（如 AiMessage 插件）管理生命周期，通过构造函数注入
+    /// </summary>
+    public readonly Browser? browser;
+
+    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true, Browser? browser = null)
     {
         this.token = token;
         this.prompt = prompt;
+        this.browser = browser;
         this.HistoryRecorder = historyRecorder;
         SystemPrompt = new ZhipuMessage()
         {
@@ -57,13 +62,18 @@ public partial class ZhipuAi : IDisposable
     {
 
         RegisterGetTime();
-        RegisterBrowser();
 
-        //RegisterWeiboHot();
-
-        if (ModelPreset.enableSearch)
+        // Browser 相关工具只在 browser 实例注入时注册
+        if (browser != null)
         {
-            RegisterBingSearch();
+            RegisterBrowser();
+
+            //RegisterWeiboHot();
+
+            if (ModelPreset.enableSearch)
+            {
+                RegisterBingSearch();
+            }
         }
     }
     /// <summary>
@@ -414,7 +424,6 @@ public partial class ZhipuAi : IDisposable
 
     public void Dispose()
     {
-        browser.Dispose();
         client.Dispose();
         GC.SuppressFinalize(this);
     }
