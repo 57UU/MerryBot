@@ -28,7 +28,7 @@ highlights-prompt = """你是一个有趣的群刊编辑[曼瑞]，负责整理�
 1. 标题要吸引眼球，可以用夸张或幽默的方式
 2. 内容要有趣，可以狠狠调侃群友
 3. 可以引用群友的原话，但要标注来源
-4. 可以对群友进行有趣的评价或\"颁奖\"，比如什么\"搬屎王\"之类的抽象头衔
+4. 可以对群友进行有趣的评价或"颁奖"，比如什么"搬屎王"之类的抽象头衔
 5. 发现群里的有趣话题、猎奇内容、搞笑对话
 6. 语气要活泼有趣，可以用表情符号
 7. 适当总结群里的热点话题
@@ -65,8 +65,9 @@ note:
 - linux bash终端
 - Markdown 功能，使用Chrome将Md渲染为图片后发送（latex,mermaid supported）
 
-*: 网络访问相关funtion call 通过seleium操纵chrome（需要提前安装）实现。
-如果是命令行环境，需要为chrome(chromium)安装字体支持
+*: 网络访问相关funtion call 通过seleium操纵chrome(chromium)（需要提前安装）实现。如果chrome不存在于系统环境中，则需要在环境变量`CHROME_BIN`中指定chrome的路径。
+
+如果是命令行环境，需要为chrome安装字体支持
 ```bash
 sudo apt-get update
 # 安装彩色 Emoji 字体
