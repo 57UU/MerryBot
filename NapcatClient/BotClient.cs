@@ -1,15 +1,13 @@
 using CommonLib;
 using NapcatClient.Action;
 using NapcatClient.EventType;
-using System.Net.WebSockets;
 using System.Text.Json;
-using Websocket.Client;
 namespace NapcatClient;
 
 
 public class BotClient
 {
-    public WebsocketClient WebSocket { get; set; }
+    public WebSocketService WebSocketService { get; }
     public ISimpleLogger Logger { internal get; set; }
     public Actions Actions { get; private set; }
     public event GroupMessageCallback? OnGroupMessageReceived;
@@ -29,111 +27,39 @@ public class BotClient
     public event EssenceEventCallback? OnEssenceEventReceived;
     public event GroupCardEventCallback? OnGroupCardEventReceived;
 
-    // 消息接收监控相关字段
-    private DateTime _lastMessageTime = DateTime.Now;
-    private readonly Timer _messageMonitorTimer;
-    private const int MessageTimeoutSeconds = 15; // 消息超时15秒
-
-    private readonly Uri _uri;
-    public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
-    {
-        _uri = new($"{address}?access_token={token}");
-        this.Logger = logger;
-        PathPrefix = pathPrefix;
-
-        WebSocket = new(_uri);
-        SetupWebSocketClient(WebSocket);
-
-        // 初始化消息监控定时器
-        _messageMonitorTimer = new Timer((o) => _ = CheckMessageActivity(), null, TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
-
-        WebSocket.Start().Wait();
-        this.Actions = new Actions(Logger, this);
-        _lastMessageTime = DateTime.Now; // 初始化连接状态
-        Initialize().Wait();
-    }
-
-    private void SetupWebSocketClient(WebsocketClient webSocket)
-    {
-        webSocket.ErrorReconnectTimeout = TimeSpan.FromSeconds(5);
-        webSocket.LostReconnectTimeout = TimeSpan.FromSeconds(30);
-        webSocket.ReconnectTimeout = TimeSpan.FromSeconds(10);
-        webSocket.ReconnectionHappened.Subscribe(WebSocket_Reconnect);
-        webSocket.DisconnectionHappened.Subscribe(d =>
-        {
-            _ = WebSocket_Disconnected(d)
-            .ContinueWith(result =>
-            {
-                if (result.Exception != null)
-                {
-                    Logger.Error($"Error:{result.Exception.Message}");
-                }
-            });
-        });
-        webSocket.MessageReceived.Subscribe(msg => WebSocket_OnMessage(msg.Text));
-    }
-
-    // 消息活动检测方法
-    private async Task CheckMessageActivity()
-    {
-        var timeSinceLastMessage = DateTime.Now - _lastMessageTime;
-        if (timeSinceLastMessage.TotalSeconds > MessageTimeoutSeconds)
-        {
-            Logger.Warn($"超过{MessageTimeoutSeconds}秒未收到任何消息，尝试重新连接");
-            try
-            {
-                // 彻底关闭连接
-                await WebSocket.Stop(WebSocketCloseStatus.NormalClosure, "no message receivied");
-                WebSocket.Dispose();
-
-                // 重新创建 WebSocket 实例
-                WebSocket = new WebsocketClient(_uri);
-                SetupWebSocketClient(WebSocket);
-
-                // 重新启动连接
-                await WebSocket.Start();
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"手动重连失败: {ex.Message}");
-            }
-        }
-    }
-
     public long SelfId { get; private set; } = -1;
     public string Nickname { get; private set; } = "unknown";
     public string PathPrefix { get; private set; } = "data";
+    public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
+    {
+        this.Logger = logger;
+        PathPrefix = pathPrefix;
+
+        WebSocketService = new WebSocketService(address, token, logger);
+        WebSocketService.OnMessageReceived += WebSocket_OnMessage;
+        WebSocketService.OnDisconnected += _ => WebSocketService.ResetMessageTime();
+        WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
+
+        WebSocketService.Start();
+        this.Actions = new Actions(Logger, WebSocketService, () => SelfId);
+        Initialize().Wait();
+    }
+
     public async Task Initialize()
     {
         await Task.Delay(100);
-        //get account info
         var result = await Actions.GetAccountInfo();
         SelfId = result.userId;
         Nickname = result.nickname;
     }
+
     public void Close()
     {
-        _messageMonitorTimer?.Dispose();
-        WebSocket.Dispose();
-    }
-    private async Task WebSocket_Disconnected(DisconnectionInfo d)
-    {
-        Logger.Warn($"websocket disconnect:{d.Type},{d.CloseStatus},{d.CloseStatusDescription}");
-        // 重置消息时间，避免重连后立即触发消息超时
-        _lastMessageTime = DateTime.Now;
-    }
-    private void WebSocket_Reconnect(ReconnectionInfo reconnectionInfo)
-    {
-        Logger.Warn($"websocket reconnect:{reconnectionInfo.Type}");
-        // 重连后重置消息时间
-        _lastMessageTime = DateTime.Now;
+        WebSocketService.Dispose();
     }
 
     private void WebSocket_OnMessage(string? text)
     {
-        // 更新最后消息时间 - 任何消息都表示连接活跃
-        _lastMessageTime = DateTime.Now;
-
         if (text == null)
         {
             Logger.Debug("empty message received");
@@ -143,7 +69,6 @@ public class BotClient
         var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
         if (message.TryGetValue("echo", out JsonElement echo))
         {
-            //return message
             Actions.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
         }
         if (message.TryGetValue("message_type", out JsonElement value))
@@ -245,13 +170,4 @@ public class BotClient
             Logger.Error($"Error handling notice event: {ex.Message}");
         }
     }
-
-    private void WebSocket_OnOpen(object? sender, EventArgs e)
-    {
-        Logger.Info("websocket open");
-        // 连接打开时重置消息时间
-        _lastMessageTime = DateTime.Now;
-    }
 }
-
-

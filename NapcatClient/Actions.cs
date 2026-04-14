@@ -8,19 +8,18 @@ namespace NapcatClient.Action;
 
 public class Actions
 {
-    WebsocketClient WebSocket
-    {
-        get => bot.WebSocket;
-    }
+    WebsocketClient WebSocket => webSocketService.WebSocket;
     private readonly ISimpleLogger Logger;
-    private readonly BotClient bot;
+    private readonly WebSocketService webSocketService;
+    private readonly Func<long> getSelfId;
     private static readonly HttpClient _httpClient = new HttpClient();
     private readonly RequestCaching requestCaching = new(TimeSpan.FromMinutes(1));
 
-    public Actions(ISimpleLogger logger, BotClient bot)
+    public Actions(ISimpleLogger logger, WebSocketService webSocketService, Func<long> getSelfId)
     {
         Logger = logger;
-        this.bot = bot;
+        this.webSocketService = webSocketService;
+        this.getSelfId = getSelfId;
     }
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
@@ -215,7 +214,7 @@ public class Actions
     /// <returns></returns>
     public Task<ResponseRootObject> SendLongMessage(string groupId, string text, string nickname)
     {
-        var fowardChain = new GroupForwardChain.Builder(bot.SelfId.ToString(), nickname, groupId);
+        var fowardChain = new GroupForwardChain.Builder(getSelfId().ToString(), nickname, groupId);
 
         int i = 0;
         while (i < text.Length)
