@@ -175,6 +175,11 @@ public class Highlights : Plugin
                     var extracted = await aiMessage.ExtractMessage(message.Messages, groupId, recursive:false, resourceLimit:limit);
                     return new { time = message.Time, index, line = $"{timeStr}[user:{nickname}]{extracted}\n" };
                 }
+                catch (Exception ex)
+                {
+                    Logger.Error($"提取消息 {message.MessageId} 失败: {ex.Message}");
+                    return new { time = message.Time, index, line = "" };
+                }
                 finally
                 {
                     extractSemaphore.Release();
@@ -183,6 +188,7 @@ public class Highlights : Plugin
             var extractedLines = await Task.WhenAll(extractTasks);
             foreach (var item in extractedLines.OrderBy(i => i.time).ThenBy(i => i.index))
             {
+                if (string.IsNullOrEmpty(item.line)) continue;
                 sb.Append(item.line);
             }
 

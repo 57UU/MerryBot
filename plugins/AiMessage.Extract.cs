@@ -16,6 +16,7 @@ public partial class AiMessage
         StringBuilder sb = new();
         foreach (var item in items)
         {
+            if (item == null) continue;
             var result = await ProcessMessageItem(item, groupId, recursive, depth, limit);
             if (!string.IsNullOrEmpty(result))
             {
@@ -70,12 +71,16 @@ public partial class AiMessage
 
     string AppendTextData(TextData textData)
     {
-        return textData.Text.Trim();
+        return textData.Text?.Trim() ?? "";
     }
 
     async Task<string> AppendAtData(AtData atData, long groupId)
     {
-        string qq = atData.Qq;
+        string? qq = atData.Qq;
+        if (string.IsNullOrEmpty(qq))
+        {
+            return " @unknown ";
+        }
         var detail = await Actions.GetGroupMemberData(groupId.ToString(), qq);
         if (detail != null)
         {
@@ -90,7 +95,11 @@ public partial class AiMessage
     async Task<string> AppendReplyData(ReplyData replyData, long groupId, int depth, ResourceLimit resourceLimit)
     {
         string? referenceMessage = null;
-        string referMessageId = replyData.Id;
+        string? referMessageId = replyData.Id;
+        if (string.IsNullOrEmpty(referMessageId))
+        {
+            return "";
+        }
         var referMessage = await Actions.GetMessageById(referMessageId);
         if (referMessage != null)
         {
@@ -147,7 +156,11 @@ public partial class AiMessage
 
     async Task<string> AppendForwardData(ForwardData forwardData, long groupId, int depth)
     {
-        string msgId = forwardData.Id;
+        string? msgId = forwardData.Id;
+        if (string.IsNullOrEmpty(msgId))
+        {
+            return "<转发消息/>";
+        }
         var referMessage = await Actions.GetForwardMessageById(msgId);
         if (referMessage != null)
         {
@@ -155,8 +168,10 @@ public partial class AiMessage
             forwardLines.Add("<转发消息>");
             foreach (var msg in referMessage.Messages)
             {
+                if (msg == null) continue;
                 var extractedMessage = await ExtractMessage(msg.Message, groupId, depth < 3, depth + 1);
-                forwardLines.Add($"{msg.SenderInfo.nickname}:{extractedMessage}");
+                var nickname = msg.SenderInfo?.nickname ?? "unknown";
+                forwardLines.Add($"{nickname}:{extractedMessage}");
             }
             forwardLines.Add("</转发消息>");
             var forwardString = string.Join(Environment.NewLine, forwardLines);
@@ -181,7 +196,7 @@ public partial class AiMessage
                 if (long.TryParse(imageUrl, out var imageId))
                 {
                     var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
-                    if (imageEntry != null)
+                    if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Hash))
                     {
                         imageBytes = await storageManager.GroupHistoryRecorder.GetImageDataAsync(imageEntry.Hash);
                     }
@@ -213,8 +228,12 @@ public partial class AiMessage
         }
     }
 
-    static string GetImageContentType(string fileName)
+    static string GetImageContentType(string? fileName)
     {
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return "image/jpeg";
+        }
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         return extension switch
         {
