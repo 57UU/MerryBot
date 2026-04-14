@@ -1,4 +1,5 @@
 using BrowserService;
+using CommonLib;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
@@ -14,6 +15,18 @@ namespace ZhipuClient;
 public partial class ZhipuAi : IDisposable
 {
     string token;
+    private const int _defaultMaxConcurrency = 5;
+    private static SemaphoreSlim _semaphore = new(_defaultMaxConcurrency, _defaultMaxConcurrency);
+    private static int _maxConcurrency = _defaultMaxConcurrency;
+    public static int MaxConcurrency
+    {
+        get => _maxConcurrency;
+        set
+        {
+            _maxConcurrency = value;
+            _semaphore = new SemaphoreSlim(value, value);
+        }
+    }
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
     public ModelPreset ModelPreset { get; private set; } = null;
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
@@ -149,162 +162,162 @@ public partial class ZhipuAi : IDisposable
         try
         {
             bool done = false;
-        //if last message is too old, start a new conversation
-        if (history.TryGetValue(id, out List<ZhipuMessage>? value))
-        {
-            var lastMessage = value.LastOrDefault();
-            if (lastMessage != null)
+            //if last message is too old, start a new conversation
+            if (history.TryGetValue(id, out List<ZhipuMessage>? value))
             {
-                if (DateTime.Now - lastMessage.time > AutoNewSpan)
+                var lastMessage = value.LastOrDefault();
+                if (lastMessage != null)
                 {
-                    history.TryRemove(id, out _);
-                }
-            }
-        }
-
-        if (!history.TryGetValue(id, out List<ZhipuMessage>? currentHistory))
-        {
-            //if currentHistory is null, create a new one
-            currentHistory = new List<ZhipuMessage>();
-            history.TryAdd(id, currentHistory);
-        }
-
-        if (currentHistory.Count == 0 || currentHistory[0].Role != SYSTEM)
-        {
-            ZhipuMessage prompt;
-            if (UseDynamicPrompt)
-            {
-                StringBuilder sb = new(SystemPrompt.Content);
-                sb.AppendLine($"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}");
-                var usableTools = await GetUsableToolsByTag(specialTag);
-                foreach (var tool in usableTools)
-                {
-                    if (!string.IsNullOrWhiteSpace(tool.DynamicPrompt))
+                    if (DateTime.Now - lastMessage.time > AutoNewSpan)
                     {
-                        sb.AppendLine(tool.DynamicPrompt);
+                        history.TryRemove(id, out _);
                     }
                 }
-                prompt = new()
-                {
-                    Role = SystemPrompt.Role,
-                    Content = sb.ToString(),
-                };
             }
-            else
-            {
-                prompt = SystemPrompt;
-            }
-            currentHistory.Insert(0, prompt);
-            recorder(prompt);
-        }
 
-        var userQuery = new ZhipuMessage()
-        {
-            Role = USER,
-            Content = $"{sender}{content}"
-        };
-        currentHistory.Add(userQuery);
-        recorder(userQuery);
-        //if currentHistory is too long, remove the first message
-        int excessCount = currentHistory.Count - SlidingWindowContext;
-        if (excessCount > 0)
-        {
-            // 保留第一个元素（系统提示），移除从索引1开始的excessCount个元素
-            currentHistory.RemoveRange(1, excessCount);
-        }
-        while (!done)
-        {
-            string response;
-            bool hideOutput = false;
-            try
+            if (!history.TryGetValue(id, out List<ZhipuMessage>? currentHistory))
             {
-                var aiResponse = await Request(currentHistory, specialTag);
-                var msg = aiResponse.Choices[0].Message;
-                if (msg.Content.StartsWith("<think>"))
+                //if currentHistory is null, create a new one
+                currentHistory = new List<ZhipuMessage>();
+                history.TryAdd(id, currentHistory);
+            }
+
+            if (currentHistory.Count == 0 || currentHistory[0].Role != SYSTEM)
+            {
+                ZhipuMessage prompt;
+                if (UseDynamicPrompt)
                 {
-                    var cotEndIndex = msg.Content.IndexOf("</think>");
-                    if (cotEndIndex >= 0)
+                    StringBuilder sb = new(SystemPrompt.Content);
+                    sb.AppendLine($"\n这段对话的开始时间是{DateTime.Now.ToString("yyyy-MM-dd HH:mm")}");
+                    var usableTools = await GetUsableToolsByTag(specialTag);
+                    foreach (var tool in usableTools)
                     {
-                        msg.Content = msg.Content.Substring(cotEndIndex + 8).TrimStart('\n', ' ');
-                    }
-                }
-                response = msg.Content;
-                if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
-                {
-                    ExitAfterUseException? exitMessage = null;
-                    var assistantMessage = new AssistantMessage()
-                    {
-                        Role = msg.Role,
-                        Content = msg.Content
-                    };
-                    foreach (var i in msg.ToolCalls)
-                    {
-                        assistantMessage.ToolCalls.Add(new ToolCallSubMessage()
+                        if (!string.IsNullOrWhiteSpace(tool.DynamicPrompt))
                         {
-                            Id = i.Id,
-                            Function = i.Function
-                        });
-                        if (functionMapper.TryGetValue(i.Function.Name, out var toolDef))
-                        {
-                            if (toolDef.HideOutputOnInvoking)
-                            {
-                                hideOutput = true;
-                            }
-                            if (toolDef.Behavior == ToolBehavior.ExitAfterUse)
-                            {
-                                exitMessage = new ExitAfterUseException($"after using {i.Function.Name}, conversation will be stopped", i.Function.Name);
-                            }
+                            sb.AppendLine(tool.DynamicPrompt);
                         }
-
                     }
-                    currentHistory.Add(assistantMessage);
-                    var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
-                    HistoryRecorder?.Invoke(id, assistantMessage.Role,
-                        string.IsNullOrWhiteSpace(assistantMessage.Content) ? toolCallsStr : $"{assistantMessage.Content}:{toolCallsStr}");
-                    //tool call
-                    List<Task<ToolMessage>> tasks = new();
-                    foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
+                    prompt = new()
                     {
-                        tasks.Add(HandleFunctionCall(f.Function, f.Id, specialTag));
-                    }
-                    await Task.WhenAll(tasks);
-                    foreach (var i in tasks)
-                    {
-                        currentHistory.Add(i.Result);
-                        recorder(i.Result);
-                    }
-                    if (exitMessage != null)
-                    {
-                        throw exitMessage;
-                    }
+                        Role = SystemPrompt.Role,
+                        Content = sb.ToString(),
+                    };
                 }
                 else
                 {
-                    var currentMessage = new ZhipuMessage()
-                    {
-                        Role = msg.Role,
-                        Content = msg.Content
-                    };
-                    currentHistory.Add(currentMessage);
-                    recorder(currentMessage);
-                    done = true;
+                    prompt = SystemPrompt;
                 }
-            }
-            catch (ExitAfterUseException)
-            {
-                throw;
-            }
-            catch (Exception e)
-            {
-                response = "Error: " + e.Message;
-                done = true;
+                currentHistory.Insert(0, prompt);
+                recorder(prompt);
             }
 
-            if (!hideOutput && !string.IsNullOrEmpty(response))
+            var userQuery = new ZhipuMessage()
             {
-                yield return response.Trim();
+                Role = USER,
+                Content = $"{sender}{content}"
+            };
+            currentHistory.Add(userQuery);
+            recorder(userQuery);
+            //if currentHistory is too long, remove the first message
+            int excessCount = currentHistory.Count - SlidingWindowContext;
+            if (excessCount > 0)
+            {
+                // 保留第一个元素（系统提示），移除从索引1开始的excessCount个元素
+                currentHistory.RemoveRange(1, excessCount);
             }
-        }
+            while (!done)
+            {
+                string response;
+                bool hideOutput = false;
+                try
+                {
+                    var aiResponse = await Request(currentHistory, specialTag);
+                    var msg = aiResponse.Choices[0].Message;
+                    if (msg.Content.StartsWith("<think>"))
+                    {
+                        var cotEndIndex = msg.Content.IndexOf("</think>");
+                        if (cotEndIndex >= 0)
+                        {
+                            msg.Content = msg.Content.Substring(cotEndIndex + 8).TrimStart('\n', ' ');
+                        }
+                    }
+                    response = msg.Content;
+                    if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
+                    {
+                        ExitAfterUseException? exitMessage = null;
+                        var assistantMessage = new AssistantMessage()
+                        {
+                            Role = msg.Role,
+                            Content = msg.Content
+                        };
+                        foreach (var i in msg.ToolCalls)
+                        {
+                            assistantMessage.ToolCalls.Add(new ToolCallSubMessage()
+                            {
+                                Id = i.Id,
+                                Function = i.Function
+                            });
+                            if (functionMapper.TryGetValue(i.Function.Name, out var toolDef))
+                            {
+                                if (toolDef.HideOutputOnInvoking)
+                                {
+                                    hideOutput = true;
+                                }
+                                if (toolDef.Behavior == ToolBehavior.ExitAfterUse)
+                                {
+                                    exitMessage = new ExitAfterUseException($"after using {i.Function.Name}, conversation will be stopped", i.Function.Name);
+                                }
+                            }
+
+                        }
+                        currentHistory.Add(assistantMessage);
+                        var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
+                        HistoryRecorder?.Invoke(id, assistantMessage.Role,
+                            string.IsNullOrWhiteSpace(assistantMessage.Content) ? toolCallsStr : $"{assistantMessage.Content}:{toolCallsStr}");
+                        //tool call
+                        List<Task<ToolMessage>> tasks = new();
+                        foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
+                        {
+                            tasks.Add(HandleFunctionCall(f.Function, f.Id, specialTag));
+                        }
+                        await Task.WhenAll(tasks);
+                        foreach (var i in tasks)
+                        {
+                            currentHistory.Add(i.Result);
+                            recorder(i.Result);
+                        }
+                        if (exitMessage != null)
+                        {
+                            throw exitMessage;
+                        }
+                    }
+                    else
+                    {
+                        var currentMessage = new ZhipuMessage()
+                        {
+                            Role = msg.Role,
+                            Content = msg.Content
+                        };
+                        currentHistory.Add(currentMessage);
+                        recorder(currentMessage);
+                        done = true;
+                    }
+                }
+                catch (ExitAfterUseException)
+                {
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    response = "Error: " + e.Message;
+                    done = true;
+                }
+
+                if (!hideOutput && !string.IsNullOrEmpty(response))
+                {
+                    yield return response.Trim();
+                }
+            }
         }
         finally
         {
@@ -366,10 +379,48 @@ public partial class ZhipuAi : IDisposable
 
     }
     private static readonly MediaTypeHeaderValue JsonMediaType = new("application/json");
+
+    private static async Task<string> SendRequestAsync(HttpClient client, string url, string jsonData, ISimpleLogger logger)
+    {
+        await _semaphore.WaitAsync();
+        try
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            req.Content.Headers.ContentType = JsonMediaType;
+
+            HttpResponseMessage response = await client.SendAsync(req);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                logger.Error($"ZhipuAi API Error");
+
+                string rep = await response.Content.ReadAsStringAsync();
+
+                var err = JsonSerializer.Deserialize<ApiResponse>(rep)!;
+                StringBuilder sb = new("内容问题：");
+                foreach (var i in err.ContentFilters)
+                {
+                    sb.Append($"[{i.Role}:{i.Level}]");
+                }
+                throw new Exception(sb.ToString());
+
+
+            }
+            return await response.Content.ReadAsStringAsync();
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+        finally
+        {
+            _semaphore.Release(1);
+        }
+    }
+
     public async Task<ApiResponse> Request(IEnumerable<ZhipuMessage> messages, long specialTag)
     {
         var usableFunctionCall = await GetUsableToolsByTag(specialTag);
-        // 创建请求数据
         var requestData = new Dictionary<String, object> {
             {"model",ModelPreset.model},
             {"messages",messages },
@@ -381,42 +432,9 @@ public partial class ZhipuAi : IDisposable
         }
         requestData = requestData.Concat(ModelPreset.extraBody).ToDictionary();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, ModelPreset.CompletionUrl);
-
-        // 序列化请求数据为JSON
         string jsonData = JsonSerializer.Serialize(requestData, options);
-        req.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-        req.Content.Headers.ContentType = JsonMediaType;
 
-        // 发送POST请求
-        HttpResponseMessage response = await client.SendAsync(req);
-        // 确保请求成功
-        if (response.StatusCode != HttpStatusCode.OK)
-        {
-            Logger.Error($"ZhipuAi API Error");
-            try
-            {
-                string rep = await response.Content.ReadAsStringAsync();
-                try
-                {
-                    var err = JsonSerializer.Deserialize<ApiResponse>(rep)!;
-                    StringBuilder sb = new("内容问题：");
-                    foreach (var i in err.ContentFilters)
-                    {
-                        sb.Append($"[{i.Role}:{i.Level}]");
-                    }
-                    throw new Exception(sb.ToString());
-                }
-                catch (Exception) { }
-                throw new Exception(rep);
-            }
-            catch (Exception) { }
-            throw new HttpRequestException($"API请求失败: {response.StatusCode}");
-        }
-        // 读取并输出响应内容
-        string responseBody = await response.Content.ReadAsStringAsync();
-        //Console.WriteLine("API响应:");
-        //Console.WriteLine(responseBody);
+        string responseBody = await SendRequestAsync(client, ModelPreset.CompletionUrl, jsonData, Logger);
 
         var json = JsonSerializer.Deserialize<ApiResponse>(responseBody)!;
         return json;
