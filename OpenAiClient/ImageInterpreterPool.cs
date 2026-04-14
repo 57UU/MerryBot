@@ -1,6 +1,6 @@
 
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
 public class ImageInterpreterPool
 {

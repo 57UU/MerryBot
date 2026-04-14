@@ -7,9 +7,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
-public partial class ZhipuAi : IDisposable
+public partial class OpenAi : IDisposable
 {
     string token;
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
@@ -26,13 +26,13 @@ public partial class ZhipuAi : IDisposable
     /// </summary>
     public readonly Browser? browser;
 
-    public ZhipuAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true, Browser? browser = null)
+    public OpenAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true, Browser? browser = null)
     {
         this.token = token;
         this.prompt = prompt;
         this.browser = browser;
         this.HistoryRecorder = historyRecorder;
-        SystemPrompt = new ZhipuMessage()
+        SystemPrompt = new OpenAiMessage()
         {
             Role = SYSTEM,
             Content = prompt,
@@ -83,24 +83,24 @@ public partial class ZhipuAi : IDisposable
         Tools.Add(tool);
         functionMapper.Add(tool.Function.Name, tool);
     }
-    readonly ConcurrentDictionary<long, List<ZhipuMessage>> history = new();
+    readonly ConcurrentDictionary<long, List<OpenAiMessage>> history = new();
     readonly ConcurrentDictionary<long, SemaphoreSlim> mutex = new();
-    public ReadOnlySpan<ZhipuMessage> GetDialogHistory(long uid)
+    public ReadOnlySpan<OpenAiMessage> GetDialogHistory(long uid)
     {
         history.TryGetValue(uid, out var dialog);
         if (dialog == null)
         {
-            return Span<ZhipuMessage>.Empty;
+            return Span<OpenAiMessage>.Empty;
         }
         return CollectionsMarshal.AsSpan(dialog);
     }
-    public void SetDialogHistory(long uid, IEnumerable<ZhipuMessage> messages)
+    public void SetDialogHistory(long uid, IEnumerable<OpenAiMessage> messages)
     {
         history[uid] = messages.ToList();
     }
-    public void AppendDialogHistory(long uid, IEnumerable<ZhipuMessage> messages)
+    public void AppendDialogHistory(long uid, IEnumerable<OpenAiMessage> messages)
     {
-        var currentHistory = history.GetOrAdd(uid, _ => new List<ZhipuMessage>());
+        var currentHistory = history.GetOrAdd(uid, _ => new List<OpenAiMessage>());
         currentHistory.AddRange(messages);
     }
     public string SystemPromptContent => SystemPrompt.Content!;
@@ -108,7 +108,7 @@ public partial class ZhipuAi : IDisposable
     {
         return mutex.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
     }
-    private ZhipuMessage SystemPrompt;
+    private OpenAiMessage SystemPrompt;
     /// <summary>
     /// reset dialog for a group
     /// </summary>
@@ -122,9 +122,9 @@ public partial class ZhipuAi : IDisposable
     }
     public TimeSpan AutoNewSpan { get; set; } = TimeSpan.FromHours(12);
 
-    public void AddHistory(long id, ZhipuMessage message)
+    public void AddHistory(long id, OpenAiMessage message)
     {
-        var currentHistory = history.GetOrAdd(id, _ => new List<ZhipuMessage>());
+        var currentHistory = history.GetOrAdd(id, _ => new List<OpenAiMessage>());
         currentHistory.Add(message);
     }
 
@@ -138,7 +138,7 @@ public partial class ZhipuAi : IDisposable
     /// <returns>异步字符串迭代器，模型返回结果</returns>
     public async IAsyncEnumerable<string> Ask(string content, long id, string sender, long specialTag = 0)
     {
-        var recorder = (ZhipuMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
+        var recorder = (OpenAiMessage message) => HistoryRecorder?.Invoke(id, message.Role, message.Content);
         var mutex = EnsureMutexExists(id);
         if (!mutex.Wait(0))
         {
@@ -148,7 +148,7 @@ public partial class ZhipuAi : IDisposable
         {
             bool done = false;
             //if last message is too old, start a new conversation
-            if (history.TryGetValue(id, out List<ZhipuMessage>? value))
+            if (history.TryGetValue(id, out List<OpenAiMessage>? value))
             {
                 var lastMessage = value.LastOrDefault();
                 if (lastMessage != null)
@@ -160,16 +160,16 @@ public partial class ZhipuAi : IDisposable
                 }
             }
 
-            if (!history.TryGetValue(id, out List<ZhipuMessage>? currentHistory))
+            if (!history.TryGetValue(id, out List<OpenAiMessage>? currentHistory))
             {
                 //if currentHistory is null, create a new one
-                currentHistory = new List<ZhipuMessage>();
+                currentHistory = new List<OpenAiMessage>();
                 history.TryAdd(id, currentHistory);
             }
 
             if (currentHistory.Count == 0 || currentHistory[0].Role != SYSTEM)
             {
-                ZhipuMessage prompt;
+                OpenAiMessage prompt;
                 if (UseDynamicPrompt)
                 {
                     StringBuilder sb = new(SystemPrompt.Content);
@@ -196,7 +196,7 @@ public partial class ZhipuAi : IDisposable
                 recorder(prompt);
             }
 
-            var userQuery = new ZhipuMessage()
+            var userQuery = new OpenAiMessage()
             {
                 Role = USER,
                 Content = $"{sender}{content}"
@@ -278,7 +278,7 @@ public partial class ZhipuAi : IDisposable
                     }
                     else
                     {
-                        var currentMessage = new ZhipuMessage()
+                        var currentMessage = new OpenAiMessage()
                         {
                             Role = msg.Role,
                             Content = msg.Content
@@ -363,7 +363,7 @@ public partial class ZhipuAi : IDisposable
         return usableFunctionCall;
 
     }
-    public async Task<ApiResponse> Request(IEnumerable<ZhipuMessage> messages, long specialTag)
+    public async Task<ApiResponse> Request(IEnumerable<OpenAiMessage> messages, long specialTag)
     {
         var usableFunctionCall = await GetUsableToolsByTag(specialTag);
         var requestData = new Dictionary<String, object> {
@@ -401,16 +401,16 @@ public partial class ZhipuAi : IDisposable
 }
 
 // 创建自定义转换器
-public class MessageConverter : JsonConverter<ZhipuMessage>
+public class MessageConverter : JsonConverter<OpenAiMessage>
 {
-    public override ZhipuMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override OpenAiMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using JsonDocument doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
-        return JsonSerializer.Deserialize<ZhipuMessage>(root.GetRawText(), options)!;
+        return JsonSerializer.Deserialize<OpenAiMessage>(root.GetRawText(), options)!;
     }
 
-    public override void Write(Utf8JsonWriter writer, ZhipuMessage value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, OpenAiMessage value, JsonSerializerOptions options)
     {
         JsonSerializer.Serialize(writer, value, value.GetType());
     }

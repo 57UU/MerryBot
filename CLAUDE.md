@@ -40,13 +40,13 @@ graph TB
 
     subgraph Service Layer
         NapcatClient["NapcatClient<br/>WebSocket"]
-        ZhipuAi["ZhipuAi<br/>AI Client"]
+        OpenAiClient["OpenAiClient<br/>AI Client"]
         Browser["Browser<br/>(Chrome Selenium)"]
         DataService["DataService"]
     end
 
     Interop --> NapcatClient
-    Interop --> ZhipuAi
+    Interop --> OpenAiClient
     Interop --> Browser
     Interop --> DataService
 
@@ -67,7 +67,7 @@ graph TB
 graph LR
     subgraph Core
         MB["MerryBot"] --> NC["NapcatClient"]
-        MB --> ZA["ZhipuAi"]
+        MB --> ZA["OpenAiClient"]
         MB --> BR["Browser"]
         MB --> DS["DataService"]
     end
@@ -92,7 +92,7 @@ graph LR
 | `MerryBot/` | Entry point, plugin loading, event routing |
 | `NapcatClient/` | WebSocket client for napcat protocol |
 | `plugins/` | Plugin base class (`Plugin`, `PluginInterop`, `PluginTag`) and implementations |
-| `ZhipuAi/` | OpenAI-compatible AI client with function calling |
+| `OpenAiClient/` | OpenAI-compatible AI client with function calling |
 | `Browser/` | Chrome automation via Selenium for Markdown rendering |
 | `CommonLib/` | Shared utilities (logging, HTTP, formatting) |
 | `DataProvider/` | NoSQL plugin storage database |

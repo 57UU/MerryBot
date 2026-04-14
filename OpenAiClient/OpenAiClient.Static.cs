@@ -4,9 +4,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
-public partial class ZhipuAi
+public partial class OpenAi
 {
     private const int _defaultMaxConcurrency = 5;
     private static SemaphoreSlim _semaphore = new(_defaultMaxConcurrency, _defaultMaxConcurrency);
@@ -39,7 +39,7 @@ public partial class ZhipuAi
             HttpResponseMessage response = await client.SendAsync(req);
             if (response.StatusCode != HttpStatusCode.OK)
             {
-                logger.Error($"ZhipuAi API Error");
+                logger.Error($"OpenAiClient API Error");
 
                 string rep = await response.Content.ReadAsStringAsync();
 

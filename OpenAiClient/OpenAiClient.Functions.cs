@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
-public partial class ZhipuAi
+public partial class OpenAi
 {
     public void RegisterGetTime()
     {

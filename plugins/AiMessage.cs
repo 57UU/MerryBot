@@ -1,7 +1,7 @@
 using BrowserService;
 using NapcatClient;
 using NapcatClient.MessageType;
-using ZhipuClient;
+using OpenAiClient;
 
 namespace BotPlugin;
 
@@ -77,12 +77,12 @@ public partial class AiMessage : Plugin
         }
         var prompt = interop.GetVariableOrSetDefault("ai-prompt", "你是乐于助人的助手");
 
-        ZhipuClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
+        OpenAiClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
         {
             _ = aiMessageStorage.RecordAiMessageAsync(groupId, messageType, content);
         };
 
-        aiClient = new ZhipuAi(token, prompt, model, historyRecorder, browser: browser);
+        aiClient = new OpenAi(token, prompt, model, historyRecorder, browser: browser);
         defaultModel = model;
         aiClient.Logger = Logger;
         //tools
@@ -106,7 +106,7 @@ public partial class AiMessage : Plugin
     {
 
     }
-    internal ZhipuAi aiClient;
+    internal OpenAi aiClient;
     static bool IsContainsNew(string message)
     {
         var l = message.Split(" ");

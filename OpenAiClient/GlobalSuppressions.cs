@@ -5,4 +5,4 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-[assembly: SuppressMessage("Style", "IDE0130:命名空间与文件夹结构不匹配", Justification = "<挂起>", Scope = "namespace", Target = "~N:ZhipuClient")]
+[assembly: SuppressMessage("Style", "IDE0130:命名空间与文件夹结构不匹配", Justification = "<挂起>", Scope = "namespace", Target = "~N:OpenAiClient")]

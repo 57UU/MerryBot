@@ -3,7 +3,7 @@ using NapcatClient;
 using NapcatClient.MessageType;
 using System.Text;
 using System.Text.Json;
-using ZhipuClient;
+using OpenAiClient;
 
 namespace BotPlugin;
 

@@ -18,7 +18,7 @@
     <ProjectReference Include="..\DataService\DataService.csproj" />
     <ProjectReference Include="..\HistoryWebFrontend\HistoryWebFrontend.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
-    <ProjectReference Include="..\ZhipuAi\ZhipuAi.csproj" />
+    <ProjectReference Include="..\OpenAiClient\OpenAiClient.csproj" />
   </ItemGroup>
 
 </Project>

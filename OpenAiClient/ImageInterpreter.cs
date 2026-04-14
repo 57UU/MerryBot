@@ -2,7 +2,7 @@ using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 public enum ImageInterpreterType{
     Normal,Quick
 }

@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
 public class ModelPreset
 {

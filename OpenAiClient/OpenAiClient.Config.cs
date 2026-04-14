@@ -1,8 +1,8 @@
 using CommonLib;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
-public partial class ZhipuAi
+public partial class OpenAi
 {
 
     /// <summary>

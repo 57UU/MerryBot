@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Tomlyn;
 using Tomlyn.Serialization;
-using ZhipuClient;
+using OpenAiClient;
 
 namespace BotPlugin;
 

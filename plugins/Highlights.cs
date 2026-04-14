@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using ZhipuClient;
+using OpenAiClient;
 
 namespace BotPlugin;
 
@@ -16,7 +16,7 @@ namespace BotPlugin;
 public class Highlights : Plugin
 {
     private readonly AiMessage aiMessage;
-    private ZhipuAi aiClient;
+    private OpenAi aiClient;
     private int count;
     private int sectionCount;
     private HighlightsData storageData = new();
@@ -108,9 +108,9 @@ public class Highlights : Plugin
         }
     }
 
-    private ZhipuAi CreateSectionAi(ModelPreset modelPreset, string systemPrompt, IEnumerable<ZhipuMessage> baseHistory, long groupId)
+    private OpenAi CreateSectionAi(ModelPreset modelPreset, string systemPrompt, IEnumerable<OpenAiMessage> baseHistory, long groupId)
     {
-        var sectionAiClient = new ZhipuAi(
+        var sectionAiClient = new OpenAi(
             aiMessage.GetToken(modelPreset)!,
             systemPrompt,
             modelPreset,
@@ -193,7 +193,7 @@ public class Highlights : Plugin
             }
 
 
-            aiClient.AddHistory(groupId, new ZhipuMessage { Role = ZhipuAi.USER, Content = $"以下是需要分析的群聊消息内容：\n{sb}" });
+            aiClient.AddHistory(groupId, new OpenAiMessage { Role = OpenAi.USER, Content = $"以下是需要分析的群聊消息内容：\n{sb}" });
 
             // 第一步：生成目录 (TOC)
             string tocInstruction = $"请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 {sectionCount} 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";

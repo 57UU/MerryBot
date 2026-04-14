@@ -1,10 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
-public class ZhipuMessage
+public class OpenAiMessage
 {
     [JsonPropertyName("role")]
     public string Role { get; set; }
@@ -14,12 +14,12 @@ public class ZhipuMessage
     [JsonIgnore]
     public DateTime time = DateTime.Now;
 }
-public class AssistantMessage : ZhipuMessage
+public class AssistantMessage : OpenAiMessage
 {
     [JsonPropertyName("tool_calls")]
     public List<ToolCallSubMessage> ToolCalls { get; set; } = new();
 }
-public class ToolMessage : ZhipuMessage
+public class ToolMessage : OpenAiMessage
 {
     [JsonPropertyName("tool_call_id")]
     public string Id { get; set; }

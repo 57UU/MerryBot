@@ -5,7 +5,7 @@ using MerryBot;
 using System.Reflection;
 using Tomlyn;
 using Tomlyn.Model;
-using ZhipuClient;
+using OpenAiClient;
 
 public static partial class Program
 {
@@ -47,7 +47,7 @@ public static partial class Program
         var aiVars = config.Variables[tag.Id];
         string token = (string)aiVars[token_key];
         string prompt = (string)aiVars["ai-prompt"];
-        ZhipuAi zhipu = new ZhipuAi(token, prompt, model);
+        OpenAi zhipu = new OpenAi(token, prompt, model);
         while (true)
         {
             Console.Write("User: ");

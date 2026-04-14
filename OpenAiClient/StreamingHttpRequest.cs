@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Unicode;
 
-namespace ZhipuClient;
+namespace OpenAiClient;
 
 #pragma warning disable CS8618 
 public class StreamChunk

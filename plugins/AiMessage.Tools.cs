@@ -1,6 +1,6 @@
 using NapcatClient.MessageType;
 using System.Runtime.InteropServices;
-using ZhipuClient;
+using OpenAiClient;
 
 
 namespace BotPlugin;
