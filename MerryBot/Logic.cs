@@ -94,7 +94,8 @@ internal partial class Logic
         bool isIntercepted = false;
         foreach (var plugInfo in plugins)
         {
-            foreach (var interceptor in plugInfo.Interop.Interceptors)
+            var interceptors = plugInfo.Interop.Interceptors.ToList();
+            foreach (var interceptor in interceptors)
             {
                 if (interceptor(data))
                 {

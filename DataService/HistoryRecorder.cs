@@ -54,10 +54,9 @@ public class HistoryRecorder : IDisposable
     {
         return idGenerator.CreateId();
     }
-    private static SHA256 _sha256 = SHA256.Create();
     private static string CalculateHash(byte[] data)
     {
-        var hashBytes = _sha256.ComputeHash(data);
+        var hashBytes = SHA256.HashData(data);
         return ToFileNameSafeBase64String(Convert.ToBase64String(hashBytes));
     }
 

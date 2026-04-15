@@ -1,26 +1,18 @@
-using HWT;
 using NapcatClient.MessageType;
 
 namespace BotPlugin;
 
-public class RateLimiter
+public class RateLimiter : IDisposable
 {
     private readonly Dictionary<long, int> rateLimit = new();
     public int LimitCount { get; private set; }
     public int LimitTime { get; private set; }
     private readonly Lock locker = new();
-    private readonly HashedWheelTimer countdownManager;
-    private readonly TimeSpan timeSpan;
+    private readonly Dictionary<long, CancellationTokenSource> timers = new();
     public RateLimiter(int limitCount = 5, int limitTime = 20)
     {
         LimitCount = limitCount;
         LimitTime = limitTime;
-        timeSpan = TimeSpan.FromSeconds(limitTime);
-        countdownManager = new HashedWheelTimer(
-            tickDuration: TimeSpan.FromSeconds(1),
-            ticksPerWheel: 100,
-            maxPendingTimeouts: 0
-            );
     }
     public bool CheckIsLimited(long groupId)
     {
@@ -58,26 +50,48 @@ public class RateLimiter
     }
     private void SetTimer(long uid)
     {
-        countdownManager.NewTimeout(
-            new OnceTimerTask(
-                () => { DecreaseCallback(uid); }
-                ),
-            timeSpan
-            );
+        CancellationTokenSource? existingCts;
+        lock (locker)
+        {
+            if (timers.TryGetValue(uid, out existingCts))
+            {
+                existingCts.Cancel();
+            }
+            var cts = new CancellationTokenSource();
+            timers[uid] = cts;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(LimitTime), cts.Token);
+                    DecreaseCallback(uid);
+                }
+                catch (TaskCanceledException)
+                {
+                    // expected when cancelled
+                }
+                finally
+                {
+                    lock (locker)
+                    {
+                        timers.Remove(uid);
+                    }
+                }
+            });
+        }
     }
 
-}
-
-class OnceTimerTask : TimerTask
-{
-    private readonly Action callback;
-    public OnceTimerTask(Action callback)
+    public void Dispose()
     {
-        this.callback = callback;
-    }
-    public void Run(HWT.Timeout timeout)
-    {
-        callback.Invoke();
+        lock (locker)
+        {
+            foreach (var cts in timers.Values)
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            timers.Clear();
+        }
     }
 }
 
