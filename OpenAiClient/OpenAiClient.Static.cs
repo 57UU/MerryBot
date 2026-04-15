@@ -49,6 +49,7 @@ public partial class OpenAiCompatible
                 {
                     sb.Append($"[{i.Role}:{i.Level}]");
                 }
+                sb.AppendLine(rep);
                 throw new Exception(sb.ToString());
 
 
