@@ -4,7 +4,7 @@ using System.Text;
 
 namespace OpenAiClient;
 
-public partial class OpenAi
+public partial class OpenAiCompatible
 {
     public void RegisterGetTime()
     {

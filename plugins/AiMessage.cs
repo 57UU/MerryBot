@@ -82,7 +82,7 @@ public partial class AiMessage : Plugin
             _ = aiMessageStorage.RecordAiMessageAsync(groupId, messageType, content);
         };
 
-        aiClient = new OpenAi(token, prompt, model, historyRecorder, browser: browser);
+        aiClient = new OpenAiCompatible(token, prompt, model, historyRecorder, browser: browser);
         defaultModel = model;
         aiClient.Logger = Logger;
         //tools
@@ -106,7 +106,7 @@ public partial class AiMessage : Plugin
     {
 
     }
-    internal OpenAi aiClient;
+    internal OpenAiCompatible aiClient;
     static bool IsContainsNew(string message)
     {
         var l = message.Split(" ");

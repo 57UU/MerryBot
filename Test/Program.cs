@@ -47,7 +47,7 @@ public static partial class Program
         var aiVars = config.Variables[tag.Id];
         string token = (string)aiVars[token_key];
         string prompt = (string)aiVars["ai-prompt"];
-        OpenAi zhipu = new OpenAi(token, prompt, model);
+        OpenAiCompatible zhipu = new OpenAiCompatible(token, prompt, model);
         while (true)
         {
             Console.Write("User: ");

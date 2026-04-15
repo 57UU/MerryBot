@@ -42,11 +42,11 @@ public class ViewDialog : Plugin
                 foreach (var item in history)
                 {
                     sb.Append("• ");
-                    if (item.Role == OpenAi.SYSTEM)
+                    if (item.Role == OpenAiCompatible.SYSTEM)
                     {
                         sb.AppendLine("system: <HIDDEN>");
                     }
-                    else if (item.Role == OpenAi.ASSISTANT)
+                    else if (item.Role == OpenAiCompatible.ASSISTANT)
                     {
                         var item2 = item as AssistantMessage;
                         sb.Append("assistant: " + ConstraintLength(item.Content ?? ""));

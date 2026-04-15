@@ -9,7 +9,7 @@ using System.Text.Unicode;
 
 namespace OpenAiClient;
 
-public partial class OpenAi : IDisposable
+public partial class OpenAiCompatible : IDisposable
 {
     string token;
 #pragma warning disable CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
@@ -26,7 +26,7 @@ public partial class OpenAi : IDisposable
     /// </summary>
     public readonly Browser? browser;
 
-    public OpenAi(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true, Browser? browser = null)
+    public OpenAiCompatible(string token, string prompt, ModelPreset modelPreset, HistoryRecorder? historyRecorder = null, bool useBuildinTools = true, Browser? browser = null)
     {
         this.token = token;
         this.prompt = prompt;

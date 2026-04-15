@@ -2,7 +2,7 @@ using CommonLib;
 
 namespace OpenAiClient;
 
-public partial class OpenAi
+public partial class OpenAiCompatible
 {
 
     /// <summary>

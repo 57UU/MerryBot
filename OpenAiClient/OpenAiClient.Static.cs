@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace OpenAiClient;
 
-public partial class OpenAi
+public partial class OpenAiCompatible
 {
     private const int _defaultMaxConcurrency = 5;
     private static SemaphoreSlim _semaphore = new(_defaultMaxConcurrency, _defaultMaxConcurrency);
