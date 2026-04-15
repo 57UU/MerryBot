@@ -173,7 +173,8 @@ public class Highlights : Plugin
                     var nickname=string.IsNullOrEmpty(message.SenderGroupNickname) ? message.SenderNickname : message.SenderGroupNickname;
                     var timeStr=message.Time.ToString("yyyy-MM-dd HH:mm");
                     var extracted = await aiMessage.ExtractMessage(message.Messages, groupId, recursive:false, resourceLimit:limit);
-                    return new { time = message.Time, index, line = $"{timeStr}[user:{nickname}]{extracted}\n" };
+                    var isDeleted=message.IsDeleted?"(已撤回)":string.Empty;
+                    return new { time = message.Time, index, line = $"{isDeleted}{timeStr}[user:{nickname}]{extracted}\n" };
                 }
                 catch (Exception ex)
                 {
