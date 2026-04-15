@@ -245,8 +245,7 @@ public partial class AiMessage : Plugin
     {
         aiClient.Dispose();
         browser.Dispose();
-
-        // AiMessageStorage 由 StorageManagerPlugin 负责释放
+        ImageInterpreterPool?.Dispose();
 
         GC.SuppressFinalize(this);
     }

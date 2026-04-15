@@ -2,9 +2,10 @@
 
 namespace OpenAiClient;
 
-public class ImageInterpreterPool
+public class ImageInterpreterPool : IDisposable
 {
     private readonly IEnumerable<ImageInterpreter> _imageInterpreters;
+    private bool _disposed;
     public ImageInterpreterPool(params ImageInterpreter[] imageInterpreters)
     {
         _imageInterpreters = imageInterpreters;
@@ -42,5 +43,16 @@ public class ImageInterpreterPool
             }
         }
         throw new Exception("No image interpreter available");
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        foreach (var interpreter in _imageInterpreters)
+        {
+            interpreter.Dispose();
+        }
+        GC.SuppressFinalize(this);
     }
 }

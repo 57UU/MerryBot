@@ -6,11 +6,12 @@ namespace OpenAiClient;
 public enum ImageInterpreterType{
     Normal,Quick
 }
-public class ImageInterpreter
+public class ImageInterpreter : IDisposable
 {
     private readonly ModelPreset modelPreset;
     private readonly OpenAIClient client;
     private readonly ChatClient chatClient;
+    private bool _disposed;
     const string normalPrompt = "描述图片内容";
     const string quickPrompt = "简要描述图片大致内容";
     public ImageInterpreter(ModelPreset modelPreset, string apiKey)
@@ -68,5 +69,12 @@ public class ImageInterpreter
 
         var response = await chatClient.CompleteChatAsync(messages, chatOptions);
         return response.Value.Content[0].Text;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }
