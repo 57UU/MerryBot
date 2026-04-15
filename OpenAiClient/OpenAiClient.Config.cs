@@ -14,6 +14,10 @@ public partial class OpenAiCompatible
     /// </summary>
     public int MaxWebContentLength { get; set; } = 5000;
     /// <summary>
+    /// 用于总结网页内容的轻量总结器，null 则直接返回原始内容
+    /// </summary>
+    public WebviewSummarizer? WebviewSummarizer { get; set; } = null;
+    /// <summary>
     /// 最大上下文长度
     /// </summary>
     public int SlidingWindowContext { get; set; } = 30;

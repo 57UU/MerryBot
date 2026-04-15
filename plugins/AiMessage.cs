@@ -85,6 +85,31 @@ public partial class AiMessage : Plugin
         aiClient = new OpenAiCompatible(token, prompt, model, historyRecorder, browser: browser);
         defaultModel = model;
         aiClient.Logger = Logger;
+
+        // webview summarizer
+        var summarizerModelName = interop.GetVariableOrSetDefault<string>("webview-summarizer-model",string.Empty);
+        if (!string.IsNullOrEmpty(summarizerModelName))
+        {
+            var summarizerModel = ModelPreset.GetModelByName(summarizerModelName);
+            if (summarizerModel != null)
+            {
+                var summarizerToken = GetToken(summarizerModel);
+                if (summarizerToken != null)
+                {
+                    aiClient.WebviewSummarizer = new WebviewSummarizer(summarizerToken, summarizerModel);
+                    Logger.Info($"webview summarizer enabled: {summarizerModel.model}");
+                }
+                else
+                {
+                    Logger.Warn($"请在配置文件variable中设置{summarizerModel.ApiTokenDictKey}");
+                }
+            }
+            else
+            {
+                Logger.Warn($"无效的 webview-summarizer-model: {summarizerModelName}");
+            }
+        }
+
         //tools
         RegisterVoiceTool();
         if (useFunctionCallToReply)

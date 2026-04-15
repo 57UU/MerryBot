@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Text;
 
 namespace OpenAiClient;
 
@@ -25,6 +23,11 @@ public partial class OpenAiCompatible
         {
             var url = parameters["url"];
             var html = await browser.View(url.GetString()!);
+            if (WebviewSummarizer != null)
+            {
+                // 使用总结器总结网页内容
+                return await WebviewSummarizer.SummarizeAsync(html);
+            }
             if (html.Length > MaxWebContentLength)
             {
                 html = string.Concat(html.AsSpan(0, MaxWebContentLength), "[省略过长内容]");
