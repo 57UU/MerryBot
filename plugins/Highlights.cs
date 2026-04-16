@@ -49,8 +49,6 @@ public class Highlights : Plugin
 public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
-        // Ensure nested dictionaries exist for migration from older data
-        storageData.GroupIssues ??= new Dictionary<long, List<JournalIssue>>();
         Logger.Info($"Highlights plugin loaded. Target count: {count}");
     }
 
@@ -102,17 +100,7 @@ public override async Task OnLoaded()
         }
         else if (IsStartsWith(chain, "/highlights history"))
         {
-            var issues = storageData.GroupIssues.GetValueOrDefault(groupId) ?? new List<JournalIssue>();
-            if (issues.Count == 0)
-            {
-                _ = Actions.SendGroupMessage(groupId, "暂无历史群刊记录。");
-            }
-            else
-            {
-                var latest = issues.TakeLast(5).ToList();
-                var lines = latest.Select(i => $"第{i.IssueNumber}期 - {i.PublishTime:yyyy-MM-dd HH:mm}").Reverse();
-                _ = Actions.SendGroupMessage(groupId, $"过往群刊（共{issues.Count}期）：\n{string.Join("\n", lines)}");
-            }
+            _ = LoadAndSendHistory(groupId);
         }
         else if (IsStartsWith(chain, "/highlights view"))
         {
@@ -122,16 +110,7 @@ public override async Task OnLoaded()
                 _ = Actions.SendGroupMessage(groupId, "用法：/highlights view <期数>");
                 return;
             }
-            var issues = storageData.GroupIssues.GetValueOrDefault(groupId) ?? new List<JournalIssue>();
-            var issue = issues.FirstOrDefault(i => i.IssueNumber == issueNum);
-            if (issue == null)
-            {
-                _ = Actions.SendGroupMessage(groupId, $"未找到第{issueNum}期群刊。");
-            }
-            else
-            {
-                _ = ViewIssue(groupId, issue.Content);
-            }
+            _ = LoadAndViewIssue(groupId, issueNum);
         }
         else if (IsStartsWith(chain, "/highlights"))
         {
@@ -170,6 +149,35 @@ public override async Task OnLoaded()
     {
         byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(content);
         await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
+    }
+
+    async Task LoadAndSendHistory(long groupId)
+    {
+        var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+        if (history.Issues.Count == 0)
+        {
+            await Actions.SendGroupMessage(groupId, "暂无历史群刊记录。");
+        }
+        else
+        {
+            var latest = history.Issues.TakeLast(5).ToList();
+            var lines = latest.Select(i => $"第{i.IssueNumber}期 - {i.PublishTime:yyyy-MM-dd HH:mm}").Reverse();
+            await Actions.SendGroupMessage(groupId, $"过往群刊（共{history.Issues.Count}期）：\n{string.Join("\n", lines)}");
+        }
+    }
+
+    async Task LoadAndViewIssue(long groupId, int issueNum)
+    {
+        var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+        var issue = history.Issues.FirstOrDefault(i => i.IssueNumber == issueNum);
+        if (issue == null)
+        {
+            await Actions.SendGroupMessage(groupId, $"未找到第{issueNum}期群刊。");
+        }
+        else
+        {
+            await ViewIssue(groupId, issue.Content);
+        }
     }
 
     async Task GenerateHighlights(long groupId, int currentCount = -1){
@@ -374,11 +382,8 @@ public override async Task OnLoaded()
             await Task.WhenAll(allTasks.Select(t => t.task));
 
             // 获取当前期数
-            if (!storageData.GroupIssues.ContainsKey(groupId))
-            {
-                storageData.GroupIssues[groupId] = new List<JournalIssue>();
-            }
-            int issueNum = storageData.GroupIssues[groupId].Count + 1;
+            var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+            int issueNum = history.Issues.Count + 1;
 
             StringBuilder finalMarkdown = new();
             finalMarkdown.AppendLine($"# Highlights 第{issueNum}期\n");
@@ -403,17 +408,13 @@ public override async Task OnLoaded()
 
             // 保存到历史记录
             string markdownContent = finalMarkdown.ToString();
-            if (!storageData.GroupIssues.ContainsKey(groupId))
-            {
-                storageData.GroupIssues[groupId] = new List<JournalIssue>();
-            }
-            storageData.GroupIssues[groupId].Add(new JournalIssue
+            history.Issues.Add(new JournalIssue
             {
                 IssueNumber = issueNum,
                 PublishTime = DateTime.Now,
                 Content = markdownContent
             });
-            await Interop.PluginStorage.Save(storageData);
+            await Interop.PluginStorage.SaveGroup(groupId, history);
 
             // 第三步：最终渲染发送
             Logger.Info($"群 {groupId} 群刊第{issueNum}期内容生成完毕，正在进行最终渲染...");
@@ -452,7 +453,6 @@ public override async Task OnLoaded()
 public class HighlightsData
 {
     public Dictionary<long, int> GroupMessageCount { get; set; } = new();
-    public Dictionary<long, List<JournalIssue>> GroupIssues { get; set; } = new();
 }
 
 public class JournalIssue
@@ -460,4 +460,9 @@ public class JournalIssue
     public int IssueNumber { get; set; }
     public DateTime PublishTime { get; set; }
     public string Content { get; set; } = "";
+}
+
+public class JournalHistory
+{
+    public List<JournalIssue> Issues { get; set; } = new();
 }

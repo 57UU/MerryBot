@@ -1,4 +1,4 @@
-﻿global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
+global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
@@ -24,36 +24,55 @@ public record PluginInfo(
 /// <summary>
 /// 插件存储，支持异步读取和写入
 /// </summary>
-/// <param name="Saver"></param>
-/// <param name="Getter"></param>
 public class PluginStorage
 {
-    public PluginStorage(ObjectSaver Saver, ObjectGetter Getter)
+    public PluginStorage(
+        ObjectSaver pluginSaver, ObjectGetter pluginGetter,
+        ObjectGroupSaver groupSaver, ObjectGroupGetter groupGetter)
     {
-        this.Saver = Saver;
-        this.Getter = Getter;
+        _pluginSaver = pluginSaver;
+        _pluginGetter = pluginGetter;
+        _groupSaver = groupSaver;
+        _groupGetter = groupGetter;
     }
-    private readonly ObjectSaver Saver;
-    private readonly ObjectGetter Getter;
+
+    private readonly ObjectSaver _pluginSaver;
+    private readonly ObjectGetter _pluginGetter;
+    private readonly ObjectGroupSaver _groupSaver;
+    private readonly ObjectGroupGetter _groupGetter;
+
     public async Task<T?> Load<T>() where T : class
     {
-        var data = await Getter();
+        var data = await _pluginGetter();
         if (data is null) return null;
         return (T)data;
     }
+
     public async Task<T> Load<T>(T defaultValue) where T : class
     {
-        var data = await Getter();
+        var data = await _pluginGetter();
         if (data is null) return defaultValue;
         return (T)data;
     }
+
     public async Task Save<T>(T data) where T : class
+        => await _pluginSaver(data);
+
+    public async Task<T?> LoadGroup<T>(long groupId) where T : class
     {
-        await Saver(data);
+        var data = await _groupGetter(groupId);
+        if (data is null) return null;
+        return (T)data;
     }
+
+    public async Task SaveGroup<T>(long groupId, T data) where T : class
+        => await _groupSaver(groupId, data);
 }
+
 public delegate Task ObjectSaver(object data);
 public delegate Task<object?> ObjectGetter();
+public delegate Task ObjectGroupSaver(long groupId, object data);
+public delegate Task<object?> ObjectGroupGetter(long groupId);
 public delegate IEnumerable<PluginInfo> PluginInfoGetter();
 /// <summary>
 /// 拦截指定消息
