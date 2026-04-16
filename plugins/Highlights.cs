@@ -46,9 +46,11 @@ public class Highlights : Plugin
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
     }
-    public override async Task OnLoaded()
+public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
+        // Ensure nested dictionaries exist for migration from older data
+        storageData.GroupIssues ??= new Dictionary<long, List<JournalIssue>>();
         Logger.Info($"Highlights plugin loaded. Target count: {count}");
     }
 
@@ -98,13 +100,48 @@ public class Highlights : Plugin
             _ = Interop.PluginStorage.Save(storageData);
             _ = Actions.SendGroupMessage(groupId, "群聊消息计数已重置。");
         }
+        else if (IsStartsWith(chain, "/highlights history"))
+        {
+            var issues = storageData.GroupIssues.GetValueOrDefault(groupId) ?? new List<JournalIssue>();
+            if (issues.Count == 0)
+            {
+                _ = Actions.SendGroupMessage(groupId, "暂无历史群刊记录。");
+            }
+            else
+            {
+                var latest = issues.TakeLast(5).ToList();
+                var lines = latest.Select(i => $"第{i.IssueNumber}期 - {i.PublishTime:yyyy-MM-dd HH:mm}").Reverse();
+                _ = Actions.SendGroupMessage(groupId, $"过往群刊（共{issues.Count}期）：\n{string.Join("\n", lines)}");
+            }
+        }
+        else if (IsStartsWith(chain, "/highlights view"))
+        {
+            var parts = chain.ToString().Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 3 || !int.TryParse(parts[2], out int issueNum))
+            {
+                _ = Actions.SendGroupMessage(groupId, "用法：/highlights view <期数>");
+                return;
+            }
+            var issues = storageData.GroupIssues.GetValueOrDefault(groupId) ?? new List<JournalIssue>();
+            var issue = issues.FirstOrDefault(i => i.IssueNumber == issueNum);
+            if (issue == null)
+            {
+                _ = Actions.SendGroupMessage(groupId, $"未找到第{issueNum}期群刊。");
+            }
+            else
+            {
+                _ = ViewIssue(groupId, issue.Content);
+            }
+        }
         else if (IsStartsWith(chain, "/highlights"))
         {
             int current = storageData.GroupMessageCount.GetValueOrDefault(groupId, 0);
             _ = Actions.SendGroupMessage(groupId, $"群刊插件帮助（当前计数：{current}/{count}）：\n" +
                 "/highlights status - 查看当前计数\n" +
                 "/highlights flush - 立即生成群刊\n" +
-                "/highlights reset - 重置当前计数");
+                "/highlights reset - 重置当前计数\n" +
+                "/highlights history - 查看过往期数\n" +
+                "/highlights view <期数> - 查看指定期数群刊");
         }
     }
 
@@ -128,6 +165,13 @@ public class Highlights : Plugin
     {
         return groupLocks.TryGetValue(groupId, out var groupLock) && groupLock.CurrentCount == 0;
     }
+
+    async Task ViewIssue(long groupId, string content)
+    {
+        byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(content);
+        await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
+    }
+
     async Task GenerateHighlights(long groupId, int currentCount = -1){
         var groupLock = groupLocks.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
         if (!groupLock.Wait(0))
@@ -329,9 +373,16 @@ public class Highlights : Plugin
             // 等待所有任务完成
             await Task.WhenAll(allTasks.Select(t => t.task));
 
+            // 获取当前期数
+            if (!storageData.GroupIssues.ContainsKey(groupId))
+            {
+                storageData.GroupIssues[groupId] = new List<JournalIssue>();
+            }
+            int issueNum = storageData.GroupIssues[groupId].Count + 1;
+
             StringBuilder finalMarkdown = new();
-            finalMarkdown.AppendLine("# 群刊高亮内容\n");
-            
+            finalMarkdown.AppendLine($"# Highlights 第{issueNum}期\n");
+
             // 按顺序拼接
             var headerTask = allTasks.First(t => t.type == "header");
             finalMarkdown.AppendLine("## 前言");
@@ -350,9 +401,23 @@ public class Highlights : Plugin
             finalMarkdown.AppendLine(footerTask.task.Result);
             finalMarkdown.AppendLine("\n---\n");
 
+            // 保存到历史记录
+            string markdownContent = finalMarkdown.ToString();
+            if (!storageData.GroupIssues.ContainsKey(groupId))
+            {
+                storageData.GroupIssues[groupId] = new List<JournalIssue>();
+            }
+            storageData.GroupIssues[groupId].Add(new JournalIssue
+            {
+                IssueNumber = issueNum,
+                PublishTime = DateTime.Now,
+                Content = markdownContent
+            });
+            await Interop.PluginStorage.Save(storageData);
+
             // 第三步：最终渲染发送
-            Logger.Info($"群 {groupId} 群刊内容生成完毕，正在进行最终渲染...");
-            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(finalMarkdown.ToString());
+            Logger.Info($"群 {groupId} 群刊第{issueNum}期内容生成完毕，正在进行最终渲染...");
+            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(markdownContent);
             await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
         }
         catch (NotAvailableException)
@@ -387,4 +452,12 @@ public class Highlights : Plugin
 public class HighlightsData
 {
     public Dictionary<long, int> GroupMessageCount { get; set; } = new();
+    public Dictionary<long, List<JournalIssue>> GroupIssues { get; set; } = new();
+}
+
+public class JournalIssue
+{
+    public int IssueNumber { get; set; }
+    public DateTime PublishTime { get; set; }
+    public string Content { get; set; } = "";
 }
