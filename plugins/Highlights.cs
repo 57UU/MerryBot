@@ -45,7 +45,12 @@ public class Highlights : Plugin
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
+
+        enableHeader = interop.GetStructVariableOrSetDefault("enable-header", false);
+        enableFooter = interop.GetStructVariableOrSetDefault("enable-footer", true);
     }
+    private readonly bool enableHeader;
+    private readonly bool enableFooter;
 public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
@@ -151,6 +156,28 @@ public override async Task OnLoaded()
         await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
     }
 
+    async Task<string> AskWithRetry(OpenAiCompatible client, string prompt, long groupId, int retryCount = 1)
+    {
+        string result = "";
+        int attempts = 0;
+        while (true)
+        {
+            try
+            {
+                await foreach (var chunk in client.Ask(prompt, groupId, "", groupId))
+                {
+                    result = chunk;
+                }
+                return result;
+            }
+            catch when (attempts < retryCount)
+            {
+                attempts++;
+                Logger.Warn($"AI请求失败，第{attempts}次重试...");
+            }
+        }
+    }
+
     async Task LoadAndSendHistory(long groupId)
     {
         var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
@@ -250,11 +277,7 @@ public override async Task OnLoaded()
 
             // 第一步：生成目录 (TOC)
             string tocInstruction = $"请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 {sectionCount} 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";
-            string tocJson = "";
-            await foreach (var chunk in aiClient.Ask(tocInstruction, groupId, "", groupId))
-            {
-                tocJson = chunk;
-            }
+            string tocJson = await AskWithRetry(aiClient, tocInstruction, groupId);
 
             // 处理可能包含 ```json ... ``` 的情况
             if (tocJson.Contains("```json"))
@@ -289,11 +312,7 @@ public override async Task OnLoaded()
             {
                 Logger.Warn($"群 {groupId} 目录生成失败，尝试直接生成全文...");
                 const string fallbackInstruction = "请根据以上提供的群聊消息生成一份完整的、有趣的群刊，要求使用 Markdown 语法排版。";
-                string fullMarkdown = "";
-                await foreach (var chunk in aiClient.Ask(fallbackInstruction, groupId, "", groupId))
-                {
-                    fullMarkdown = chunk;
-                }
+                string fullMarkdown = await AskWithRetry(aiClient, fallbackInstruction, groupId);
                 if (!string.IsNullOrWhiteSpace(fullMarkdown))
                 {
                     byte[] fallbackImg = await aiMessage.browser.TakeMarkdownScreenshot(fullMarkdown);
@@ -314,23 +333,21 @@ public override async Task OnLoaded()
             List<(string type, string title, Task<string> task)> allTasks = new();
 
             // 1. 生成前言 (Header)
-            var headerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
-            allTasks.Add(("header", "前言", Task.Run(async () =>
+            if (enableHeader)
             {
-                string content = "";
-                try
+                var headerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
+                allTasks.Add(("header", "前言", Task.Run(async () =>
                 {
-                    await foreach (var chunk in headerAi.Ask("请为这份群刊编写一段引人入胜的前言。风格要幽默、戏剧性强，概括本次群聊的氛围。只需返回正文，不要包含标题、前言或总结。", groupId, "", groupId))
+                    try
                     {
-                        content = chunk;
+                        return await AskWithRetry(headerAi, "请为这份群刊编写一段引人入胜的前言。风格要幽默、戏剧性强，概括本次群聊的氛围。只需返回正文，不要包含任何其他信息，也不需要太长", groupId);
                     }
-                }
-                finally
-                {
-                    headerAi.Dispose();
-                }
-                return content;
-            })));
+                    finally
+                    {
+                        headerAi.Dispose();
+                    }
+                })));
+            }
 
             // 2. 生成正文章节 (Sections)
             int sectionIndex = 1;
@@ -342,41 +359,34 @@ public override async Task OnLoaded()
                 var sectionAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
                 allTasks.Add(("section", sectionTitle, Task.Run(async () =>
                 {
-                    string content = "";
                     try
                     {
-                        await foreach (var chunk in sectionAi.Ask(sectionInstruction, groupId, "", groupId))
-                        {
-                            content = chunk;
-                        }
+                        return await AskWithRetry(sectionAi, sectionInstruction, groupId);
                     }
                     finally
                     {
                         sectionAi.Dispose();
                     }
-                    return content;
                 })));
                 sectionIndex++;
             }
 
             // 3. 生成结语 (Footer)
-            var footerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
-            allTasks.Add(("footer", "结语", Task.Run(async () =>
+            if (enableFooter)
             {
-                string content = "";
-                try
+                var footerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
+                allTasks.Add(("footer", "结语", Task.Run(async () =>
                 {
-                    await foreach (var chunk in footerAi.Ask("请为这份群刊编写一段精彩的结语。总结本次群聊的精华，给读者留下深刻印象，并对未来群聊表示期待。只需返回正文，不要包含标题、前言或总结。", groupId, "", groupId))
+                    try
                     {
-                        content = chunk;
+                        return await AskWithRetry(footerAi, "请为这份群刊编写一段精彩的结语。总结本次群聊的精华，给读者留下深刻印象，并对未来群聊表示期待。只需返回正文，不要包含任何其他信息，也不需要太长", groupId);
                     }
-                }
-                finally
-                {
-                    footerAi.Dispose();
-                }
-                return content;
-            })));
+                    finally
+                    {
+                        footerAi.Dispose();
+                    }
+                })));
+            }
 
             // 等待所有任务完成
             await Task.WhenAll(allTasks.Select(t => t.task));
@@ -389,10 +399,13 @@ public override async Task OnLoaded()
             finalMarkdown.AppendLine($"# Highlights 第{issueNum}期\n");
 
             // 按顺序拼接
-            var headerTask = allTasks.First(t => t.type == "header");
-            finalMarkdown.AppendLine("## 前言");
-            finalMarkdown.AppendLine(headerTask.task.Result);
-            finalMarkdown.AppendLine("\n---\n");
+            if (enableHeader)
+            {
+                var headerTask = allTasks.First(t => t.type == "header");
+                finalMarkdown.AppendLine("## 前言");
+                finalMarkdown.AppendLine(headerTask.task.Result);
+                finalMarkdown.AppendLine("\n---\n");
+            }
 
             foreach (var item in allTasks.Where(t => t.type == "section"))
             {
@@ -401,10 +414,13 @@ public override async Task OnLoaded()
                 finalMarkdown.AppendLine("\n---\n");
             }
 
-            var footerTask = allTasks.First(t => t.type == "footer");
-            finalMarkdown.AppendLine("## 结语");
-            finalMarkdown.AppendLine(footerTask.task.Result);
-            finalMarkdown.AppendLine("\n---\n");
+            if (enableFooter)
+            {
+                var footerTask = allTasks.First(t => t.type == "footer");
+                finalMarkdown.AppendLine("## 结语");
+                finalMarkdown.AppendLine(footerTask.task.Result);
+                finalMarkdown.AppendLine("\n---\n");
+            }
 
             // 保存到历史记录
             string markdownContent = finalMarkdown.ToString();
