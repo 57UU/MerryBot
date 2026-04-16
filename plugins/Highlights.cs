@@ -109,7 +109,7 @@ public override async Task OnLoaded()
         }
         else if (IsStartsWith(chain, "/highlights view"))
         {
-            var parts = chain.ToString().Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var parts = ((TextData)chain[0]).Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 3 || !int.TryParse(parts[2], out int issueNum))
             {
                 _ = Actions.SendGroupMessage(groupId, "用法：/highlights view <期数>");
