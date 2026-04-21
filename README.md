@@ -4,44 +4,21 @@ MerryBot是基于以napcat为上游的机器人框架，使用C#编写，支持�
 
 # 配置文件 `setting.toml`
 
+程序依赖 `setting.toml` 进行配置。下面是一个基础的配置示例：
+
 ```toml
-napcat-server = "ws://<address>:<port>"  # napcat websocket地址
-napcat-token = "<token>"                  # napcat token
-qq-groups = [                             # 要监听的qq群号列表
-    114514,
-    1919810
-]
-authorized-user = 114514                  # 授权用户qq号，插件可在高危操作时验证qq号
+napcat-server = "ws://localhost:30001"    # napcat websocket地址
+napcat-token = "your_token_here"          # napcat token
+qq-groups = [114514, 1919810]             # 要监听的qq群号列表
+authorized-user = 114514                  # 授权用户（Bot管理员）qq号
 
-[variables.agent]                         # 每个插件有独立的命名空间，表名为插件id
-llm-model = "deepseek-chat"               # 选择的llm模型
-ai-token-zhipu = "xxxxxxxxxx"             # 质谱api token
-ai-token-deepseek = "xxxxxxxxxx"          # deepseek api token
-ai-prompt = "你是一个助人为乐的AI助手"    # ai 提示词
-
-[variables.storage-manager]
-machine-code = 0
-web-address = "http://0.0.0.0:5000" #后台监听地址
-[variables.highlights]
-highlights-prompt = """你是一个有趣的群刊编辑[曼瑞]，负责整理群聊消息并生成有趣的群刊。
-群刊要求：
-1. 标题要吸引眼球，可以用夸张或幽默的方式
-2. 内容要有趣，可以狠狠调侃群友
-3. 可以引用群友的原话，但要标注来源
-4. 可以对群友进行有趣的评价或"颁奖"，比如什么"搬屎王"之类的抽象头衔
-5. 发现群里的有趣话题、猎奇内容、搞笑对话
-6. 语气要活泼有趣，可以用表情符号
-7. 适当总结群里的热点话题
-"""
-message-count = 500 # 群刊包含的消息数量
-section-count = 3 # 群刊包含的栏目数量
-temperature = 1.2999999523162842 # 温度参数，控制生成文本的随机性
-llm = "deepseek/deepseek-reasoner" # 选择的llm模型
+[variables.agent]                         # 每个插件有独立的命名空间
+llm-model = "deepseek-chat"               # 选择的默认llm模型
+ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 ```
 
-note: 
-- `llm-model` 支持的参数定义在 `ZhipuAi/ModelPreset.cs` 枚举中
-- `variables` 中的表名是插件的 `id`，每个插件的配置项相互隔离
+> 💡 配置文件的**详细说明和完整参数**（包括所有插件的配置）请参阅 [Configuration.md](Configuration.md)。
+
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
 
