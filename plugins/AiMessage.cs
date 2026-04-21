@@ -118,7 +118,10 @@ public partial class AiMessage : Plugin
         }
         // turn to another bot
         //AddBotForHelp();
-        RegisterImagePainter();
+        if (interop.GetStructVariable<bool>("enable_image_painter") ?? false)
+        {
+            RegisterImagePainter();
+        }
         RegisterShellTool();
         RegisterMarkdownSender();
         RegisterContextTool();
