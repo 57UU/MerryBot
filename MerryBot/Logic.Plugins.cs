@@ -53,14 +53,17 @@ internal partial class Logic
                     pluginVars = new TomlTable();
                     ConfigManager.Instance.Variables[attribute.Id] = pluginVars;
                 }
-                var interop = new PluginInterop(
+                var pluginStorage = new PluginStorage(
+                            (s) => PluginStorageDatabase.StorePluginData(attribute.Id, s),
+                            () => PluginStorageDatabase.GetPluginData(attribute.Id),
+                            (groupId, s) => PluginStorageDatabase.StoreGroupPluginData(attribute.Id, groupId, s),
+                            groupId => PluginStorageDatabase.GetGroupPluginData(attribute.Id, groupId)
+                            );
+                        var interop = new PluginInterop(
                         new PluginLogger(attribute.Id),
                         QqGroupIDs,
                         () => plugins,
-                        new PluginStorage(
-                            (s) => PluginStorageDatabase.StorePluginData(attribute.Id, s),
-                            () => PluginStorageDatabase.GetPluginData(attribute.Id)
-                            ),
+                        pluginStorage,
                         botClient,
                         pluginVars,
                         Shutdown,

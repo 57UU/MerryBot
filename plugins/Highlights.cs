@@ -45,8 +45,13 @@ public class Highlights : Plugin
         aiClient.Logger=Logger;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
+
+        enableHeader = interop.GetStructVariableOrSetDefault("enable-header", false);
+        enableFooter = interop.GetStructVariableOrSetDefault("enable-footer", true);
     }
-    public override async Task OnLoaded()
+    private readonly bool enableHeader;
+    private readonly bool enableFooter;
+public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
         Logger.Info($"Highlights plugin loaded. Target count: {count}");
@@ -98,13 +103,29 @@ public class Highlights : Plugin
             _ = Interop.PluginStorage.Save(storageData);
             _ = Actions.SendGroupMessage(groupId, "群聊消息计数已重置。");
         }
+        else if (IsStartsWith(chain, "/highlights history"))
+        {
+            _ = LoadAndSendHistory(groupId);
+        }
+        else if (IsStartsWith(chain, "/highlights view"))
+        {
+            var parts = ((TextData)chain[0]).Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 3 || !int.TryParse(parts[2], out int issueNum))
+            {
+                _ = Actions.SendGroupMessage(groupId, "用法：/highlights view <期数>");
+                return;
+            }
+            _ = LoadAndViewIssue(groupId, issueNum);
+        }
         else if (IsStartsWith(chain, "/highlights"))
         {
             int current = storageData.GroupMessageCount.GetValueOrDefault(groupId, 0);
             _ = Actions.SendGroupMessage(groupId, $"群刊插件帮助（当前计数：{current}/{count}）：\n" +
                 "/highlights status - 查看当前计数\n" +
                 "/highlights flush - 立即生成群刊\n" +
-                "/highlights reset - 重置当前计数");
+                "/highlights reset - 重置当前计数\n" +
+                "/highlights history - 查看过往期数\n" +
+                "/highlights view <期数> - 查看指定期数群刊");
         }
     }
 
@@ -128,6 +149,64 @@ public class Highlights : Plugin
     {
         return groupLocks.TryGetValue(groupId, out var groupLock) && groupLock.CurrentCount == 0;
     }
+
+    async Task ViewIssue(long groupId, string content)
+    {
+        byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(content);
+        await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
+    }
+
+    async Task<string> AskWithRetry(OpenAiCompatible client, string prompt, long groupId, int retryCount = 1)
+    {
+        string result = "";
+        int attempts = 0;
+        while (true)
+        {
+            try
+            {
+                await foreach (var chunk in client.Ask(prompt, groupId, "", groupId))
+                {
+                    result = chunk;
+                }
+                return result;
+            }
+            catch when (attempts < retryCount)
+            {
+                attempts++;
+                Logger.Warn($"AI请求失败，第{attempts}次重试...");
+            }
+        }
+    }
+
+    async Task LoadAndSendHistory(long groupId)
+    {
+        var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+        if (history.Issues.Count == 0)
+        {
+            await Actions.SendGroupMessage(groupId, "暂无历史群刊记录。");
+        }
+        else
+        {
+            var latest = history.Issues.TakeLast(5).ToList();
+            var lines = latest.Select(i => $"第{i.IssueNumber}期 - {i.PublishTime:yyyy-MM-dd HH:mm}").Reverse();
+            await Actions.SendGroupMessage(groupId, $"过往群刊（共{history.Issues.Count}期）：\n{string.Join("\n", lines)}");
+        }
+    }
+
+    async Task LoadAndViewIssue(long groupId, int issueNum)
+    {
+        var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+        var issue = history.Issues.FirstOrDefault(i => i.IssueNumber == issueNum);
+        if (issue == null)
+        {
+            await Actions.SendGroupMessage(groupId, $"未找到第{issueNum}期群刊。");
+        }
+        else
+        {
+            await ViewIssue(groupId, issue.Content);
+        }
+    }
+
     async Task GenerateHighlights(long groupId, int currentCount = -1){
         var groupLock = groupLocks.GetOrAdd(groupId, _ => new SemaphoreSlim(1, 1));
         if (!groupLock.Wait(0))
@@ -198,11 +277,7 @@ public class Highlights : Plugin
 
             // 第一步：生成目录 (TOC)
             string tocInstruction = $"请基于以上提供的群聊消息生成一份有趣的群刊目录。目录应包含 {sectionCount} 个章节，每个章节简要描述要点。请以 JSON 数组格式返回，只返回 JSON 数组本身，例如：[\"章节1标题: 简要描述\", \"章节2标题: 简要描述\"]";
-            string tocJson = "";
-            await foreach (var chunk in aiClient.Ask(tocInstruction, groupId, "", groupId))
-            {
-                tocJson = chunk;
-            }
+            string tocJson = await AskWithRetry(aiClient, tocInstruction, groupId);
 
             // 处理可能包含 ```json ... ``` 的情况
             if (tocJson.Contains("```json"))
@@ -237,11 +312,7 @@ public class Highlights : Plugin
             {
                 Logger.Warn($"群 {groupId} 目录生成失败，尝试直接生成全文...");
                 const string fallbackInstruction = "请根据以上提供的群聊消息生成一份完整的、有趣的群刊，要求使用 Markdown 语法排版。";
-                string fullMarkdown = "";
-                await foreach (var chunk in aiClient.Ask(fallbackInstruction, groupId, "", groupId))
-                {
-                    fullMarkdown = chunk;
-                }
+                string fullMarkdown = await AskWithRetry(aiClient, fallbackInstruction, groupId);
                 if (!string.IsNullOrWhiteSpace(fullMarkdown))
                 {
                     byte[] fallbackImg = await aiMessage.browser.TakeMarkdownScreenshot(fullMarkdown);
@@ -262,23 +333,21 @@ public class Highlights : Plugin
             List<(string type, string title, Task<string> task)> allTasks = new();
 
             // 1. 生成前言 (Header)
-            var headerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
-            allTasks.Add(("header", "前言", Task.Run(async () =>
+            if (enableHeader)
             {
-                string content = "";
-                try
+                var headerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
+                allTasks.Add(("header", "前言", Task.Run(async () =>
                 {
-                    await foreach (var chunk in headerAi.Ask("请为这份群刊编写一段引人入胜的前言。风格要幽默、戏剧性强，概括本次群聊的氛围。只需返回正文，不要包含标题、前言或总结。", groupId, "", groupId))
+                    try
                     {
-                        content = chunk;
+                        return await AskWithRetry(headerAi, "请为这份群刊编写一段引人入胜的前言。风格要幽默、戏剧性强，概括本次群聊的氛围。只需返回正文，不要包含任何其他信息，也不需要太长", groupId);
                     }
-                }
-                finally
-                {
-                    headerAi.Dispose();
-                }
-                return content;
-            })));
+                    finally
+                    {
+                        headerAi.Dispose();
+                    }
+                })));
+            }
 
             // 2. 生成正文章节 (Sections)
             int sectionIndex = 1;
@@ -290,53 +359,53 @@ public class Highlights : Plugin
                 var sectionAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
                 allTasks.Add(("section", sectionTitle, Task.Run(async () =>
                 {
-                    string content = "";
                     try
                     {
-                        await foreach (var chunk in sectionAi.Ask(sectionInstruction, groupId, "", groupId))
-                        {
-                            content = chunk;
-                        }
+                        return await AskWithRetry(sectionAi, sectionInstruction, groupId);
                     }
                     finally
                     {
                         sectionAi.Dispose();
                     }
-                    return content;
                 })));
                 sectionIndex++;
             }
 
             // 3. 生成结语 (Footer)
-            var footerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
-            allTasks.Add(("footer", "结语", Task.Run(async () =>
+            if (enableFooter)
             {
-                string content = "";
-                try
+                var footerAi = CreateSectionAi(aiClient.ModelPreset, aiClient.SystemPromptContent, baseHistory, groupId);
+                allTasks.Add(("footer", "结语", Task.Run(async () =>
                 {
-                    await foreach (var chunk in footerAi.Ask("请为这份群刊编写一段精彩的结语。总结本次群聊的精华，给读者留下深刻印象，并对未来群聊表示期待。只需返回正文，不要包含标题、前言或总结。", groupId, "", groupId))
+                    try
                     {
-                        content = chunk;
+                        return await AskWithRetry(footerAi, "请为这份群刊编写一段精彩的结语。总结本次群聊的精华，给读者留下深刻印象，并对未来群聊表示期待。只需返回正文，不要包含任何其他信息，也不需要太长", groupId);
                     }
-                }
-                finally
-                {
-                    footerAi.Dispose();
-                }
-                return content;
-            })));
+                    finally
+                    {
+                        footerAi.Dispose();
+                    }
+                })));
+            }
 
             // 等待所有任务完成
             await Task.WhenAll(allTasks.Select(t => t.task));
 
+            // 获取当前期数
+            var history = await Interop.PluginStorage.LoadGroup<JournalHistory>(groupId) ?? new JournalHistory();
+            int issueNum = history.Issues.Count + 1;
+
             StringBuilder finalMarkdown = new();
-            finalMarkdown.AppendLine("# 群刊高亮内容\n");
-            
+            finalMarkdown.AppendLine($"# Highlights 第{issueNum}期\n");
+
             // 按顺序拼接
-            var headerTask = allTasks.First(t => t.type == "header");
-            finalMarkdown.AppendLine("## 前言");
-            finalMarkdown.AppendLine(headerTask.task.Result);
-            finalMarkdown.AppendLine("\n---\n");
+            if (enableHeader)
+            {
+                var headerTask = allTasks.First(t => t.type == "header");
+                finalMarkdown.AppendLine("## 前言");
+                finalMarkdown.AppendLine(headerTask.task.Result);
+                finalMarkdown.AppendLine("\n---\n");
+            }
 
             foreach (var item in allTasks.Where(t => t.type == "section"))
             {
@@ -345,14 +414,27 @@ public class Highlights : Plugin
                 finalMarkdown.AppendLine("\n---\n");
             }
 
-            var footerTask = allTasks.First(t => t.type == "footer");
-            finalMarkdown.AppendLine("## 结语");
-            finalMarkdown.AppendLine(footerTask.task.Result);
-            finalMarkdown.AppendLine("\n---\n");
+            if (enableFooter)
+            {
+                var footerTask = allTasks.First(t => t.type == "footer");
+                finalMarkdown.AppendLine("## 结语");
+                finalMarkdown.AppendLine(footerTask.task.Result);
+                finalMarkdown.AppendLine("\n---\n");
+            }
+
+            // 保存到历史记录
+            string markdownContent = finalMarkdown.ToString();
+            history.Issues.Add(new JournalIssue
+            {
+                IssueNumber = issueNum,
+                PublishTime = DateTime.Now,
+                Content = markdownContent
+            });
+            await Interop.PluginStorage.SaveGroup(groupId, history);
 
             // 第三步：最终渲染发送
-            Logger.Info($"群 {groupId} 群刊内容生成完毕，正在进行最终渲染...");
-            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(finalMarkdown.ToString());
+            Logger.Info($"群 {groupId} 群刊第{issueNum}期内容生成完毕，正在进行最终渲染...");
+            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(markdownContent);
             await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
         }
         catch (NotAvailableException)
@@ -387,4 +469,16 @@ public class Highlights : Plugin
 public class HighlightsData
 {
     public Dictionary<long, int> GroupMessageCount { get; set; } = new();
+}
+
+public class JournalIssue
+{
+    public int IssueNumber { get; set; }
+    public DateTime PublishTime { get; set; }
+    public string Content { get; set; } = "";
+}
+
+public class JournalHistory
+{
+    public List<JournalIssue> Issues { get; set; } = new();
 }
