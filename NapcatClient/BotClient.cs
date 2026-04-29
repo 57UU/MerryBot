@@ -37,6 +37,7 @@ public class BotClient
 
         WebSocketService = new WebSocketService(address, token, logger);
         WebSocketService.OnMessageReceived += WebSocket_OnMessage;
+        WebSocketService.OnMessageReceived += _ => WebSocketService.ResetMessageTime();
         WebSocketService.OnDisconnected += _ => WebSocketService.ResetMessageTime();
         WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
 
