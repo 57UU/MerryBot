@@ -26,7 +26,7 @@ public class LlmService : Plugin
             BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")
         });
 
-        var defaultModelTag = interop.GetVariableOrSetDefault("defaultllm", "deepseek/deepseek-chat");
+        var defaultModelTag = interop.GetVariableOrSetDefault("default-llm", ModelPreset.DeepSeekChat.ModelTag);
         DefaultModel = ModelPreset.GetModelByName(defaultModelTag) ?? ModelPreset.DeepSeekChat;
         Logger.Info($"LlmService started, default model: {DefaultModel.ModelTag}");
     }
