@@ -35,6 +35,12 @@ ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 ## AI机器人
 使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。另外，可以通过`extra-models.toml`添加自定义Openai-compatible模型。
 
+支持以下命令：
+- `#新对话` 或 `/new` - 开启新对话（清除上下文）
+- `/new 你好` - 开启新对话并发送首条消息
+- `/setllm [model-tag]` - 切换当前会话的 LLM 模型
+- `/getllm` - 查看当前使用的模型及可用模型列表
+
 内置了如下function call:
 - bing搜索
 - 网页浏览
