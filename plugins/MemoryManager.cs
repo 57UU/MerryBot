@@ -69,12 +69,18 @@ public class MemoryManager
 
     /// <summary>
     /// 读取 index.md 内容（特殊文件，始终注入 prompt，模型不可修改）
+    /// 如果文件不存在，自动创建一个空的 index.md
     /// </summary>
-    /// <returns>index.md 内容，不存在返回 null</returns>
-    public string? ReadIndex(long groupId)
+    /// <returns>index.md 内容，不存在时返回空字符串</returns>
+    public string ReadIndex(long groupId)
     {
         var filePath = Path.Combine(GetGroupDir(groupId), "index.md");
-        if (!File.Exists(filePath)) return null;
+        if (!File.Exists(filePath))
+        {
+            Directory.CreateDirectory(GetGroupDir(groupId));
+            File.WriteAllText(filePath, string.Empty);
+            return string.Empty;
+        }
         return File.ReadAllText(filePath);
     }
 
@@ -88,11 +94,11 @@ public class MemoryManager
         var indexContent = ReadIndex(groupId);
         var keys = ListKeys(groupId);
 
-        if (indexContent == null && keys.Length == 0) return null;
+        if (string.IsNullOrEmpty(indexContent) && keys.Length == 0) return null;
 
         var sb = new System.Text.StringBuilder();
 
-        if (indexContent != null)
+        if (!string.IsNullOrEmpty(indexContent))
         {
             sb.AppendLine(indexContent);
             sb.AppendLine();

@@ -333,7 +333,7 @@ public partial class AiMessage
         saveMemory.Function.Description = "保存或更新一条记忆（markdown文件）。用于记住用户偏好、重要信息等。";
         saveMemory.DynamicPrompt = "当你了解到用户偏好、重要事实或其他需要记住的信息时，使用save_memory保存。";
         saveMemory.DynamicPromptFunc = (groupId) => Task.FromResult(memoryManager.GetPromptInjection(groupId));
-        saveMemory.Function.Parameters.AddRequired("key", new ParameterProperty() { Type = "string", Description = "记忆的短标识，如 '用户偏好'、'项目进度'（不可使用 'index'）" });
+        saveMemory.Function.Parameters.AddRequired("key", new ParameterProperty() { Type = "string", Description = "记忆的短标识，如 '用户偏好'、'项目进度'" });
         saveMemory.Function.Parameters.AddRequired("content", new ParameterProperty() { Type = "string", Description = "要记住的内容（markdown格式）" });
         saveMemory.Function.FunctionCall = async (parameters) =>
         {
