@@ -146,7 +146,8 @@ public class ModelPreset
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
             "deepseek-v4-flash",
             "https://api.deepseek.com",
-            "deepseek"
+            "deepseek",
+            extraBody: Empty.Add("thinking", Empty.Add("type", "true"))
         );
     public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.SavedWith(model: "deepseek-v4-pro");
     public static readonly ModelPreset Qwen3Max = new(
