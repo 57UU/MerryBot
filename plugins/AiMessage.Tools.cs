@@ -84,27 +84,53 @@ public partial class AiMessage
 
     void RegisterShellTool()
     {
-        const string user = "merrybot";
+        var user = Interop.GetVariableOrSetDefault("shell-user", "merrybot");
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var terminal = Terminal.CreateUserTerminal(user);
-            int timeout = 10;
+            var shellManager = new ShellManager(user);
+
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}";
-            shell.Function.Description = $"执行Linux sh shell命令.(限时{timeout}s)";
+            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。";
+            shell.Function.Description = $"异步执行Linux sh shell命令，立即返回task_id，用shell_result查询结果。默认超时{ShellManager.DefaultTimeoutSeconds}s，长时间任务建议设置更大值。";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
+            shell.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultTimeoutSeconds}s" });
             shell.Function.FunctionCall = async (parameters) =>
             {
-                var result = await terminal.RunCommandAsync(
-                    parameters["command"].GetString()!,
-                    timeoutMs: timeout * 1000 + 500,
-                    useHardTimeout: true,
-                    waitMutex: true
-                    );
-                return PluginUtils.ConstraintLength(result, 3000);
+                var command = parameters["command"].GetString()!;
+                var timeout = parameters.TryGetValue("timeout", out var t) ? t.GetInt32() : ShellManager.DefaultTimeoutSeconds;
+                var taskId = shellManager.StartCommand(command, timeout);
+                return $"任务已启动，task_id: {taskId}。使用 shell_result 工具查询结果。";
             };
             aiClient.RegisterTool(shell);
+
+            var shellSync = new ToolDef();
+            shellSync.Function.Name = "shell_sync";
+            shellSync.DynamicPrompt = $"同步执行短时命令并直接返回结果。适合ls、cat等快速命令。";
+            shellSync.Function.Description = $"同步执行shell命令，等待并返回结果。适用于短时任务（默认{ShellManager.DefaultSyncTimeoutSeconds}s）。";
+            shellSync.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
+            shellSync.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultSyncTimeoutSeconds}s" });
+            shellSync.Function.FunctionCall = async (parameters) =>
+            {
+                var command = parameters["command"].GetString()!;
+                var timeout = parameters.TryGetValue("timeout", out var t) ? t.GetInt32() : ShellManager.DefaultSyncTimeoutSeconds;
+                var result = await shellManager.RunSync(command, timeout);
+                return PluginUtils.ConstraintLength(result, 3000);
+            };
+            aiClient.RegisterTool(shellSync);
+
+            var shellResult = new ToolDef();
+            shellResult.Function.Name = "shell_result";
+            shellResult.DynamicPrompt = "用于查询shell命令的执行结果，需要提供task_id。";
+            shellResult.Function.Description = "查询shell命令的执行结果。如果任务仍在执行中会返回提示。";
+            shellResult.Function.Parameters.AddRequired("task_id", new ParameterProperty() { Type = "string", Description = "shell命令返回的task_id" });
+            shellResult.Function.FunctionCall = async (parameters) =>
+            {
+                var taskId = parameters["task_id"].GetString()!;
+                var (completed, result) = await shellManager.QueryResult(taskId);
+                return completed ? PluginUtils.ConstraintLength(result, 3000) : result;
+            };
+            aiClient.RegisterTool(shellResult);
         }
         var fileSender = RegisterFileSenderTool((filePath) =>
         {
