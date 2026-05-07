@@ -207,8 +207,14 @@ public partial class OpenAiCompatible : IDisposable
             int excessCount = currentHistory.Count - SlidingWindowContext;
             if (excessCount > 0)
             {
-                // 保留第一个元素（系统提示），移除从索引1开始的excessCount个元素
-                currentHistory.RemoveRange(1, excessCount);
+                // 保留第一个元素（系统提示），找到安全的裁剪点
+                // 不能把 tool_calls 和 tool 消息拆开
+                int safeCutIndex = 1 + excessCount;
+                while (safeCutIndex < currentHistory.Count && currentHistory[safeCutIndex].Role == TOOL)
+                {
+                    safeCutIndex++;
+                }
+                currentHistory.RemoveRange(1, safeCutIndex - 1);
             }
             while (!done)
             {
