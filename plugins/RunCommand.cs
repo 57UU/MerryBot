@@ -9,18 +9,27 @@ public class RunCommand : Plugin
 {
     long authorized;
     bool useUnprivileged = true;
+    /// <summary>
+    /// shell-user 配置，供其他插件使用
+    /// </summary>
+    public string ShellUser { get; }
     public RunCommand(PluginInterop interop) : base(interop)
     {
-        //not Linux 
+        //not Linux
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             throw new PluginNotUsableException("shell plugin can only support Linux");
         }
-        terminal = Terminal.CreateUserTerminal();
+        ShellUser = interop.GetVariableOrSetDefault("shell-user", "merrybot");
+        terminal = Terminal.CreateUserTerminal(ShellUser);
         terminal.logger = Logger;
         authorized = interop.AuthorizedUser;
-        Logger.Info("shell plugin started");
+        Logger.Info($"shell plugin started, user: {ShellUser}");
     }
+    /// <summary>
+    /// 创建一个新的 ShellManager 实例（使用当前配置的 shell-user）
+    /// </summary>
+    public ShellManager CreateShellManager() => new(ShellUser);
     public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
     {
         long sender = data.sender.user_id;

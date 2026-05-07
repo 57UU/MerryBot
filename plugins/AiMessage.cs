@@ -32,9 +32,11 @@ public partial class AiMessage : Plugin
         var token = Interop.GetClassVariable<string>(token_key);
         return token;
     }
-    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, ExtraModels __) : base(interop)
+    private readonly RunCommand? runCommand;
+    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, ExtraModels __, RunCommand? runCommand = null) : base(interop)
     {
         this.storageManager = storageManager;
+        this.runCommand = runCommand;
         this.aiMessageStorage = storageManager.AiMessageStorage;
 
         // 初始化 Browser 实例

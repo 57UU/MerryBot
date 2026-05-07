@@ -1,5 +1,4 @@
 using NapcatClient.MessageType;
-using System.Runtime.InteropServices;
 using OpenAiClient;
 
 
@@ -84,10 +83,10 @@ public partial class AiMessage
 
     void RegisterShellTool()
     {
-        var user = Interop.GetVariableOrSetDefault("shell-user", "merrybot");
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        var user = runCommand?.ShellUser ?? "merrybot";
+        if (runCommand != null)
         {
-            var shellManager = new ShellManager(user);
+            var shellManager = runCommand.CreateShellManager();
             var skillsPrompt = BuildSkillsPrompt(user);
 
             var shell = new ToolDef();
