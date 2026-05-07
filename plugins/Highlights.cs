@@ -16,6 +16,7 @@ namespace BotPlugin;
 public class Highlights : Plugin
 {
     private readonly AiMessage aiMessage;
+    private readonly LlmService llmService;
     private OpenAiCompatible aiClient;
     private int count;
     private int sectionCount;
@@ -23,26 +24,19 @@ public class Highlights : Plugin
     private StorageManagerPlugin storageManager;
     private readonly ConcurrentDictionary<long, SemaphoreSlim> groupLocks = new();
 
-    public Highlights(PluginInterop interop, AiMessage aiMessage, StorageManagerPlugin storageManager) : base(interop)
+    public Highlights(PluginInterop interop, AiMessage aiMessage, LlmService llmService, StorageManagerPlugin storageManager) : base(interop)
     {
         this.aiMessage = aiMessage;
+        this.llmService = llmService;
         this.storageManager = storageManager;
         string prompt = interop.GetVariableOrSetDefault("highlights-prompt", "你是一个专业的群刊编辑，负责编辑群刊的高亮内容。");
         count = interop.GetIntVariableOrSetDefault("message-count", 500);
         sectionCount = Math.Max(1, interop.GetIntVariableOrSetDefault("section-count", 3));
         float temperature = interop.GetStructVariableOrSetDefault("temperature", 1.3f);
-        ModelPreset model=ModelPreset.DeepSeekReasoner;
-        var modelStr = interop.GetVariableOrSetDefault("llm",model.ModelTag);
-        if(!string.IsNullOrWhiteSpace(modelStr)){
-            var tmp =ModelPreset.GetModelByName(modelStr);
-            if(tmp!=null){
-                model=tmp;
-            }
-        }
-        //modify temperature
-        model=model.With(temperature: temperature);
+        ModelPreset model = llmService.ResolveModel(interop.GetVariableOrSetDefault("llm", ""));
+        model = model.With(temperature: temperature);
         int responseTimeout = interop.GetIntVariableOrSetDefault("response-timeout", 180);
-        aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false, browser: aiMessage.browser);
+        aiClient = new(llmService.GetToken(model)!, prompt, model, useBuildinTools: false, browser: llmService.Browser);
         aiClient.Logger=Logger;
         aiClient.ResponseTimeout=responseTimeout;
         aiClient.RegisterBingSearch();
@@ -134,11 +128,11 @@ public override async Task OnLoaded()
     private OpenAiCompatible CreateSectionAi(ModelPreset modelPreset, string systemPrompt, IEnumerable<OpenAiMessage> baseHistory, long groupId)
     {
         var sectionAiClient = new OpenAiCompatible(
-            aiMessage.GetToken(modelPreset)!,
+            llmService.GetToken(modelPreset)!,
             systemPrompt,
             modelPreset,
             useBuildinTools: false,
-            browser: aiMessage.browser
+            browser: llmService.Browser
         );
         sectionAiClient.Logger = Logger;
         sectionAiClient.RegisterBingSearch();
@@ -154,7 +148,7 @@ public override async Task OnLoaded()
 
     async Task ViewIssue(long groupId, string content)
     {
-        byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(content);
+        byte[] img = await llmService.Browser.TakeMarkdownScreenshot(content);
         await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
     }
 
@@ -317,7 +311,7 @@ public override async Task OnLoaded()
                 string fullMarkdown = await AskWithRetry(aiClient, fallbackInstruction, groupId);
                 if (!string.IsNullOrWhiteSpace(fullMarkdown))
                 {
-                    byte[] fallbackImg = await aiMessage.browser.TakeMarkdownScreenshot(fullMarkdown);
+                    byte[] fallbackImg = await llmService.Browser.TakeMarkdownScreenshot(fullMarkdown);
                     await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(fallbackImg)]);
                 }
                 return;
@@ -436,7 +430,7 @@ public override async Task OnLoaded()
 
             // 第三步：最终渲染发送
             Logger.Info($"群 {groupId} 群刊第{issueNum}期内容生成完毕，正在进行最终渲染...");
-            byte[] img = await aiMessage.browser.TakeMarkdownScreenshot(markdownContent);
+            byte[] img = await llmService.Browser.TakeMarkdownScreenshot(markdownContent);
             await Actions.SendGroupMessage(groupId, [ImageData.FromBinary(img)]);
         }
         catch (NotAvailableException)

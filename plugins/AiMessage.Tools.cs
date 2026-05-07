@@ -302,7 +302,7 @@ public partial class AiMessage
         mdSender.Function.FunctionCall = async (parameters) =>
         {
             var markdown = parameters["md"];
-            byte[] img=await browser.TakeMarkdownScreenshot(markdown.GetString()!);
+            byte[] img=await llmService.Browser.TakeMarkdownScreenshot(markdown.GetString()!);
             await Actions.SendGroupMessage(parameters.SpecialTag, [ImageData.FromBinary(img)]);
             return "done";
         };

@@ -1,4 +1,3 @@
-using BrowserService;
 using NapcatClient;
 using NapcatClient.MessageType;
 using OpenAiClient;
@@ -20,49 +19,27 @@ public partial class AiMessage : Plugin
         ModelPreset.Glm_4_1V_Flash_Free,
         ModelPreset.Glm_4V_Flash_Free
         ];
-    internal ModelPreset defaultModel;
-
-    /// <summary>
-    /// Browser 实例，由 AiMessage 插件管理生命周期，可注入到其他需要的组件
-    /// </summary>
-    public readonly Browser browser;
-
-    internal string? GetToken(ModelPreset modelPreset){
-        var token_key = modelPreset.ApiTokenDictKey;
-        var token = Interop.GetClassVariable<string>(token_key);
-        return token;
-    }
+    private readonly LlmService llmService;
     private readonly RunCommand? runCommand;
-    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, ExtraModels __, RunCommand? runCommand = null) : base(interop)
+    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, LlmService llmService, ExtraModels __, RunCommand? runCommand = null) : base(interop)
     {
         this.storageManager = storageManager;
+        this.llmService = llmService;
         this.runCommand = runCommand;
         this.aiMessageStorage = storageManager.AiMessageStorage;
 
-        // 初始化 Browser 实例
-        browser = new Browser(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
-        //display available model
-        //ModelPreset.DisplayAllModels();
-        var model = ModelPreset.GetModelByName(
-            interop.GetClassVariable<string>(LLM_KEY)
-            );
-        if (model == null)
-        {
-            Logger.Warn("please specific 'llm-model' in setting/variables;rollback to GLM4.5 Free");
-            model = ModelPreset.Glm_4_5_Free;
-        }
+        var model = llmService.ResolveModel(interop.GetClassVariable<string>(LLM_KEY));
         useFunctionCallToReply = interop.GetStructVariable<bool>("use_function_call_reply") ?? false;
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
-        var token_key = model.ApiTokenDictKey;
-        var token = GetToken(model)
-            ?? throw new PluginNotUsableException($"请在配置文件variable中设置{token_key}");
+        var token = llmService.GetToken(model)
+            ?? throw new PluginNotUsableException($"请在配置文件 LlmService 中设置{model.ApiTokenDictKey}");
         //image interpreter
         {
             var imageInterpreters = new List<ImageInterpreter>();
             foreach (var model_image in imageInterpreterModels)
             {
                 var token_key_image = model_image.ApiTokenDictKey;
-                var token_image = interop.GetClassVariable<string>(token_key_image);
+                var token_image = llmService.GetToken(model_image);
                 if (token_image == null)
                 {
                     Logger.Warn($"请在配置文件variable中设置{token_key_image}");
@@ -84,8 +61,7 @@ public partial class AiMessage : Plugin
             _ = aiMessageStorage.RecordAiMessageAsync(groupId, messageType, content);
         };
 
-        aiClient = new OpenAiCompatible(token, prompt, model, historyRecorder, browser: browser);
-        defaultModel = model;
+        aiClient = new OpenAiCompatible(token, prompt, model, historyRecorder, browser: llmService.Browser);
         aiClient.Logger = Logger;
 
         // webview summarizer
@@ -95,7 +71,7 @@ public partial class AiMessage : Plugin
             var summarizerModel = ModelPreset.GetModelByName(summarizerModelName);
             if (summarizerModel != null)
             {
-                var summarizerToken = GetToken(summarizerModel);
+                var summarizerToken = llmService.GetToken(summarizerModel);
                 if (summarizerToken != null)
                 {
                     aiClient.WebviewSummarizer = new WebviewSummarizer(summarizerToken, summarizerModel);
@@ -190,8 +166,7 @@ public partial class AiMessage : Plugin
             var model = ModelPreset.GetModelByName(tag);
             if (model != null)
             {
-                //access token
-                string? token = Interop.GetClassVariable<string>(model.ApiTokenDictKey);
+                string? token = llmService.GetToken(model);
                 if (token != null)
                 {
                     //valid
@@ -275,7 +250,6 @@ public partial class AiMessage : Plugin
     public override void Dispose()
     {
         aiClient.Dispose();
-        browser.Dispose();
         ImageInterpreterPool?.Dispose();
 
         GC.SuppressFinalize(this);
