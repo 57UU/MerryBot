@@ -29,6 +29,7 @@ ai-token-xianyv = "xxxxxxxxxx"            # 咸鱼 API 等其他自定义中转�
 ai-prompt = "你是一个助人为乐的AI助手"    # AI 的 System Prompt（人设提示词）
 use_function_call_reply = false           # 是否启用 Function Call 回复
 webview-summarizer-model = "xianyv/qwen3.5-plus" # 用于网页总结的特定模型
+shell-user = "merrybot"                   # Shell 终端使用的 Linux 用户名（默认 merrybot）
 ```
 > **注意**：`llm-model` 支持的参数定义在 `ZhipuAi/ModelPreset.cs` 枚举中，也可以通过 `extra-models.toml` 添加自定义模型。
 

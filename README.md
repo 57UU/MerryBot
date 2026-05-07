@@ -41,8 +41,31 @@ ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 - 查看时间
 - 发送语音
 - 查看微博热搜
-- linux bash终端
+- Linux Shell 终端（支持同步/异步两种模式）
 - Markdown 功能，使用Chrome将Md渲染为图片后发送（latex,mermaid supported）
+
+### Shell 工具
+
+提供三种 shell 调用方式：
+
+| 工具 | 模式 | 适用场景 | 默认超时 |
+|------|------|----------|----------|
+| `shell_sync` | 同步等待 | `ls`、`cat` 等快速命令 | 10s |
+| `shell` | 异步返回 task_id | 编译、安装等耗时任务 | 30s |
+| `shell_result` | 查询异步任务 | 拿 `shell` 的结果 | - |
+
+每个异步命令会创建独立的 Terminal 实例，支持真正并行执行。超时时间可通过 `timeout` 参数自定义。
+
+### Skills 技能系统
+
+在 shell 用户的家目录下创建 `skills/` 文件夹（如 `/home/merrybot/skills/`），放入技能文件，AI 会自动识别并在需要时读取执行：
+
+```bash
+# 示例：创建一个翻译技能
+echo "你是一个翻译助手，请将用户输入翻译为英文。" > ~/skills/翻译.txt
+```
+
+AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内容，再按指令执行。
 
 *: 网络访问相关funtion call 通过seleium操纵chrome(chromium)（需要提前安装）实现。如果chrome不存在于系统环境中，则需要在环境变量`CHROME_BIN`中指定chrome的路径。
 

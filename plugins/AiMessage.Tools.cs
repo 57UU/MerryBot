@@ -88,10 +88,11 @@ public partial class AiMessage
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var shellManager = new ShellManager(user);
+            var skillsPrompt = BuildSkillsPrompt(user);
 
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。";
+            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。{skillsPrompt}";
             shell.Function.Description = $"异步执行Linux sh shell命令，立即返回task_id，用shell_result查询结果。默认超时{ShellManager.DefaultTimeoutSeconds}s，长时间任务建议设置更大值。";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultTimeoutSeconds}s" });
@@ -143,6 +144,40 @@ public partial class AiMessage
         });
         fileSender.DynamicPrompt = "在发送文件时，禁止泄露其他用户目录或系统文件";
     }
+
+    private string BuildSkillsPrompt(string user)
+    {
+        var skillsDir = $"/home/{user}/skills";
+        if (!System.IO.Directory.Exists(skillsDir))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var entries = System.IO.Directory.GetFileSystemEntries(skillsDir, "*", System.IO.SearchOption.TopDirectoryOnly);
+                
+            if (entries.Length == 0) return string.Empty;
+
+            var skillInfos = entries.Select(e => 
+            {
+                var name = System.IO.Path.GetFileName(e);
+                if (string.IsNullOrEmpty(name)) return string.Empty;
+                var isDir = System.IO.File.GetAttributes(e).HasFlag(System.IO.FileAttributes.Directory);
+                return isDir ? $"[文件夹]{name}" : $"[文件]{name}";
+            }).Where(n => !string.IsNullOrEmpty(n));
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"~/skills/ 目录下有以下内容（第一层）：{string.Join("、", skillInfos)}。");
+            sb.AppendLine("当用户的需求匹配某个技能时，先用 shell_sync 读取技能文件内容（cat ~/skills/<文件名>），或者查看文件夹内容（ls ~/skills/<文件夹名>），按照其中的指令执行。");
+            return sb.ToString();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     private void RegisterBotForHelp()
     {
         try
