@@ -242,7 +242,8 @@ public partial class OpenAiCompatible : IDisposable
                         var assistantMessage = new AssistantMessage()
                         {
                             Role = msg.Role,
-                            Content = msg.Content
+                            Content = msg.Content,
+                            ReasoningContent = msg.ReasoningContent
                         };
                         foreach (var i in msg.ToolCalls)
                         {
@@ -287,10 +288,11 @@ public partial class OpenAiCompatible : IDisposable
                     }
                     else
                     {
-                        var currentMessage = new OpenAiMessage()
+                        var currentMessage = new AssistantMessage()
                         {
                             Role = msg.Role,
-                            Content = msg.Content
+                            Content = msg.Content,
+                            ReasoningContent = msg.ReasoningContent
                         };
                         currentHistory.Add(currentMessage);
                         recorder(currentMessage);
