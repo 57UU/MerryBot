@@ -144,11 +144,11 @@ public class ModelPreset
     public static readonly ModelPreset Glm_4_7 = Glm_4_5_Free.SavedWith("GLM-4.7", extraBody: Empty);
     public static readonly ModelPreset Glm_4_7_Flash_Free = Glm_4_5_Free.SavedWith("glm-4.7-flash");
     public static readonly ModelPreset DeepSeekChat = new ModelPreset(
-            "deepseek-chat",
+            "deepseek-v4-flash",
             "https://api.deepseek.com",
             "deepseek"
         );
-    public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.SavedWith(model: "deepseek-reasoner");
+    public static readonly ModelPreset DeepSeekReasoner = DeepSeekChat.SavedWith(model: "deepseek-v4-pro");
     public static readonly ModelPreset Qwen3Max = new(
             "qwen3-max",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
