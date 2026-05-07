@@ -67,6 +67,31 @@ echo "你是一个翻译助手，请将用户输入翻译为英文。" > ~/skill
 
 AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内容，再按指令执行。
 
+### Memory 记忆系统
+
+每个群有独立的持久化记忆空间，以 markdown 文件存储在 `{dataPath}/memory/{groupId}/` 目录下。
+
+| 工具 | 功能 |
+|------|------|
+| `save_memory` | 保存或更新一条记忆（写入 `{key}.md`） |
+| `recall_memory` | 查看当前群所有记忆的 key 列表 |
+| `query_memory` | 通过 key 读取具体内容 |
+| `delete_memory` | 删除指定记忆（删除文件） |
+
+每次对话开始时，AI 会在 system prompt 中看到所有记忆的 key 列表，按需调用 `query_memory` 查看具体内容。
+
+使用示例：
+```
+用户: 我喜欢用中文回复
+AI → save_memory("用户偏好", "喜欢用中文回复")
+→ 写入文件 data/memory/114514/用户偏好.md
+
+[下一次对话]
+system prompt: ## 已记忆的信息
+               - 用户偏好
+AI → query_memory("用户偏好") → "喜欢用中文回复"
+```
+
 *: 网络访问相关funtion call 通过seleium操纵chrome(chromium)（需要提前安装）实现。如果chrome不存在于系统环境中，则需要在环境变量`CHROME_BIN`中指定chrome的路径。
 
 如果是命令行环境，需要为chrome安装字体支持

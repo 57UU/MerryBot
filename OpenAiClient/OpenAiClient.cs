@@ -177,9 +177,12 @@ public partial class OpenAiCompatible : IDisposable
                     var usableTools = await GetUsableToolsByTag(specialTag);
                     foreach (var tool in usableTools)
                     {
-                        if (!string.IsNullOrWhiteSpace(tool.DynamicPrompt))
+                        string? dynamicContent = tool.DynamicPromptFunc != null
+                            ? await tool.DynamicPromptFunc(specialTag)
+                            : tool.DynamicPrompt;
+                        if (!string.IsNullOrWhiteSpace(dynamicContent))
                         {
-                            sb.AppendLine(tool.DynamicPrompt);
+                            sb.AppendLine(dynamicContent);
                         }
                     }
                     prompt = new()

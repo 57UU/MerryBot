@@ -321,4 +321,76 @@ public partial class AiMessage
         };
         aiClient.RegisterTool(contextTool);
     }
+
+    #region Memory
+
+    private void RegisterMemoryTools()
+    {
+        var memoryManager = new MemoryManager(Interop.PathPrefix);
+
+        // save_memory
+        var saveMemory = new ToolDef();
+        saveMemory.Function.Name = "save_memory";
+        saveMemory.Function.Description = "保存或更新一条记忆（markdown文件）。用于记住用户偏好、重要信息等。";
+        saveMemory.DynamicPrompt = "当你了解到用户偏好、重要事实或其他需要记住的信息时，使用save_memory保存。";
+        saveMemory.DynamicPromptFunc = (groupId) => Task.FromResult(memoryManager.GetPromptInjection(groupId));
+        saveMemory.Function.Parameters.AddRequired("key", new ParameterProperty() { Type = "string", Description = "记忆的短标识，如 '用户偏好'、'项目进度'（不可使用 'index'）" });
+        saveMemory.Function.Parameters.AddRequired("content", new ParameterProperty() { Type = "string", Description = "要记住的内容（markdown格式）" });
+        saveMemory.Function.FunctionCall = async (parameters) =>
+        {
+            var key = parameters["key"].GetString()!;
+            var content = parameters["content"].GetString()!;
+            try
+            {
+                await memoryManager.SaveAsync(parameters.SpecialTag, key, content);
+                return $"已记忆: {key}";
+            }
+            catch (ArgumentException e)
+            {
+                return $"保存失败: {e.Message}";
+            }
+        };
+        aiClient.RegisterTool(saveMemory);
+
+        // recall_memory
+        var recallMemory = new ToolDef();
+        recallMemory.Function.Name = "recall_memory";
+        recallMemory.Function.Description = "查看当前群所有记忆的 key 列表。用 query_memory(key) 查看具体内容。";
+        recallMemory.DynamicPrompt = "如果你想了解之前记住的信息，先用recall_memory查看key列表，再用query_memory查看具体内容。";
+        recallMemory.Function.FunctionCall = async (parameters) =>
+        {
+            var keys = memoryManager.ListKeys(parameters.SpecialTag);
+            return keys.Length > 0 ? string.Join("\n", keys) : "当前没有记忆。";
+        };
+        aiClient.RegisterTool(recallMemory);
+
+        // query_memory
+        var queryMemory = new ToolDef();
+        queryMemory.Function.Name = "query_memory";
+        queryMemory.Function.Description = "通过 key 查询一条记忆的具体内容";
+        queryMemory.Function.Parameters.AddRequired("key", new ParameterProperty() { Type = "string", Description = "要查询的记忆 key" });
+        queryMemory.Function.FunctionCall = async (parameters) =>
+        {
+            var key = parameters["key"].GetString()!;
+            var content = await memoryManager.ReadAsync(parameters.SpecialTag, key);
+            return content ?? $"未找到记忆: {key}";
+        };
+        aiClient.RegisterTool(queryMemory);
+
+        // delete_memory
+        var deleteMemory = new ToolDef();
+        deleteMemory.Function.Name = "delete_memory";
+        deleteMemory.Function.Description = "删除一条记忆";
+        deleteMemory.Function.Parameters.AddRequired("key", new ParameterProperty() { Type = "string", Description = "要删除的记忆标识" });
+        deleteMemory.Function.FunctionCall = async (parameters) =>
+        {
+            var key = parameters["key"].GetString()!;
+            return memoryManager.Delete(parameters.SpecialTag, key)
+                ? $"已删除记忆: {key}"
+                : $"未找到记忆: {key}";
+        };
+        aiClient.RegisterTool(deleteMemory);
+    }
+
+    #endregion
 }

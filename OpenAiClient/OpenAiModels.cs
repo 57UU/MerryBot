@@ -72,6 +72,11 @@ public class ToolDef
     public IsUseable isUseable = async (tag) => true;
     [JsonIgnore]
     public string? DynamicPrompt { get; set; }
+    /// <summary>
+    /// 动态 Prompt 回调，参数为 specialTag(groupId)，返回要注入的内容。优先级高于 DynamicPrompt。
+    /// </summary>
+    [JsonIgnore]
+    public Func<long, Task<string?>>? DynamicPromptFunc { get; set; }
     [JsonIgnore]
     public bool HideOutputOnInvoking = false;
     [JsonIgnore]

@@ -125,6 +125,7 @@ public partial class AiMessage : Plugin
         RegisterShellTool();
         RegisterMarkdownSender();
         RegisterContextTool();
+        RegisterMemoryTools();
     }
 
 
