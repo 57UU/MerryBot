@@ -91,8 +91,8 @@ public partial class AiMessage
 
             var shell = new ToolDef();
             shell.Function.Name = "shell";
-            shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。{skillsPrompt}";
-            shell.Function.Description = $"异步执行Linux sh shell命令，立即返回task_id，用shell_result查询结果。默认超时{ShellManager.DefaultTimeoutSeconds}s，长时间任务建议设置更大值。";
+            //shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。{skillsPrompt}";
+            shell.Function.Description = $"异步执行Linux sh shell命令，立即返回task_id，用shell_result查询结果。长时间任务建议设置更大值。";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultTimeoutSeconds}s" });
             shell.Function.FunctionCall = async (parameters) =>
@@ -106,7 +106,7 @@ public partial class AiMessage
 
             var shellSync = new ToolDef();
             shellSync.Function.Name = "shell_sync";
-            shellSync.DynamicPrompt = $"同步执行短时命令并直接返回结果。适合ls、cat等快速命令。";
+            //shellSync.DynamicPrompt = $"同步执行短时命令并直接返回结果。适合ls、cat等快速命令。";
             shellSync.Function.Description = $"同步执行shell命令，等待并返回结果。适用于短时任务（默认{ShellManager.DefaultSyncTimeoutSeconds}s）。";
             shellSync.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shellSync.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultSyncTimeoutSeconds}s" });
@@ -167,7 +167,7 @@ public partial class AiMessage
             }).Where(n => !string.IsNullOrEmpty(n));
 
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"~/skills/ 目录下有以下内容（第一层）：{string.Join("、", skillInfos)}。");
+            sb.AppendLine($"~/skills/ 目录下有以下内容：{string.Join("、", skillInfos)}。");
             sb.AppendLine("当用户的需求匹配某个技能时，先用 shell_sync 读取技能文件内容（cat ~/skills/<文件名>），或者查看文件夹内容（ls ~/skills/<文件夹名>），按照其中的指令执行。");
             return sb.ToString();
         }
@@ -311,11 +311,15 @@ public partial class AiMessage
     private void RegisterContextTool(){
         var contextTool=new ToolDef();
         contextTool.Function.Name = "get_context";
-        contextTool.Function.Description = "获取上下文";
+        contextTool.Function.Description = "获取上下文消息";
         contextTool.DynamicPrompt="如果你不能理解用户的问题，请使用工具获取上下文。";
+        contextTool.Function.Parameters.AddNonRequired("start", new ParameterProperty() { Type = "integer", Description = "从倒数第几条开始，默认1（最近一条）" });
+        contextTool.Function.Parameters.AddNonRequired("length", new ParameterProperty() { Type = "integer", Description = "获取几条消息，默认10" });
         contextTool.Function.FunctionCall = async (parameters) =>
         {
-            string context = await storageManager.GetContext(parameters.SpecialTag);
+            int start = parameters.TryGetValue("start", out var s) ? s.GetInt32() : 1;
+            int length = parameters.TryGetValue("length", out var l) ? l.GetInt32() : 5;
+            string context = await storageManager.GetContext(parameters.SpecialTag, start, length);
             return context;
         };
         aiClient.RegisterTool(contextTool);

@@ -46,11 +46,11 @@ public class StorageManagerPlugin : Plugin
 
     }
 
-    public async Task<string> GetContext(long groupId, int count = 5)
+    public async Task<string> GetContext(long groupId, int start = 1, int length = 5)
     {
-        var startTime = DateTime.UtcNow.AddMinutes(-30);
-        var endTime = DateTime.UtcNow;
-        var messages = await historyRecorder.GetMessagesByGroupAndTimeRangeAsync(groupId, startTime, endTime, count);
+        if (start < 1) start = 1;
+        if (length < 1) length = 1;
+        var messages = await historyRecorder.GetMessagesByGroupIdAsync(groupId, start, length);
         messages.Reverse();
         var context = string.Join("\n", messages.Select(m =>
         {
