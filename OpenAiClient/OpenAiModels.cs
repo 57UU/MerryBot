@@ -17,7 +17,8 @@ public class OpenAiMessage
 public class AssistantMessage : OpenAiMessage
 {
     [JsonPropertyName("tool_calls")]
-    public List<ToolCallSubMessage> ToolCalls { get; set; } = new();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ToolCallSubMessage>? ToolCalls { get; set; }
 
     [JsonPropertyName("reasoning_content")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

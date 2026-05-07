@@ -243,7 +243,8 @@ public partial class OpenAiCompatible : IDisposable
                         {
                             Role = msg.Role,
                             Content = msg.Content,
-                            ReasoningContent = msg.ReasoningContent
+                            ReasoningContent = msg.ReasoningContent,
+                            ToolCalls = new()
                         };
                         foreach (var i in msg.ToolCalls)
                         {

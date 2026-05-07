@@ -4,7 +4,7 @@ using OpenAiClient;
 
 namespace BotPlugin;
 
-[PluginTag("agent", "AI机器人", "键入 #新对话 来开启新对话;/setllm 设置模型;/getllm 查看模型", isIgnore: false)]
+[PluginTag("agent", "AI机器人", "键入 #新对话 或 /new 来开启新对话;/setllm 设置模型;/getllm 查看模型", isIgnore: false)]
 public partial class AiMessage : Plugin
 {
     bool useFunctionCallToReply;
@@ -119,7 +119,7 @@ public partial class AiMessage : Plugin
         var l = message.Split(" ");
         foreach (var item in l)
         {
-            if (item == "#新对话")
+            if (item == "#新对话" || item == "/new")
             {
                 return true;
             }
@@ -217,6 +217,16 @@ public partial class AiMessage : Plugin
             {
                 _ = Actions.ReplyGroupMessage(groupId, messageId, $"current llm: {aiClient.ModelPreset.model}\n{string.Join(", ", ModelPreset.AllModelsDict.Keys)}");
             }
+            else if (text.StartsWith("/new"))
+            {
+                text = text.Replace("/new", "").Trim();
+                Logger.Info("[New] " + text);
+                aiClient.Reset(groupId);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    _ = HandleMessage(groupId, text, messageId, nickname, data.sender.user_id);
+                }
+            }
             return;
         }
         if (!string.IsNullOrWhiteSpace(text))
@@ -224,7 +234,7 @@ public partial class AiMessage : Plugin
 
             if (IsContainsNew(text))
             {
-                text = text.Replace("#新对话", "");
+                text = text.Replace("#新对话", "").Replace("/new", "").Trim();
                 Logger.Info("[New] " + text);
                 aiClient.Reset(groupId);
             }
