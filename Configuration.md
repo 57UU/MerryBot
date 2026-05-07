@@ -49,6 +49,7 @@ message-count = 500                       # 触发生成群刊的消息数量阈
 section-count = 3                         # 群刊包含的栏目/章节数量
 llm = "deepseek/deepseek-reasoner"        # 生成群刊使用的专属 LLM 模型
 temperature = 1.3                         # 温度参数，控制生成文本的随机性和创造性
+response-timeout = 120                    # AI 响应超时时间（秒），默认 120 秒
 enable-header = false                     # 是否启用群刊页眉
 enable-footer = true                      # 是否启用群刊页脚
 highlights-prompt = """你是一个有趣的群刊编辑...""" # 群刊 AI 生成的系统提示词（支持多行文本）

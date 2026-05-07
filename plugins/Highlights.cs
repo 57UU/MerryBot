@@ -41,8 +41,10 @@ public class Highlights : Plugin
         }
         //modify temperature
         model=model.With(temperature: temperature);
+        int responseTimeout = interop.GetIntVariableOrSetDefault("response-timeout", 180);
         aiClient = new(aiMessage.GetToken(model)!, prompt, model, useBuildinTools: false, browser: aiMessage.browser);
         aiClient.Logger=Logger;
+        aiClient.ResponseTimeout=responseTimeout;
         aiClient.RegisterBingSearch();
         aiClient.RegisterBrowser();
 
