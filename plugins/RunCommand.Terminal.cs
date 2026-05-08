@@ -23,7 +23,7 @@ public partial class Terminal : IDisposable
     readonly string shell, arguments;
     public static Terminal CreateUserTerminal(string user = "merrybot")
     {
-        return new Terminal("sudo", $"-u {user} /bin/sh");
+        return new Terminal("sudo", $"-u {user} /bin/bash");
     }
     public Terminal(string shell, string arguments)
     {
