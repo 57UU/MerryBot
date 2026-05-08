@@ -2,97 +2,88 @@
 
 restart_code=101
 reload_code=102
+prebuilt_code=103
 
-case $(uname -m) in
-    x86_64)
-        runtime="linux-x64"
-        ;;
-    aarch64|arm64)
-        runtime="linux-arm64"
-        ;;
-    *)
-        echo "Unknown architecture: $(uname -m), defaulting to linux-arm64"
-        runtime="linux-arm64"
-        ;;
-esac
-# 获取当前脚本所在目录
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+slot_dir="$project_dir/build"
+active_slot_file="$slot_dir/active_slot"
 
-# 主循环
+# Read active slot (default A)
+read_active_slot() {
+    if [ -f "$active_slot_file" ]; then
+        cat "$active_slot_file" | tr -d '[:space:]'
+    else
+        echo "A"
+    fi
+}
+
+# Get slot path
+slot_path() {
+    echo "$slot_dir/slot_$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+}
+
+cd "$project_dir"
+
+# Bootstrap: build active slot if it doesn't exist
+active=$(read_active_slot)
+active_path=$(slot_path "$active")
+
+if [ ! -f "$active_path/MerryBot" ]; then
+    echo "[launch] First boot: building slot $active..."
+    mkdir -p "$slot_dir"
+    if ! bash build.sh "$active_path"; then
+        echo "[launch] Initial build failed, exiting"
+        exit 1
+    fi
+    echo -n "$active" > "$active_slot_file"
+fi
+
+# Main loop
 while true; do
-    # 记录编译开始时间
-    start_time=$(date +%s)
-    
-    # 先发布 HistoryWebFrontend 以生成 wwwroot 资源
-    echo "开始发布 HistoryWebFrontend..."
-    if ! dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
-        -r $runtime \
-        --self-contained false \
-        -p:PublishTrimmed=false \
-        -p:PublishSingleFile=false \
-        -p:EnableCompressionInSingleFile=false \
-        -p:PublishReadyToRun=false \
-        -p:PublishAot=false \
-        -p:DebugType=None \
-        -p:DebugSymbols=false; then
-        echo "dotnet publish HistoryWebFrontend 失败，退出脚本"
-        exit 1
-    fi
+    active=$(read_active_slot)
+    active_path=$(slot_path "$active")
 
-    # 发布优化版本
-    echo "开始发布MerryBot优化版本..."
-    if ! dotnet publish MerryBot/MerryBot.csproj -c Release \
-        -r $runtime \
-        --self-contained false \
-        -p:PublishTrimmed=false \
-        -p:TrimMode=link \
-        -p:PublishSingleFile=false \
-        -p:EnableCompressionInSingleFile=false \
-        -p:PublishReadyToRun=true \
-        -p:PublishReadyToRunShowWarnings=true \
-        -p:PublishAot=false \
-        -p:DebugType=None \
-        -p:DebugSymbols=true; then
-        echo "dotnet publish 失败，退出脚本"
-        exit 1
-    fi
-
-    # 复制 wwwroot 资源到 MerryBot 的 publish 目录
-    echo "复制 wwwroot 资源..."
-    if ! cp -r HistoryWebFrontend/bin/Release/net10.0/$runtime/publish/wwwroot MerryBot/bin/Release/net10.0/$runtime/publish/; then
-        echo "复制 wwwroot 失败，退出脚本"
-        exit 1
-    fi
-    
-    # 计算编译总时间
-    end_time=$(date +%s)
-    total_time=$((end_time - start_time))
-    minutes=$((total_time / 60))
-    seconds=$((total_time % 60))
-    echo "========================================"
-    echo "编译完成！总耗时: ${minutes}分${seconds}秒"
-    echo "========================================"
-
-    # 运行应用程序
-    echo "启动应用程序..."
-    cd MerryBot/bin/Release/net10.0/$runtime/publish
-    
-    while true; do
-        ./MerryBot
-        exit_code=$?
-
-        if [ $exit_code -eq $restart_code ]; then
-            echo "程序退出码为 $exit_code，等于重启码，准备重新编译并启动..."
-            cd "$project_dir"
-            sleep 1
-            break
-        elif [ $exit_code -eq $reload_code ]; then
-            echo "程序退出码为 $exit_code，等于重载码，直接重启（不重新编译）..."
-            sleep 1
-            continue
-        else
-            echo "程序退出码为 $exit_code，退出脚本"
-            exit 0
+    if [ ! -f "$active_path/MerryBot" ]; then
+        echo "[launch] Slot $active not built, building..."
+        if ! bash build.sh "$active_path"; then
+            echo "[launch] Build failed for slot $active, exiting"
+            exit 1
         fi
-    done
+    fi
+
+    echo "[launch] Starting from slot $active ($active_path)..."
+    cd "$active_path"
+
+    ./MerryBot
+    exit_code=$?
+
+    cd "$project_dir"
+
+    if [ $exit_code -eq $prebuilt_code ]; then
+        # PREBUILT: C# app already built to inactive slot and updated active_slot file
+        new_active=$(read_active_slot)
+        echo "[launch] Prebuilt detected, switching to slot $new_active..."
+        sleep 1
+        continue
+
+    elif [ $exit_code -eq $restart_code ]; then
+        # RESTART: recompile current slot and restart
+        echo "[launch] Restart requested, rebuilding slot $active..."
+        sleep 1
+        if ! bash build.sh "$active_path"; then
+            echo "[launch] Rebuild failed for slot $active, exiting"
+            exit 1
+        fi
+        continue
+
+    elif [ $exit_code -eq $reload_code ]; then
+        # RELOAD: restart without recompiling
+        echo "[launch] Reload requested, restarting..."
+        sleep 1
+        continue
+
+    else
+        echo "[launch] Exit code $exit_code, exiting"
+        exit 0
+    fi
 done

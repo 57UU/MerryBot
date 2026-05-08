@@ -179,12 +179,75 @@ public partial class ViewVersion : Plugin
         var (diff, commitMessages) = await GitFetchMerge();
         diff = _redundantRegex().Replace(diff, "").Replace("()", "").Trim();
 
-        await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\nrestarting...");
+        // No changes — skip update
+        if (commitMessages == "当前代码已经是最新版本")
+        {
+            await Actions.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
+            return;
+        }
+
         //store the update info
         data.UpdateByGroupId = groupId;
         await Interop.PluginStorage.Save(data);
-        Interop.Shutdown(CommonLib.ExitCode.RESTART);
 
+        // Determine project root (2 levels up from build/slot_x/)
+        string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string projectRoot = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
+        string buildDir = Path.Combine(projectRoot, "build");
+        string activeSlotFile = Path.Combine(buildDir, "active_slot");
+
+        // Read current active slot
+        string activeSlot = "A";
+        if (File.Exists(activeSlotFile))
+        {
+            activeSlot = (await File.ReadAllTextAsync(activeSlotFile)).Trim();
+        }
+
+        // Target = opposite slot
+        string targetSlot = activeSlot == "A" ? "B" : "A";
+        string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
+
+        await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
+
+        // Run build.sh in background
+        string buildScript = Path.Combine(projectRoot, "build.sh");
+        var psi = new ProcessStartInfo
+        {
+            FileName = "bash",
+            Arguments = $"\"{buildScript}\" \"{targetDir}\"",
+            WorkingDirectory = projectRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        try
+        {
+            using var buildProcess = Process.Start(psi)!;
+            string stdout = await buildProcess.StandardOutput.ReadToEndAsync();
+            string stderr = await buildProcess.StandardError.ReadToEndAsync();
+            await buildProcess.WaitForExitAsync();
+
+            if (buildProcess.ExitCode != 0)
+            {
+                string errMsg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                Logger.Error($"Build failed: {errMsg}");
+                await Actions.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                return;
+            }
+
+            // Build succeeded — update active slot and exit
+            await File.WriteAllTextAsync(activeSlotFile, targetSlot);
+            Logger.Info($"Build succeeded, switching to slot {targetSlot}");
+            await Actions.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            Interop.Shutdown(CommonLib.ExitCode.PREBUILT);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Build process error: {ex.Message}");
+            await Actions.SendGroupMessage(groupId, $"编译过程出错: {ex.Message}\n当前版本继续运行");
+        }
     }
     private async Task Reload(long groupId)
     {
