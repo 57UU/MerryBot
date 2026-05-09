@@ -30,9 +30,10 @@ cd "$project_dir"
 
 start_time=$(date +%s)
 
-# Restore all projects for target runtime
+# Restore all projects (per-project to avoid sln platform parsing issue with .NET 10)
 echo "[build] Restoring for $runtime..."
-dotnet restore -r $runtime
+dotnet restore HistoryWebFrontend/HistoryWebFrontend.csproj -r $runtime
+dotnet restore MerryBot/MerryBot.csproj -r $runtime
 
 # Publish HistoryWebFrontend to generate wwwroot
 echo "[build] Publishing HistoryWebFrontend..."
@@ -46,7 +47,8 @@ dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
     -p:PublishReadyToRun=false \
     -p:PublishAot=false \
     -p:DebugType=None \
-    -p:DebugSymbols=false
+    -p:DebugSymbols=false \
+    -p:AppendRuntimeIdentifierToOutputPath=false
 
 # Publish MerryBot with ReadyToRun
 echo "[build] Publishing MerryBot..."
@@ -61,14 +63,15 @@ dotnet publish MerryBot/MerryBot.csproj -c Release \
     -p:PublishReadyToRun=false \
     -p:PublishAot=false \
     -p:DebugType=None \
-    -p:DebugSymbols=true
+    -p:DebugSymbols=true \
+    -p:AppendRuntimeIdentifierToOutputPath=false
 
 # Copy publish output to target slot directory
 echo "[build] Copying to $target_dir..."
 rm -rf "$target_dir"
 mkdir -p "$target_dir"
-cp -r MerryBot/bin/Release/net10.0/$runtime/publish/* "$target_dir/"
-cp -r HistoryWebFrontend/bin/Release/net10.0/$runtime/publish/wwwroot "$target_dir/"
+cp -r MerryBot/bin/linux/Release/net10.0/$runtime/publish/* "$target_dir/"
+cp -r HistoryWebFrontend/bin/linux/Release/net10.0/$runtime/publish/wwwroot "$target_dir/"
 
 end_time=$(date +%s)
 total_time=$((end_time - start_time))
