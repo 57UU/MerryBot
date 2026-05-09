@@ -58,8 +58,7 @@ dotnet publish MerryBot/MerryBot.csproj -c Release \
     -p:TrimMode=link \
     -p:PublishSingleFile=false \
     -p:EnableCompressionInSingleFile=false \
-    -p:PublishReadyToRun=true \
-    -p:PublishReadyToRunShowWarnings=true \
+    -p:PublishReadyToRun=false \
     -p:PublishAot=false \
     -p:DebugType=None \
     -p:DebugSymbols=true
