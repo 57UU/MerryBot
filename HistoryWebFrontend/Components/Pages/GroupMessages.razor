@@ -8,7 +8,6 @@
 
 <PageTitle>群聊消息</PageTitle>
 
-<script src="/js/BenzAMRRecorder.min.js"></script>
 <script>
 	window.amrPlayers = {};
 	window.playAmrAudio = function (url) {
@@ -97,18 +96,8 @@
 				<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" @onscroll="HandleScroll"
 					id="group-message-container">
 					@if (SelectedGroupId > 0)
-
 					{
-						@if (IsLoading && CurrentPage == 1)
-
-						{
-							<div class="text-center-custom text-muted-custom py-2-custom">
-								加载中...
-							</div>
-						}
-
 						@if (GroupMessageList.Any())
-
 						{
 							<div class="message-container-custom" id="group-message-list">
 								@if (IsLoadingMore)
@@ -157,8 +146,7 @@
 							</div>
 						}
 
-						else if (!IsLoading)
-
+						else
 						{
 							<div class="text-center-custom text-muted-custom mt-5-custom">
 								暂无消息
@@ -190,31 +178,6 @@
 </div>
 
 <script>
-	let scrollTimeout = null;
-
-	function scrollToElementBottom(elementId) {
-		const element = document.getElementById(elementId);
-		if (element) {
-			element.scrollTop = element.scrollHeight;
-		}
-	}
-
-	function checkScrollPosition(elementId, dotNetRef) {
-		const element = document.getElementById(elementId);
-		if (element && element.scrollTop <= 50) {
-			dotNetRef.invokeMethodAsync('LoadMoreMessages');
-		}
-	}
-
-	function handleScrollWithDebounce(elementId, dotNetRef) {
-		if (scrollTimeout) {
-			clearTimeout(scrollTimeout);
-		}
-		scrollTimeout = setTimeout(() => {
-			checkScrollPosition(elementId, dotNetRef);
-		}, 200);
-	}
-
 	function openForwardModal(forwardId) {
 		const modal = document.getElementById('forward-modal');
 		const iframe = document.getElementById('forward-iframe');
@@ -240,8 +203,6 @@
 	private long SelectedGroupId { get; set; } = 0;
 
 	private List<GroupMessage> GroupMessageList { get; set; } = new List<GroupMessage>();
-
-	private bool IsLoading { get; set; } = false;
 
 	private bool IsLoadingMore { get; set; } = false;
 
@@ -364,177 +325,76 @@
 
 
 	private async Task LoadGroupMessages(long groupId, bool shouldScroll = true)
-
 	{
-
 		CurrentPage = 1;
-
 		HasMoreMessages = true;
 
-		IsLoading = true;
-
 		try
-
 		{
-
-			GroupMessageList = await HistoryRecorder.GetMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
-
-			if (shouldScroll)
-
-			{
-
-				await Task.Delay(100);
-
-				await ScrollToBottom();
-
-			}
-
+			var messages = await HistoryRecorder.GetMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
+			GroupMessageList = messages;
 		}
-
 		catch (Exception ex)
-
 		{
-
 			Console.WriteLine($"Error loading group messages: {ex.Message}");
-
 			GroupMessageList = new List<GroupMessage>();
-
 		}
 
-		finally
-
+		if (shouldScroll)
 		{
-
-			IsLoading = false;
-
+			await Task.Delay(50);
+			await ScrollToBottom();
 		}
-
 	}
 
 
 
 	private async Task LoadMoreGroupMessages()
-
 	{
-
 		if (IsLoadingMore || !HasMoreMessages)
-
 			return;
 
-
-
 		IsLoadingMore = true;
-
 		CurrentPage++;
 
-
-
 		try
-
 		{
-
 			var moreMessages = await HistoryRecorder.GetMessagesByGroupIdAsync(SelectedGroupId, CurrentPage, PageSize);
-
 			if (moreMessages.Any())
-
 			{
-
-				var oldScrollHeight = await GetScrollHeight();
-
-				var oldScrollTop = await GetScrollTop();
-
-
-
+				var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", "group-message-container");
 				GroupMessageList.AddRange(moreMessages);
-
-
-
 				await Task.Delay(50);
-
-
-
-				var newScrollHeight = await GetScrollHeight();
-
-				var scrollPosition = oldScrollTop + (newScrollHeight - oldScrollHeight);
-
-
-
-				await SetScrollTop(scrollPosition);
-
+				var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", "group-message-container");
+				await JSRuntime.InvokeVoidAsync("setScrollTop", "group-message-container", before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
 			}
-
 			else
-
 			{
-
 				HasMoreMessages = false;
-
 			}
-
 		}
-
 		catch (Exception ex)
-
 		{
-
 			Console.WriteLine($"Error loading more group messages: {ex.Message}");
-
 		}
-
 		finally
-
 		{
-
 			IsLoadingMore = false;
-
 		}
-
 	}
 
 
 
-	private async Task<double> GetScrollHeight()
-
-	{
-
-		return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('group-message-container').scrollHeight");
-
-	}
-
-
-
-	private async Task<double> GetScrollTop()
-
-	{
-
-		return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('group-message-container').scrollTop");
-
-	}
-
-
-
-	private async Task SetScrollTop(double scrollTop)
-
-	{
-
-		await JSRuntime.InvokeVoidAsync("eval", $"document.getElementById('group-message-container').scrollTop = {scrollTop}");
-
-	}
+	private record ScrollInfo(double ScrollHeight, double ScrollTop);
 
 
 
 	private async Task HandleScroll(EventArgs e)
-
 	{
-
 		if (_dotNetRef != null)
-
 		{
-
-			await JSRuntime.InvokeVoidAsync("handleScrollWithDebounce", "group-message-container", _dotNetRef);
-
+			await JSRuntime.InvokeVoidAsync("handleScrollForLoadMore", "group-message-container", _dotNetRef);
 		}
-
 	}
 
 

@@ -46,13 +46,6 @@
                 <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" @onscroll="HandleScroll" id="ai-message-container">
                     @if (SelectedAiGroupId > 0)
                     {
-                        @if (IsAiLoading && CurrentPage == 1)
-                        {
-                            <div class="text-center-custom text-muted-custom py-2-custom">
-                                加载中...
-                            </div>
-                        }
-                        
                         @if (AiMessageList.Any())
                         {
                             <div class="message-container-custom" id="ai-message-list">
@@ -76,7 +69,7 @@
                                 }
                             </div>
                         }
-                        else if (!IsAiLoading)
+                        else
                         {
                             <div class="text-center-custom text-muted-custom mt-5-custom">
                                 暂无 AI 消息
@@ -95,39 +88,11 @@
     </div>
 </div>
 
-<script>
-    let scrollTimeout = null;
-    
-    function scrollToElementBottom(elementId) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            element.scrollTop = element.scrollHeight;
-        }
-    }
-    
-    function checkScrollPosition(elementId, dotNetRef) {
-        const element = document.getElementById(elementId);
-        if (element && element.scrollTop <= 50) {
-            dotNetRef.invokeMethodAsync('LoadMoreMessages');
-        }
-    }
-    
-    function handleScrollWithDebounce(elementId, dotNetRef) {
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout);
-        }
-        scrollTimeout = setTimeout(() => {
-            checkScrollPosition(elementId, dotNetRef);
-        }, 200);
-    }
-</script>
-
 @code {
     private List<long> GroupIds { get; set; } = new List<long>();
     private Dictionary<long, GroupNameEntry> GroupNameCache { get; set; } = new Dictionary<long, GroupNameEntry>();
     private long SelectedAiGroupId { get; set; } = 0;
     private List<AiMessageEntry> AiMessageList { get; set; } = new List<AiMessageEntry>();
-    private bool IsAiLoading { get; set; } = false;
     private bool IsLoadingMore { get; set; } = false;
     private int CurrentPage { get; set; } = 1;
     private int PageSize { get; set; } = 50;
@@ -190,51 +155,45 @@
     {
         CurrentPage = 1;
         HasMoreMessages = true;
-        IsAiLoading = true;
+
         try
         {
-            AiMessageList = await HistoryRecorder.GetAiMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
-            if (shouldScroll)
-            {
-                await Task.Delay(100);
-                await ScrollToBottom();
-            }
+            var messages = await HistoryRecorder.GetAiMessagesByGroupIdAsync(groupId, CurrentPage, PageSize);
+            AiMessageList = messages;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading AI messages: {ex.Message}");
             AiMessageList = new List<AiMessageEntry>();
         }
-        finally
+
+        if (shouldScroll)
         {
-            IsAiLoading = false;
+            await Task.Delay(50);
+            await ScrollToBottom();
         }
     }
     
+    private record ScrollInfo(double ScrollHeight, double ScrollTop);
+
     private async Task LoadMoreAiMessages()
     {
         if (IsLoadingMore || !HasMoreMessages)
             return;
-        
+
         IsLoadingMore = true;
         CurrentPage++;
-        
+
         try
         {
             var moreMessages = await HistoryRecorder.GetAiMessagesByGroupIdAsync(SelectedAiGroupId, CurrentPage, PageSize);
             if (moreMessages.Any())
             {
-                var oldScrollHeight = await GetScrollHeight();
-                var oldScrollTop = await GetScrollTop();
-                
+                var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", "ai-message-container");
                 AiMessageList.AddRange(moreMessages);
-                
                 await Task.Delay(50);
-                
-                var newScrollHeight = await GetScrollHeight();
-                var scrollPosition = oldScrollTop + (newScrollHeight - oldScrollHeight);
-                
-                await SetScrollTop(scrollPosition);
+                var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", "ai-message-container");
+                await JSRuntime.InvokeVoidAsync("setScrollTop", "ai-message-container", before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
             }
             else
             {
@@ -255,7 +214,7 @@
     {
         if (_dotNetRef != null)
         {
-            await JSRuntime.InvokeVoidAsync("handleScrollWithDebounce", "ai-message-container", _dotNetRef);
+            await JSRuntime.InvokeVoidAsync("handleScrollForLoadMore", "ai-message-container", _dotNetRef);
         }
     }
     
@@ -271,21 +230,6 @@
     private async Task ScrollToBottom()
     {
         await JSRuntime.InvokeVoidAsync("scrollToElementBottom", "ai-message-container");
-    }
-    
-    private async Task<double> GetScrollHeight()
-    {
-        return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('ai-message-container').scrollHeight");
-    }
-    
-    private async Task<double> GetScrollTop()
-    {
-        return await JSRuntime.InvokeAsync<double>("eval", "document.getElementById('ai-message-container').scrollTop");
-    }
-    
-    private async Task SetScrollTop(double scrollTop)
-    {
-        await JSRuntime.InvokeVoidAsync("eval", $"document.getElementById('ai-message-container').scrollTop = {scrollTop}");
     }
     
     private async Task SelectAiGroup(long groupId)
