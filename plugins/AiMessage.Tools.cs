@@ -168,7 +168,7 @@ public partial class AiMessage
 
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"~/skills/ 目录下有以下内容：{string.Join("、", skillInfos)}。");
-            sb.AppendLine("当用户的需求匹配某个技能时，先用 shell_sync 读取技能文件内容（cat ~/skills/<文件名>），或者查看文件夹内容（ls ~/skills/<文件夹名>），按照其中的指令执行。");
+            sb.AppendLine("当用户的需求匹配某个技能时，先用 shell_sync 读取技能文件内容（cat ~/skills/<文件名>），或者查看文件夹内容（ls ~/skills/<文件夹名>），按照其中的指令执行。如果你需要安装某个技能也请将技能安装在这里（git clone等）。");
             return sb.ToString();
         }
         catch
