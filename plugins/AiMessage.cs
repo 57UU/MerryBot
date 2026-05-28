@@ -88,6 +88,35 @@ public partial class AiMessage : Plugin
             }
         }
 
+        // auto-compress context management
+        aiClient.AutoCompressEnabled = interop.GetStructVariable<bool>("auto-compress-enabled") ?? true;
+        var compressThreshold = interop.GetStructVariable<int>("compress-token-threshold");
+        if (compressThreshold.HasValue)
+            aiClient.CompressTokenThreshold = compressThreshold.Value;
+        var compressModelName = interop.GetVariableOrSetDefault<string>("compress-model", string.Empty);
+        if (!string.IsNullOrEmpty(compressModelName))
+        {
+            var compressModel = ModelPreset.GetModelByName(compressModelName);
+            if (compressModel != null)
+            {
+                var compressToken = llmService.GetToken(compressModel);
+                if (compressToken != null)
+                {
+                    aiClient.CompressionModel = compressModel;
+                    aiClient.CompressionToken = compressToken;
+                    Logger.Info($"compression model enabled: {compressModel.model}");
+                }
+                else
+                {
+                    Logger.Warn($"请在配置文件variable中设置{compressModel.ApiTokenDictKey}");
+                }
+            }
+            else
+            {
+                Logger.Warn($"无效的 compress-model: {compressModelName}");
+            }
+        }
+
         //tools
         RegisterVoiceTool();
         if (useFunctionCallToReply)

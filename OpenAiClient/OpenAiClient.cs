@@ -17,6 +17,7 @@ public partial class OpenAiCompatible : IDisposable
 #pragma warning restore CS8625 // 无法将 null 字面量转换为非 null 的引用类型。
 
     HttpClient client = new HttpClient();
+    private HttpClient? _compressionClient;
     private List<ToolDef> Tools { get; set; } = new();
     private Dictionary<string, ToolDef> functionMapper = new();
 
@@ -206,18 +207,63 @@ public partial class OpenAiCompatible : IDisposable
             };
             currentHistory.Add(userQuery);
             recorder(userQuery);
-            //if currentHistory is too long, remove the first message
-            int excessCount = currentHistory.Count - SlidingWindowContext;
-            if (excessCount > 0)
+            // 上下文管理：自动压缩或滑动窗口
+            int estimatedTokens = EstimateTokens(currentHistory, 0, currentHistory.Count);
+            if (estimatedTokens > CompressTokenThreshold)
             {
-                // 保留第一个元素（系统提示），找到安全的裁剪点
-                // 不能把 tool_calls 和 tool 消息拆开
-                int safeCutIndex = 1 + excessCount;
-                while (safeCutIndex < currentHistory.Count && currentHistory[safeCutIndex].Role == TOOL)
+                if (AutoCompressEnabled)
                 {
-                    safeCutIndex++;
+                    int compressFrom = 1;
+                    // 保留最近一半阈值的 token，压缩其余部分
+                    int keepCharBudget = CompressTokenThreshold; // 字符数 = token * 2
+                    int keepCharCount = 0;
+                    int cutTarget = currentHistory.Count;
+                    for (int i = currentHistory.Count - 1; i > compressFrom; i--)
+                    {
+                        keepCharCount += (currentHistory[i].Content ?? string.Empty).Length;
+                        if (keepCharCount >= keepCharBudget)
+                        {
+                            cutTarget = i;
+                            break;
+                        }
+                    }
+                    int safeCutIndex = FindSafeCutIndex(currentHistory, cutTarget);
+                    if (safeCutIndex > compressFrom)
+                    {
+                        var messagesToCompress = currentHistory.GetRange(compressFrom, safeCutIndex - compressFrom);
+                        try
+                        {
+                            Logger.Info($"auto-compress: {messagesToCompress.Count} messages (~{estimatedTokens} tokens) -> summarizing...");
+                            string summary = await CompressHistoryAsync(messagesToCompress);
+                            var summaryMessage = new OpenAiMessage
+                            {
+                                Role = SYSTEM,
+                                Content = $"[对话历史摘要]\n{summary}"
+                            };
+                            currentHistory.RemoveRange(compressFrom, safeCutIndex - compressFrom);
+                            currentHistory.Insert(compressFrom, summaryMessage);
+                            recorder(summaryMessage);
+                            Logger.Info($"auto-compress: done, history now {currentHistory.Count} messages");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"auto-compress failed, falling back to deletion: {ex.Message}");
+                            int safeCut = FindSafeCutIndex(currentHistory, 1 + (currentHistory.Count - SlidingWindowContext));
+                            if (safeCut > 1)
+                                currentHistory.RemoveRange(1, safeCut - 1);
+                        }
+                    }
                 }
-                currentHistory.RemoveRange(1, safeCutIndex - 1);
+                else
+                {
+                    // Legacy 滑动窗口：按消息数删除
+                    int excessCount = currentHistory.Count - SlidingWindowContext;
+                    if (excessCount > 0)
+                    {
+                        int safeCutIndex = FindSafeCutIndex(currentHistory, 1 + excessCount);
+                        currentHistory.RemoveRange(1, safeCutIndex - 1);
+                    }
+                }
             }
             while (!done)
             {
@@ -397,9 +443,87 @@ public partial class OpenAiCompatible : IDisposable
         return json;
     }
 
+    private static int EstimateTokens(List<OpenAiMessage> messages, int from, int count)
+    {
+        int charCount = 0;
+        for (int i = from; i < from + count && i < messages.Count; i++)
+            charCount += (messages[i].Content ?? string.Empty).Length;
+        return charCount / 2;
+    }
+
+    private static int FindSafeCutIndex(List<OpenAiMessage> history, int startIndex)
+    {
+        int cutIndex = startIndex;
+        while (cutIndex < history.Count && history[cutIndex].Role == TOOL)
+            cutIndex++;
+        return cutIndex;
+    }
+
+    private async Task<string> CompressHistoryAsync(List<OpenAiMessage> messagesToCompress)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("请将以下对话历史压缩为简洁的摘要，保留关键信息、决定和上下文。");
+        sb.AppendLine("摘要应该让读者能理解之前讨论了什么、做了什么决定、执行了哪些操作及其结果。");
+        sb.AppendLine("不要添加对话中没有的信息。用中文回复。");
+        sb.AppendLine();
+        sb.AppendLine("--- 对话历史 ---");
+        foreach (var msg in messagesToCompress)
+        {
+            string roleLabel = msg.Role switch
+            {
+                USER => "用户",
+                ASSISTANT => "助手",
+                TOOL => "工具调用结果",
+                SYSTEM => "系统",
+                _ => msg.Role
+            };
+            string content = msg.Content ?? string.Empty;
+            if (content.Length > 2000)
+                content = string.Concat(content.AsSpan(0, 2000), "...[截断]");
+            sb.AppendLine($"[{roleLabel}]: {content}");
+        }
+
+        HttpClient usedClient;
+        string usedModel;
+        string completionUrl;
+        if (CompressionModel != null && CompressionToken != null)
+        {
+            if (_compressionClient == null)
+            {
+                _compressionClient = new HttpClient();
+                _compressionClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {CompressionToken}");
+            }
+            usedClient = _compressionClient;
+            usedModel = CompressionModel.model;
+            completionUrl = CompressionModel.CompletionUrl;
+        }
+        else
+        {
+            usedClient = client;
+            usedModel = ModelPreset.model;
+            completionUrl = ModelPreset.CompletionUrl;
+        }
+
+        var requestMessages = new List<OpenAiMessage>
+        {
+            new OpenAiMessage { Role = SYSTEM, Content = "你是一个对话历史压缩助手。" },
+            new OpenAiMessage { Role = USER, Content = sb.ToString() }
+        };
+        var requestData = new Dictionary<string, object>
+        {
+            { "model", usedModel },
+            { "messages", requestMessages }
+        };
+        string jsonData = JsonSerializer.Serialize(requestData, options);
+        string responseBody = await SendRequestAsync(usedClient, completionUrl, jsonData, Logger);
+        var response = JsonSerializer.Deserialize<ApiResponse>(responseBody)!;
+        return response.Choices[0].Message.Content;
+    }
+
     public void Dispose()
     {
         client.Dispose();
+        _compressionClient?.Dispose();
         GC.SuppressFinalize(this);
     }
 

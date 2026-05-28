@@ -40,6 +40,9 @@ llm-model = "deepseek/deepseek-v4-flash"  # 本插件使用的 LLM 模型（覆�
 ai-prompt = "你是一个助人为乐的AI助手"    # AI 的 System Prompt（人设提示词）
 use_function_call_reply = false           # 是否启用 Function Call 回复
 webview-summarizer-model = ""             # 用于网页总结的特定模型（留空则禁用，格式同 llm-model）
+auto-compress-enabled = true              # 启用自动压缩上下文管理（默认 true），禁用则回退到滑动窗口删除
+compress-model = ""                       # 压缩用模型（格式 provider/model），留空则用主模型
+compress-token-threshold = 64000          # 触发压缩的 token 数阈值（默认 64000，本地字符估算）
 ```
 
 ### 3. 存储管理插件 (`[variables.storage-manager]`)

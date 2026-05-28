@@ -18,9 +18,25 @@ public partial class OpenAiCompatible
     /// </summary>
     public WebviewSummarizer? WebviewSummarizer { get; set; } = null;
     /// <summary>
-    /// 最大上下文长度
+    /// 最大上下文长度（Legacy 滑动窗口模式的消息数阈值）
     /// </summary>
     public int SlidingWindowContext { get; set; } = 30;
+    /// <summary>
+    /// 是否启用自动压缩，禁用时回退到滑动窗口删除
+    /// </summary>
+    public bool AutoCompressEnabled { get; set; } = true;
+    /// <summary>
+    /// 触发压缩的 token 数阈值（本地字符估算，字符数/2）
+    /// </summary>
+    public int CompressTokenThreshold { get; set; } = 64_000;
+    /// <summary>
+    /// 用于压缩/摘要的模型，null 则使用主模型
+    /// </summary>
+    public ModelPreset? CompressionModel { get; set; } = null;
+    /// <summary>
+    /// 压缩模型的 Token，null 则使用主客户端的 Token
+    /// </summary>
+    public string? CompressionToken { get; set; } = null;
     /// <summary>
     /// 响应超时时间
     /// </summary>
