@@ -23,7 +23,8 @@ public class LlmService : Plugin
     {
         Browser = new Browser(new BrowserOptions
         {
-            BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")
+            BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
+            ChromeDriverPath = interop.GetVariableOrSetDefault("chromedriver-path", "")
         });
 
         var defaultModelTag = interop.GetVariableOrSetDefault("default-llm", ModelPreset.DeepSeekChat.ModelTag);

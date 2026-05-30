@@ -37,6 +37,7 @@ public record BrowserOptions
     public double ActualPixelScaleFator { get; private set; } = 1;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? BinaryPath { get; init; } = null;
+    public string? ChromeDriverPath { get; init; } = null;
     public void AdaptSystem(){
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -126,6 +127,11 @@ public partial class Browser : IDisposable
         {
             Console.WriteLine("Arch: Linux Arm64;you may need to install chromedriver manually");
             stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
+        }
+
+        if (!string.IsNullOrEmpty(this.browserOptions.ChromeDriverPath))
+        {
+            stealthInstanceSettings.ChromeDriverPath = this.browserOptions.ChromeDriverPath;
         }
 
 
