@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>BrowserService</RootNamespace>
+    <DefineConstants>$(DefineConstants);_PUBLISH_CHROMEDRIVER</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
