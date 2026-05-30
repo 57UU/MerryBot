@@ -92,7 +92,7 @@ public partial class AiMessage
             var shell = new ToolDef();
             shell.Function.Name = "shell";
             //shell.DynamicPrompt = $"你可以使用shell工具在你的linux电脑上执行命令，已安装py等程序，user: {user}。命令将在后台执行，使用shell_result查询结果。{skillsPrompt}";
-            shell.Function.Description = $"异步执行Linux sh shell命令，立即返回task_id，用shell_result查询结果。长时间任务建议设置更大值。";
+            shell.Function.Description = $"异步执行Linux bash命令，立即返回task_id，用shell_result查询结果。长时间任务建议设置更大值。";
             shell.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shell.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultTimeoutSeconds}s" });
             shell.Function.FunctionCall = async (parameters) =>
@@ -107,7 +107,7 @@ public partial class AiMessage
             var shellSync = new ToolDef();
             shellSync.Function.Name = "shell_sync";
             //shellSync.DynamicPrompt = $"同步执行短时命令并直接返回结果。适合ls、cat等快速命令。";
-            shellSync.Function.Description = $"同步执行shell命令，等待并返回结果。适用于短时任务（默认{ShellManager.DefaultSyncTimeoutSeconds}s）。";
+            shellSync.Function.Description = $"同步执行bash命令，等待并返回结果。适用于短时任务（默认{ShellManager.DefaultSyncTimeoutSeconds}s）。";
             shellSync.Function.Parameters.AddRequired("command", new ParameterProperty() { Type = "string", Description = "要执行的命令" });
             shellSync.Function.Parameters.AddNonRequired("timeout", new ParameterProperty() { Type = "integer", Description = $"超时秒数，默认{ShellManager.DefaultSyncTimeoutSeconds}s" });
             shellSync.Function.FunctionCall = async (parameters) =>
