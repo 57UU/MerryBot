@@ -3,9 +3,7 @@ using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Chromium;
 using OpenQA.Selenium.Support.Extensions;
 using OpenQA.Selenium.Support.UI;
-using SeleniumStealth.NET.Clients;
-using SeleniumStealth.NET.Clients.Extensions;
-using SeleniumStealth.NET.Clients.Models;
+using BrowserService.Stealth;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -152,7 +150,7 @@ public partial class Browser : IDisposable
             options.AddArgument($"--force-device-scale-factor={browserOptions.DeviceScaleFactor}");
         }
 
-        var driver = await Task.Run(() => Stealth.Instantiate(options, stealthInstanceSettings));
+        var driver = await Task.Run(() => StealthClient.Instantiate(options, stealthInstanceSettings));
         driver.Manage().Timeouts().PageLoad = browserOptions.Timeout;
         driver.Manage().Timeouts().AsynchronousJavaScript = browserOptions.Timeout;
         driverPack = new(driver);
