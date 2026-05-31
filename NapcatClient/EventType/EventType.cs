@@ -376,7 +376,7 @@ public class GroupMsgEmojiLikeEvent : NoticeEvent
     public long GroupId { get; set; }
 
     /// <summary>
-    /// 回应者 QQ 号
+    /// 操作者 QQ 号
     /// </summary>
     [JsonPropertyName("user_id")]
     public long UserId { get; set; }
@@ -388,13 +388,31 @@ public class GroupMsgEmojiLikeEvent : NoticeEvent
     public long MessageId { get; set; }
 
     /// <summary>
-    /// 表情 ID
+    /// 表情列表
     /// </summary>
     [JsonPropertyName("likes")]
-    public string Likes { get; set; }
+    public List<EmojiLikeItem> Likes { get; set; } = [];
 
     /// <summary>
-    /// 回应数量
+    /// 是否为添加回应（添加/取消）
+    /// </summary>
+    [JsonPropertyName("is_add")]
+    public bool IsAdd { get; set; }
+}
+
+/// <summary>
+/// 表情回应单项
+/// </summary>
+public class EmojiLikeItem
+{
+    /// <summary>
+    /// 表情 ID
+    /// </summary>
+    [JsonPropertyName("emoji_id")]
+    public string EmojiId { get; set; } = "";
+
+    /// <summary>
+    /// 该表情的回应人数
     /// </summary>
     [JsonPropertyName("count")]
     public int Count { get; set; }
