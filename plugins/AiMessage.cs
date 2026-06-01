@@ -256,6 +256,17 @@ public partial class AiMessage : Plugin
                     _ = HandleMessage(groupId, text, messageId, nickname, data.sender.user_id);
                 }
             }
+            else if (text.StartsWith("/stop"))
+            {
+                if (aiClient.CancelRequest(groupId))
+                {
+                    _ = Actions.ReplyGroupMessage(groupId, messageId, "已停止当前请求");
+                }
+                else
+                {
+                    _ = Actions.ReplyGroupMessage(groupId, messageId, "当前没有进行中的请求");
+                }
+            }
             return;
         }
         if (!string.IsNullOrWhiteSpace(text))

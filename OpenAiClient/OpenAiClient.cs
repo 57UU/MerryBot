@@ -86,6 +86,7 @@ public partial class OpenAiCompatible : IDisposable
     }
     readonly ConcurrentDictionary<long, List<OpenAiMessage>> history = new();
     readonly ConcurrentDictionary<long, SemaphoreSlim> mutex = new();
+    readonly ConcurrentDictionary<long, CancellationTokenSource> activeRequests = new();
     public ReadOnlySpan<OpenAiMessage> GetDialogHistory(long uid)
     {
         history.TryGetValue(uid, out var dialog);
@@ -121,6 +122,16 @@ public partial class OpenAiCompatible : IDisposable
         history.TryRemove(id, out _);
         mutex.Release();
     }
+    public bool CancelRequest(long id)
+    {
+        if (activeRequests.TryRemove(id, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+            return true;
+        }
+        return false;
+    }
     public TimeSpan AutoNewSpan { get; set; } = TimeSpan.FromHours(12);
 
     public void AddHistory(long id, OpenAiMessage message)
@@ -145,6 +156,8 @@ public partial class OpenAiCompatible : IDisposable
         {
             throw new NotAvailableException("上一个请求尚未完成");
         }
+        var cts = new CancellationTokenSource();
+        activeRequests[id] = cts;
         try
         {
             bool done = false;
@@ -389,10 +402,16 @@ public partial class OpenAiCompatible : IDisposable
                 {
                     yield return response.Trim();
                 }
+                if (cts.IsCancellationRequested)
+                {
+                    break;
+                }
             }
         }
         finally
         {
+            activeRequests.TryRemove(id, out _);
+            cts.Dispose();
             mutex.Release();
         }
 
