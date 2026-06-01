@@ -133,7 +133,7 @@ public partial class ViewVersion : Plugin
         string commitMessages;
         try
         {
-            if (!hasChanges)
+            if (hasChanges)
             {
                 // 获取两个commit之间的所有提交
                 string rangeCommits = await ExecuteGitCommand($"log {beforeCommit.Trim()}..{afterCommit.Trim()} --pretty=format:%s");
@@ -161,6 +161,10 @@ public partial class ViewVersion : Plugin
                         commitMessages = sb.ToString();
                     }
                 }
+            }
+            else
+            {
+                commitMessages = "当前代码已经是最新版本";
             }
         }
         catch (Exception ex)
