@@ -352,6 +352,7 @@ public partial class OpenAiCompatible : IDisposable
                 }
                 catch (Exception e)
                 {
+                    Logger.Error($"OpenAiCompatible error: {e}");
                     response = "Error: " + e.Message;
                     done = true;
                 }

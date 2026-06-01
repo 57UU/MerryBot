@@ -27,6 +27,7 @@ public partial class AiMessage
             }
             catch (Exception e)
             {
+                Console.WriteLine($"AiMessage send error: {e}");
                 return $"发送失败:{e.Message}";
             }
             return "发送成功。你不必回复'已发送',也不必重复发送的信息";
@@ -59,6 +60,7 @@ public partial class AiMessage
             }
             catch (Exception e)
             {
+                Console.WriteLine($"AiMessage send error: {e}");
                 return $"发送失败:{e.Message}";
             }
             return "成功";
@@ -258,7 +260,7 @@ public partial class AiMessage
         }
         catch (Exception ex)
         {
-            Logger.Error($"图片生成异常: {ex.Message}");
+            Logger.Error($"图片生成异常: {ex}");
             await Actions.SendGroupMessage(groupId, $"图片生成失败，请稍后重试\n{ex.Message}");
         }
     }

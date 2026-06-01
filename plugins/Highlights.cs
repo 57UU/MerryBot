@@ -253,7 +253,7 @@ public override async Task OnLoaded()
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"提取消息 {message.MessageId} 失败: {ex.Message}");
+                    Logger.Error($"提取消息 {message.MessageId} 失败: {ex}");
                     return new { time = message.Time, index, line = "" };
                 }
                 finally

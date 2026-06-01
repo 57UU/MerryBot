@@ -39,7 +39,7 @@ public class ImageInterpreterPool : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error interpreting image with {interpreter.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"Error interpreting image with {interpreter.GetType().Name}: {ex}");
             }
         }
         throw new Exception("No image interpreter available");

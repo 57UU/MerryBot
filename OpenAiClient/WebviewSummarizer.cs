@@ -42,6 +42,7 @@ public sealed class WebviewSummarizer : IDisposable
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"WebviewSummarizer error: {ex}");
             return $"[总结请求失败] {ex.Message}";
         }
     }
