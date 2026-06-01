@@ -83,9 +83,10 @@ public static partial class Program
 
     public static async Task TestGitFetchMerge()
     {
-        var (a, b) = await ViewVersion.GitFetchMerge();
-        Console.WriteLine(a);
-        Console.WriteLine(b);
+        var (diff, messages, hasChanges) = await ViewVersion.GitFetchMerge();
+        Console.WriteLine($"Has changes: {hasChanges}");
+        Console.WriteLine(diff);
+        Console.WriteLine(messages);
     }
 
     public static async Task TestImagePainterDashscope()

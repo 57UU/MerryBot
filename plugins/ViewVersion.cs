@@ -4,7 +4,7 @@ using System.Text;
 
 namespace BotPlugin;
 
-[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件;/reload重启程序", priority: 114514)]
+[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件;/update force强制更新;/reload重启程序", priority: 114514)]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;
@@ -117,27 +117,23 @@ public partial class ViewVersion : Plugin
     /// 执行git fetch和merge操作，并获取合并前后的提交信息
     /// </summary>
     /// <returns>合并结果和提交信息</returns>
-    public static async Task<(string diff, string commitMessages)> GitFetchMerge()
+    public static async Task<(string diff, string commitMessages, bool hasChanges)> GitFetchMerge()
     {
         // 先获取当前HEAD的commit哈希值
-        string beforeCommit = await ExecuteGitCommand("rev-parse HEAD");
+        string beforeCommit = (await ExecuteGitCommand("rev-parse HEAD")).Trim();
 
         // 执行fetch和merge
         await ExecuteGitCommand("fetch");
         var diff = await ExecuteGitCommand("merge");
 
         // 获取合并后的HEAD
-        string afterCommit = await ExecuteGitCommand("rev-parse HEAD");
+        string afterCommit = (await ExecuteGitCommand("rev-parse HEAD")).Trim();
 
+        bool hasChanges = beforeCommit != afterCommit;
         string commitMessages;
         try
         {
-            // 如果前后commit相同，说明没有更新
-            if (beforeCommit.Trim() == afterCommit.Trim())
-            {
-                commitMessages = "当前代码已经是最新版本";
-            }
-            else
+            if (!hasChanges)
             {
                 // 获取两个commit之间的所有提交
                 string rangeCommits = await ExecuteGitCommand($"log {beforeCommit.Trim()}..{afterCommit.Trim()} --pretty=format:%s");
@@ -172,15 +168,15 @@ public partial class ViewVersion : Plugin
             commitMessages = $"获取提交信息时出错: {ex.Message}";
         }
 
-        return (diff, commitMessages);
+        return (diff, commitMessages, hasChanges);
     }
-    private async Task Update(long groupId)
+    private async Task Update(long groupId, bool force = false)
     {
-        var (diff, commitMessages) = await GitFetchMerge();
+        var (diff, commitMessages, hasChanges) = await GitFetchMerge();
         diff = _redundantRegex().Replace(diff, "").Replace("()", "").Trim();
 
-        // No changes — skip update
-        if (commitMessages == "当前代码已经是最新版本")
+        // No changes — skip update (unless forced)
+        if (!hasChanges && !force)
         {
             await Actions.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
             return;
@@ -261,6 +257,17 @@ public partial class ViewVersion : Plugin
         if (IsStartsWith(chain, "/version"))
         {
             _ = Actions.SendGroupMessage(groupId, gitInfo);
+        }
+        else if (IsStartsWith(chain, "/update force"))
+        {
+            if (authorized == data.sender.user_id)
+            {
+                _ = Update(groupId, force: true);
+            }
+            else
+            {
+                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+            }
         }
         else if (IsStartsWith(chain, "/update"))
         {
