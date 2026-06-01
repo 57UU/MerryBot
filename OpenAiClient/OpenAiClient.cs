@@ -272,34 +272,59 @@ public partial class OpenAiCompatible : IDisposable
                 try
                 {
                     var aiResponse = await Request(currentHistory, specialTag);
-                    var msg = aiResponse.Choices[0].Message;
-                    if (msg.Content.StartsWith("<think>"))
+                    // 防御：API 在工具调用回合可能返回空 choices / 空 message。
+                    if (aiResponse?.Choices == null || aiResponse.Choices.Count == 0)
                     {
-                        var cotEndIndex = msg.Content.IndexOf("</think>");
+                        Logger.Warn("OpenAiCompatible: empty choices in response");
+                        response = "";
+                        done = true;
+                    }
+                    else
+                    {
+                    var msg = aiResponse.Choices[0].Message;
+                    // 防御：API 偶尔返回 choices[0] 为 null（理论上不应该发生但 System.Text.Json 不强制）
+                    if (msg == null)
+                    {
+                        Logger.Warn("OpenAiCompatible: null message in choices[0]");
+                        response = "";
+                        done = true;
+                    }
+                    else
+                    {
+                    // 防御：工具调用回合（finish_reason == tool_calls）时，provider 经常只回 tool_calls，content 为 null。
+                    // 直接 .StartsWith 会在第二轮 NRE。这里用空字符串兜底。
+                    var rawContent = msg.Content ?? string.Empty;
+                    if (rawContent.StartsWith("<think>"))
+                    {
+                        var cotEndIndex = rawContent.IndexOf("</think>");
                         if (cotEndIndex >= 0)
                         {
-                            msg.Content = msg.Content.Substring(cotEndIndex + 8).TrimStart('\n', ' ');
+                            rawContent = rawContent.Substring(cotEndIndex + 8).TrimStart('\n', ' ');
                         }
                     }
-                    response = msg.Content;
+                    response = rawContent;
                     if (aiResponse.Choices[0].FinishReason == TOOL_CALL)
                     {
                         ExitAfterUseException? exitMessage = null;
                         var assistantMessage = new AssistantMessage()
                         {
                             Role = msg.Role,
-                            Content = msg.Content,
+                            Content = rawContent,
                             ReasoningContent = msg.ReasoningContent,
                             ToolCalls = new()
                         };
-                        foreach (var i in msg.ToolCalls)
+                        // 防御：ToolCalls 在某些响应里可能为 null
+                        var toolCalls = msg.ToolCalls ?? new List<ToolCall>();
+                        foreach (var i in toolCalls)
                         {
+                            // 防御：i.Function 在异常响应里可能为 null
+                            if (i?.Function == null) continue;
                             assistantMessage.ToolCalls.Add(new ToolCallSubMessage()
                             {
                                 Id = i.Id,
                                 Function = i.Function
                             });
-                            if (functionMapper.TryGetValue(i.Function.Name, out var toolDef))
+                            if (!string.IsNullOrEmpty(i.Function.Name) && functionMapper.TryGetValue(i.Function.Name, out var toolDef))
                             {
                                 if (toolDef.HideOutputOnInvoking)
                                 {
@@ -313,13 +338,14 @@ public partial class OpenAiCompatible : IDisposable
 
                         }
                         currentHistory.Add(assistantMessage);
-                        var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function.Name}({i.Function.Arguments})"));
+                        var toolCallsStr = string.Join(",", assistantMessage.ToolCalls.Select(i => $"{i.Function?.Name}({i.Function?.Arguments})"));
                         HistoryRecorder?.Invoke(id, assistantMessage.Role,
                             string.IsNullOrWhiteSpace(assistantMessage.Content) ? toolCallsStr : $"{assistantMessage.Content}:{toolCallsStr}");
                         //tool call
                         List<Task<ToolMessage>> tasks = new();
-                        foreach (var f in aiResponse.Choices[0].Message.ToolCalls)
+                        foreach (var f in toolCalls)
                         {
+                            if (f?.Function == null) continue;
                             tasks.Add(HandleFunctionCall(f.Function, f.Id, specialTag));
                         }
                         await Task.WhenAll(tasks);
@@ -338,13 +364,15 @@ public partial class OpenAiCompatible : IDisposable
                         var currentMessage = new AssistantMessage()
                         {
                             Role = msg.Role,
-                            Content = msg.Content,
+                            Content = rawContent,
                             ReasoningContent = msg.ReasoningContent
                         };
                         currentHistory.Add(currentMessage);
                         recorder(currentMessage);
                         done = true;
                     }
+                    } // 防御 msg==null else
+                    } // 防御 choices empty else
                 }
                 catch (ExitAfterUseException)
                 {
@@ -518,7 +546,8 @@ public partial class OpenAiCompatible : IDisposable
         string jsonData = JsonSerializer.Serialize(requestData, options);
         string responseBody = await SendRequestAsync(usedClient, completionUrl, jsonData, Logger);
         var response = JsonSerializer.Deserialize<ApiResponse>(responseBody)!;
-        return response.Choices[0].Message.Content;
+        // 防御：Message 可能为 null；Content 理论上有值，但 provider 异常时可能为 null
+        return response.Choices[0].Message?.Content ?? string.Empty;
     }
 
     public void Dispose()

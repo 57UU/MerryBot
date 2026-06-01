@@ -187,7 +187,7 @@ public class Choice
     public int Index { get; set; }
 
     [JsonPropertyName("message")]
-    public Message Message { get; set; }
+    public Message? Message { get; set; }
 
     [JsonPropertyName("finish_reason")]
     public string FinishReason { get; set; }
@@ -200,17 +200,17 @@ public class Message
 
     [JsonPropertyName("content")]
 
-    public string Content { get; set; }
+    public string? Content { get; set; }
 
 
     [JsonPropertyName("reasoning_content")]
-    public string ReasoningContent { get; set; }
+    public string? ReasoningContent { get; set; }
 
     [JsonPropertyName("audio")]
-    public Audio Audio { get; set; }
+    public Audio? Audio { get; set; }
 
     [JsonPropertyName("tool_calls")]
-    public List<ToolCall> ToolCalls { get; set; } = new List<ToolCall>();
+    public List<ToolCall>? ToolCalls { get; set; }
 }
 
 public class Audio
