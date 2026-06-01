@@ -162,8 +162,8 @@ public class ModelPreset
         "https://api.xiaomimimo.com/v1",
         "xiaomi"
         );
-    public static readonly ModelPreset MiniMax2_7 = new(
-        "MiniMax-M2.7",
+    public static readonly ModelPreset MiniMax3 = new(
+        "MiniMax-M3",
         "https://api.minimax.chat/v1",
         "minimax"
         );

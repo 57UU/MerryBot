@@ -39,7 +39,7 @@ public static partial class Program
     {
         var config = ConfigManager.Instance;
 
-        var model = ModelPreset.MiniMax2_7;
+        var model = ModelPreset.MiniMax3;
         var token_key = model.ApiTokenDictKey;
 
         PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
