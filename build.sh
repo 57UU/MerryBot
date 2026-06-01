@@ -5,6 +5,10 @@
 
 set -e
 
+# Shut down any leftover MSBuild/Roslyn workers from previous builds
+# (NodeReuse leaves them around, and they hold file locks on .runtimeconfig.json)
+dotnet build-server shutdown || true
+
 if [ -z "$1" ]; then
     echo "Usage: build.sh <target_dir>"
     exit 1
