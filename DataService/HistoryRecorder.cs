@@ -170,6 +170,18 @@ public class HistoryRecorder : IDisposable
         return imageEntry;
     }
 
+    /// <summary>
+    /// 把 description 写到 ImageEntry（按 hash 去重的那一层）。幂等。
+    /// </summary>
+    public async Task SetImageEntryDescriptionAsync(string hash, string description)
+    {
+        if (string.IsNullOrEmpty(hash) || string.IsNullOrEmpty(description)) return;
+        var entry = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
+        if (entry == null || entry.Description == description) return;
+        entry.Description = description;
+        await imageBedCollection.UpdateAsync(entry);
+    }
+
     public async Task<FileEntry> RecordFileAsync(string originalUrl, byte[] data)
     {
         var hash = CalculateHash(data);

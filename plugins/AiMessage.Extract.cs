@@ -51,7 +51,7 @@ public partial class AiMessage
         }
         else if (item is ImageData imageData)
         {
-            return await AppendImageData(imageData, depth, limit);
+            return await AppendImageData(imageData, depth);
         }
         else if (item is FaceData faceData)
         {
@@ -183,49 +183,35 @@ public partial class AiMessage
         }
     }
 
-    async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)
+    async Task<string> AppendImageData(ImageData imageData, int depth)
     {
-        if (ImageInterpreterPool != null && imageData.Url != null && limit.CanUseImageInterpreter(depth))
+        if (imageData.Url != null)
         {
-            await limit.ImageInterpreterSemaphore.WaitAsync();
-            var imageUrl = imageData.Url;
-            byte[]? imageBytes = null;
-            var imageType = GetImageContentType(imageData.File);
-            if (!imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            if (long.TryParse(imageData.Url, out var imageId))
             {
-                if (long.TryParse(imageUrl, out var imageId))
+                var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
+                if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Hash))
                 {
-                    var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
-                    if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Hash))
+                    var imageBytes = await storageManager.GroupHistoryRecorder
+                        .GetImageDataAsync(imageEntry.Hash);
+                    if (imageBytes != null)
                     {
-                        imageBytes = await storageManager.GroupHistoryRecorder.GetImageDataAsync(imageEntry.Hash);
+                        var imageType = GetImageContentType(imageData.File);
+                        try
+                        {
+                            var description = await imageDescriptionPlugin
+                                .GetOrComputeDescriptionAsync(imageEntry.Hash, imageBytes, imageType);
+                            if (!string.IsNullOrEmpty(description))
+                            {
+                                return $"<image：{description}/>";
+                            }
+                        }
+                        catch { /* 忽略 */ }
                     }
                 }
             }
-            try
-            {
-                var description = imageBytes != null
-                    ? await ImageInterpreterPool!.Interpret(imageBytes, imageType, limit.ImageInterpreterType)
-                    : await ImageInterpreterPool!.Interpret(imageUrl, limit.ImageInterpreterType);
-                if (!limit.TryConsumeImageInterpreter(depth))
-                {
-                    return $"<image {imageData.Summary}/>";
-                }
-                return $"<image：{description}/>";
-            }
-            catch (Exception)
-            {
-                return $"<image {imageData.Summary}/>";
-            }
-            finally
-            {
-                limit.ImageInterpreterSemaphore.Release();
-            }
         }
-        else
-        {
-            return $"<image {imageData.Summary}/>";
-        }
+        return $"<image {imageData.Summary}/>";
     }
 
     static string GetImageContentType(string? fileName)

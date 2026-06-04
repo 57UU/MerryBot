@@ -10,12 +10,14 @@ namespace BotPlugin;
 public class MessageRecorderPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;
+    private readonly ImageDescriptionPlugin descriptionPlugin;
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
     private readonly RequestCaching _groupNameCheckCache = new(TimeSpan.FromHours(24));
 
-    public MessageRecorderPlugin(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
+    public MessageRecorderPlugin(PluginInterop interop, StorageManagerPlugin storageManager, ImageDescriptionPlugin descriptionPlugin) : base(interop)
     {
         this.historyRecorder = storageManager.GroupHistoryRecorder;
+        this.descriptionPlugin = descriptionPlugin;
         interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
     }
     private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
@@ -62,6 +64,8 @@ public class MessageRecorderPlugin : Plugin
             if (success)
             {
                 Logger.Trace($"记录消息: 群 {groupId}, 发送者 {data.sender.user_id}, 消息ID {data.message_id}");
+                // 调度图片描述任务（fire-and-forget）
+                _ = ScheduleImageDescriptionsAsync(groupMessage);
             }
             else
             {
@@ -71,6 +75,36 @@ public class MessageRecorderPlugin : Plugin
         catch (Exception ex)
         {
             Logger.Error($"记录消息失败: {ex.Message}");
+        }
+    }
+
+    private async Task ScheduleImageDescriptionsAsync(DataService.GroupMessage groupMessage)
+    {
+        foreach (var item in groupMessage.Messages)
+        {
+            if (item is not ImageData imageData) continue;
+            if (string.IsNullOrEmpty(imageData.Url)) continue;
+            if (!long.TryParse(imageData.Url, out var imageId)) continue;
+            _ = ScheduleOneDescriptionAsync(imageId);
+        }
+        await Task.CompletedTask;
+    }
+
+    private async Task ScheduleOneDescriptionAsync(long imageId)
+    {
+        try
+        {
+            var imageEntry = await historyRecorder.GetImageByIdAsync(imageId);
+            if (imageEntry == null || string.IsNullOrEmpty(imageEntry.Hash)) return;
+            var bytes = await historyRecorder.GetImageDataAsync(imageEntry.Hash);
+            if (bytes == null) return;
+            // fire-and-forget，plugin 内部处理 byte[] 缓存 / 解析 / 写 ImageEntry
+            _ = descriptionPlugin.GetOrComputeDescriptionAsync(
+                imageEntry.Hash, bytes, "image/jpeg");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"图片描述调度失败(imageId={imageId}): {ex.Message}");
         }
     }
     private async Task CheckAndUpdateGroupNameAsync(long groupId)

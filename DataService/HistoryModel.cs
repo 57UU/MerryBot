@@ -86,6 +86,10 @@ public class ImageEntry
     public long Id { get; set; }
     public string OriginalUrl { get; set; }
     public string Hash { get; set; }
+    /// <summary>
+    /// 图片文字描述，由 vision 模型生成后写入。null 表示尚未解析或解析失败。
+    /// </summary>
+    public string? Description { get; set; }
 
     public ImageEntry()
     {

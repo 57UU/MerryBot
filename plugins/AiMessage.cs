@@ -12,19 +12,21 @@ public partial class AiMessage : Plugin
     readonly RateLimiter messageRateLimiter = new RateLimiter(limitCount: 3, limitTime: 8);
     const string LLM_KEY = "llm-model";
     private DataService.HistoryRecorder aiMessageStorage;
-    private readonly ImageInterpreterPool? ImageInterpreterPool;
     private readonly StorageManagerPlugin storageManager;
-    private readonly ModelPreset[] imageInterpreterModels = [
-        ModelPreset.GLM_4_6V_Flash_Free,
-        ModelPreset.Glm_4_1V_Flash_Free,
-        ModelPreset.Glm_4V_Flash_Free
-        ];
     private readonly LlmService llmService;
+    private readonly ImageDescriptionPlugin imageDescriptionPlugin;
     private readonly RunCommand? runCommand;
-    public AiMessage(PluginInterop interop, StorageManagerPlugin storageManager, LlmService llmService, ExtraModels __, RunCommand? runCommand = null) : base(interop)
+    public AiMessage(
+        PluginInterop interop,
+        StorageManagerPlugin storageManager,
+        LlmService llmService,
+        ImageDescriptionPlugin imageDescriptionPlugin,
+        ExtraModels __,
+        RunCommand? runCommand = null) : base(interop)
     {
         this.storageManager = storageManager;
         this.llmService = llmService;
+        this.imageDescriptionPlugin = imageDescriptionPlugin;
         this.runCommand = runCommand;
         this.aiMessageStorage = storageManager.AiMessageStorage;
 
@@ -33,27 +35,6 @@ public partial class AiMessage : Plugin
         Logger.Info($"ai plugin start. use model {model.model} by {model.provider}");
         var token = llmService.GetToken(model)
             ?? throw new PluginNotUsableException($"请在配置文件 LlmService 中设置{model.ApiTokenDictKey}");
-        //image interpreter
-        {
-            var imageInterpreters = new List<ImageInterpreter>();
-            foreach (var model_image in imageInterpreterModels)
-            {
-                var token_key_image = model_image.ApiTokenDictKey;
-                var token_image = llmService.GetToken(model_image);
-                if (token_image == null)
-                {
-                    Logger.Warn($"请在配置文件variable中设置{token_key_image}");
-                }
-                else
-                {
-                    imageInterpreters.Add(new ImageInterpreter(model_image, token_image));
-                }
-            }
-            if (imageInterpreters.Count > 0)
-            {
-                ImageInterpreterPool = new ImageInterpreterPool(imageInterpreters);
-            }
-        }
         var prompt = interop.GetVariableOrSetDefault("ai-prompt", "你是乐于助人的助手");
 
         OpenAiClient.HistoryRecorder historyRecorder = (groupId, messageType, content) =>
@@ -300,7 +281,6 @@ public partial class AiMessage : Plugin
     public override void Dispose()
     {
         aiClient.Dispose();
-        ImageInterpreterPool?.Dispose();
 
         GC.SuppressFinalize(this);
     }
