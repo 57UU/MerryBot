@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
 using DataService;
 using OpenAiClient;
 
@@ -11,9 +11,8 @@ namespace BotPlugin;
 [PluginTag("image-description", "ImageDescription", "图片描述统一服务（引用缓存+解析+入库）", priority: 998, type: PluginType.Background)]
 public class ImageDescriptionPlugin : Plugin
 {
-    // byte[] 引用缓存：key 是 byte[] 引用（不需要哈希），自动 GC 回收
-    // ConditionalWeakTable 线程安全，GetValue 实现"已有则返回，没有则创建"
-    private readonly ConditionalWeakTable<byte[], Task<string?>> _byteCache = new();
+    // hash 级内存缓存：相同 hash 的图片（不同 byte[] 实例）也能命中
+    private readonly ConcurrentDictionary<string, Task<string?>> _memoryCache = new();
 
     private readonly ImageInterpreterPool? _pool;
     private readonly StorageManagerPlugin _storageManager;
@@ -67,9 +66,10 @@ public class ImageDescriptionPlugin : Plugin
         if (!_enabled || _pool == null || imageBytes == null || imageBytes.Length == 0)
             return null;
 
-        // (1) byte[] 引用缓存（最快路径：相同 byte[] 实例直接复用）
-        if (_byteCache.TryGetValue(imageBytes, out var cached))
+        // (1) hash 级内存缓存（不同 byte[] 实例但相同 hash 也能命中）
+        if (_memoryCache.TryGetValue(hash, out var cached))
         {
+            Console.WriteLine($"[ImageDescription] memory cache HIT, hash={hash}");
             return await cached;
         }
 
@@ -77,12 +77,14 @@ public class ImageDescriptionPlugin : Plugin
         var entry = await _storageManager.GroupHistoryRecorder.GetImageByHashAsync(hash);
         if (entry != null && !string.IsNullOrEmpty(entry.Description))
         {
+            Console.WriteLine($"[ImageDescription] Description cache HIT, hash={hash}");
             return entry.Description;
         }
 
+        Console.WriteLine($"[ImageDescription] cache MISS, calling vision model, hash={hash}");
         // (3) 调模型 + 写回 ImageEntry
-        // GetValue 回调线程安全：相同 byte[] 引用只触发一次 ComputeAndCacheAsync
-        var task = _byteCache.GetValue(imageBytes, _ =>
+        // GetOrAdd 保证相同 hash 只触发一次 ComputeAndCacheAsync
+        var task = _memoryCache.GetOrAdd(hash, _ =>
             ComputeAndCacheAsync(hash, imageBytes, contentType));
         return await task;
     }
