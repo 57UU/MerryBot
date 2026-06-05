@@ -51,7 +51,7 @@ public partial class AiMessage
         }
         else if (item is ImageData imageData)
         {
-            return await AppendImageData(imageData, depth);
+            return await AppendImageData(imageData, depth, limit);
         }
         else if (item is FaceData faceData)
         {
@@ -183,35 +183,77 @@ public partial class AiMessage
         }
     }
 
-    async Task<string> AppendImageData(ImageData imageData, int depth)
+    async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)
     {
-        if (imageData.Url != null)
+        if (llmService.ImageInterpreterPool == null || imageData.Url == null || !limit.CanUseImageInterpreter(depth))
         {
-            if (long.TryParse(imageData.Url, out var imageId))
-            {
-                var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
-                if (imageEntry != null && !string.IsNullOrEmpty(imageEntry.Hash))
-                {
-                    var imageBytes = await storageManager.GroupHistoryRecorder
-                        .GetImageDataAsync(imageEntry.Hash);
-                    if (imageBytes != null)
-                    {
-                        var imageType = GetImageContentType(imageData.File);
-                        try
-                        {
-                            var description = await imageDescriptionPlugin
-                                .GetOrComputeDescriptionAsync(imageEntry.Hash, imageBytes, imageType);
-                            if (!string.IsNullOrEmpty(description))
-                            {
-                                return $"<image：{description}/>";
-                            }
-                        }
-                        catch { /* 忽略 */ }
-                    }
-                }
-            }
+            return $"<image {imageData.Summary}/>";
         }
-        return $"<image {imageData.Summary}/>";
+
+        await limit.ImageInterpreterSemaphore.WaitAsync();
+        try
+        {
+            var imageUrl = imageData.Url;
+            var imageType = GetImageContentType(imageData.File);
+
+            // 本地存储的图片（非 HTTP URL）
+            if (!imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                return await DescribeLocalImage(imageUrl, imageType);
+            }
+
+            // 远程图片：通过 ImageInterpreterPool 解析
+            return await InterpretRemoteImage(imageUrl, imageType, imageData.Summary, depth, limit);
+        }
+        catch (Exception)
+        {
+            return $"<image {imageData.Summary}/>";
+        }
+        finally
+        {
+            limit.ImageInterpreterSemaphore.Release();
+        }
+    }
+
+    async Task<string> DescribeLocalImage(string imageUrl, string imageType)
+    {
+        if (!long.TryParse(imageUrl, out var imageId))
+        {
+            return "<image/>";
+        }
+
+        var imageEntry = await storageManager.GroupHistoryRecorder.GetImageByIdAsync(imageId);
+        if (imageEntry == null)
+        {
+            return "<image/>";
+        }
+
+        if (imageEntry.Description != null)
+        {
+            return $"<image：{imageEntry.Description}/>";
+        }
+
+        var imageBytes = await storageManager.GroupHistoryRecorder.GetImageDataAsync(imageEntry.Hash);
+        if (imageBytes == null)
+        {
+            return "<image/>";
+        }
+
+        var description = await imageDescriptionPlugin
+            .GetOrComputeDescriptionAsync(imageEntry.Hash, imageBytes, imageType);
+        return $"<image：{description}/>";
+    }
+
+    async Task<string> InterpretRemoteImage(string imageUrl, string imageType, string? summary, int depth, ResourceLimit limit)
+    {
+        var description = await llmService.ImageInterpreterPool!
+            .Interpret(imageUrl, limit.ImageInterpreterType);
+
+        if (!limit.TryConsumeImageInterpreter(depth))
+        {
+            return $"<image {summary}/>";
+        }
+        return $"<image：{description}/>";
     }
 
     static string GetImageContentType(string? fileName)
