@@ -14,6 +14,8 @@ public class Actions
     private readonly Func<long> getSelfId;
     private static readonly HttpClient _httpClient = new HttpClient();
     private readonly RequestCaching requestCaching = new(TimeSpan.FromMinutes(1));
+    private readonly ConcurrentDictionary<string, Lazy<Task<byte[]>>> _inflightBinaryRequests = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _inflightTextRequests = new();
 
     public Actions(ISimpleLogger logger, WebSocketService webSocketService, Func<long> getSelfId)
     {
@@ -24,31 +26,53 @@ public class Actions
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
     private long _echoCounter = 0;
-    public async Task<byte[]> HttpGetBinary(string url)
+    public Task<byte[]> HttpGetBinary(string url)
     {
         var cacheKey = $"http-bin-{url}";
         if (requestCaching.TryGetCache(cacheKey, out byte[]? cacheRes))
         {
-            return cacheRes!;
+            return Task.FromResult(cacheRes!);
         }
-        HttpResponseMessage response = await _httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        byte[] responseBody = await response.Content.ReadAsByteArrayAsync();
-        requestCaching.SetCache(cacheKey, responseBody);
-        return responseBody;
+        var lazy = _inflightBinaryRequests.GetOrAdd(cacheKey, _ => new Lazy<Task<byte[]>>(async () =>
+        {
+            try
+            {
+                HttpResponseMessage response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                byte[] responseBody = await response.Content.ReadAsByteArrayAsync();
+                requestCaching.SetCache(cacheKey, responseBody);
+                return responseBody;
+            }
+            finally
+            {
+                _inflightBinaryRequests.TryRemove(cacheKey, out var _);
+            }
+        }));
+        return lazy.Value;
     }
-    public async Task<string> HttpGetText(string url)
+    public Task<string> HttpGetText(string url)
     {
         var cacheKey = $"http-text-{url}";
         if (requestCaching.TryGetCache(cacheKey, out string? cacheRes))
         {
-            return cacheRes!;
+            return Task.FromResult(cacheRes!);
         }
-        HttpResponseMessage response = await _httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        string responseBody = await response.Content.ReadAsStringAsync();
-        requestCaching.SetCache(cacheKey, responseBody);
-        return responseBody;
+        var lazy = _inflightTextRequests.GetOrAdd(cacheKey, _ => new Lazy<Task<string>>(async () =>
+        {
+            try
+            {
+                HttpResponseMessage response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                string responseBody = await response.Content.ReadAsStringAsync();
+                requestCaching.SetCache(cacheKey, responseBody);
+                return responseBody;
+            }
+            finally
+            {
+                _inflightTextRequests.TryRemove(cacheKey, out var _);
+            }
+        }));
+        return lazy.Value;
     }
     public Task<ResponseRootObject> _SendAction(ParameteredAct act, string? cacheKey = null, TimeSpan? expiration = null)
     {
