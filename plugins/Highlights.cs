@@ -44,6 +44,7 @@ public class Highlights : Plugin
 
         enableHeader = interop.GetStructVariableOrSetDefault("enable-header", false);
         enableFooter = interop.GetStructVariableOrSetDefault("enable-footer", true);
+        IsEnable = interop.GetStructVariableOrSetDefault("enable", true);
     }
     private readonly bool enableHeader;
     private readonly bool enableFooter;
