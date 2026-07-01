@@ -51,7 +51,7 @@ public class Highlights : Plugin
 public override async Task OnLoaded()
     {
         storageData = await Interop.PluginStorage.Load<HighlightsData>() ?? new HighlightsData();
-        Logger.Info($"Highlights plugin loaded. Target count: {count}");
+        Logger.Info($"Highlights plugin loaded. Target count: {count}. Status: {IsEnable}");
     }
 
     public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
