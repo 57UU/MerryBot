@@ -190,9 +190,14 @@ public partial class ViewVersion : Plugin
         data.UpdateByGroupId = groupId;
         await Interop.PluginStorage.Save(data);
 
-        // Determine project root (2 levels up from build/slot_x/)
+        // Determine project root by searching for .git directory or MerryBot.sln
         string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-        string projectRoot = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
+        string? projectRoot = FindProjectRoot(baseDir);
+        if (projectRoot == null)
+        {
+            await Actions.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
+            return;
+        }
         string buildDir = Path.Combine(projectRoot, "build");
         string activeSlotFile = Path.Combine(buildDir, "active_slot");
 
@@ -237,8 +242,10 @@ public partial class ViewVersion : Plugin
                 return;
             }
 
-            // Build succeeded — update active slot and exit
-            await File.WriteAllTextAsync(activeSlotFile, targetSlot);
+            // Build succeeded — atomically update active slot and exit
+            string tempFile = activeSlotFile + ".tmp";
+            await File.WriteAllTextAsync(tempFile, targetSlot);
+            File.Move(tempFile, activeSlotFile, overwrite: true);
             Logger.Info($"Build succeeded, switching to slot {targetSlot}");
             await Actions.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
             Interop.Shutdown(CommonLib.ExitCode.PREBUILT);
@@ -286,6 +293,21 @@ public partial class ViewVersion : Plugin
             }
         }
     }
+    /// <summary>
+    /// Find project root by searching for .git directory or MerryBot.sln, starting from the given directory and walking up.
+    /// </summary>
+    private static string? FindProjectRoot(string startDir)
+    {
+        string? dir = startDir;
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir, ".git")) || File.Exists(Path.Combine(dir, "MerryBot.sln")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return null;
+    }
+
     class Data
     {
         public long UpdateByGroupId = -1;

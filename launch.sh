@@ -24,6 +24,9 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 slot_dir="$project_dir/build"
 active_slot_file="$slot_dir/active_slot"
 
+# Handle interrupt signals gracefully
+trap 'echo "[launch] Interrupted, exiting"; exit 0' INT TERM
+
 # Read active slot (default A)
 read_active_slot() {
     if [ -f "$active_slot_file" ]; then
@@ -87,7 +90,6 @@ while true; do
         # PREBUILT: C# app already built to inactive slot and updated active_slot file
         new_active=$(read_active_slot)
         echo "[launch] Prebuilt detected, switching to slot $new_active..."
-        sleep 1
         continue
 
     elif [ $exit_code -eq $restart_code ]; then

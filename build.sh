@@ -17,6 +17,12 @@ fi
 target_dir="$1"
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+# Safety check: prevent dangerous rm -rf on invalid paths
+if [ -z "$target_dir" ] || [ "$target_dir" = "/" ] || [ "$target_dir" = "." ]; then
+    echo "Invalid target directory: $target_dir"
+    exit 1
+fi
+
 case $(uname -m) in
     x86_64)
         runtime="linux-x64"
