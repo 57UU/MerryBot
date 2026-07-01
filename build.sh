@@ -39,12 +39,18 @@ echo "[build] Restoring for $runtime..."
 dotnet restore HistoryWebFrontend/HistoryWebFrontend.csproj -r $runtime
 dotnet restore MerryBot/MerryBot.csproj -r $runtime
 
-# Publish HistoryWebFrontend to generate wwwroot
+# Clean and prepare target directory
+rm -rf "$target_dir"
+mkdir -p "$target_dir"
+
+# Publish HistoryWebFrontend to temp dir, then copy wwwroot to target
+wwwroot_tmp="$target_dir/.wwwroot_tmp"
 echo "[build] Publishing HistoryWebFrontend..."
 dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
     -r $runtime \
     --self-contained false \
     --no-restore \
+    -o "$wwwroot_tmp" \
     -p:PublishTrimmed=false \
     -p:PublishSingleFile=false \
     -p:EnableCompressionInSingleFile=false \
@@ -53,13 +59,16 @@ dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
     -p:DebugType=None \
     -p:DebugSymbols=false \
     -p:AppendRuntimeIdentifierToOutputPath=false
+cp -r "$wwwroot_tmp/wwwroot" "$target_dir/"
+rm -rf "$wwwroot_tmp"
 
-# Publish MerryBot with ReadyToRun
+# Publish MerryBot directly to target
 echo "[build] Publishing MerryBot..."
 dotnet publish MerryBot/MerryBot.csproj -c Release \
     -r $runtime \
     --self-contained false \
     --no-restore \
+    -o "$target_dir" \
     -p:PublishTrimmed=false \
     -p:TrimMode=link \
     -p:PublishSingleFile=false \
@@ -69,13 +78,6 @@ dotnet publish MerryBot/MerryBot.csproj -c Release \
     -p:DebugType=None \
     -p:DebugSymbols=true \
     -p:AppendRuntimeIdentifierToOutputPath=false
-
-# Copy publish output to target slot directory
-echo "[build] Copying to $target_dir..."
-rm -rf "$target_dir"
-mkdir -p "$target_dir"
-cp -r MerryBot/bin/linux/Release/net10.0/$runtime/publish/* "$target_dir/"
-cp -r HistoryWebFrontend/bin/linux/Release/net10.0/$runtime/publish/wwwroot "$target_dir/"
 
 end_time=$(date +%s)
 total_time=$((end_time - start_time))
