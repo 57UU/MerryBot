@@ -4,7 +4,7 @@ using System.Text;
 
 namespace BotPlugin;
 
-[PluginTag("view-version", "版本查看", "/version查看当前版本;/update更新软件;/update force强制更新;/reload重启程序", priority: 114514)]
+[PluginTag("view-version", "版本查看", "/version查看当前版本;/update [-f]更新软件;/reload重启程序", priority: 114514)]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;
@@ -262,22 +262,12 @@ public partial class ViewVersion : Plugin
         {
             _ = Actions.SendGroupMessage(groupId, gitInfo);
         }
-        else if (IsStartsWith(chain, "/update force"))
-        {
-            if (authorized == data.sender.user_id)
-            {
-                _ = Update(groupId, force: true);
-            }
-            else
-            {
-                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
-            }
-        }
         else if (IsStartsWith(chain, "/update"))
         {
             if (authorized == data.sender.user_id)
             {
-                _ = Update(groupId);
+                bool force = chain.ToString().Contains("-f");
+                _ = Update(groupId, force: force);
             }
             else
             {
