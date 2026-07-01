@@ -4,6 +4,22 @@ restart_code=101
 reload_code=102
 prebuilt_code=103
 
+force_build=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--force-build)
+            force_build=true
+            shift
+            ;;
+        *)
+            echo "Usage: $0 [-f|--force-build]"
+            exit 1
+            ;;
+    esac
+done
+
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 slot_dir="$project_dir/build"
 active_slot_file="$slot_dir/active_slot"
@@ -24,11 +40,19 @@ slot_path() {
 
 cd "$project_dir"
 
-# Bootstrap: build active slot if it doesn't exist
+# Bootstrap: build active slot if it doesn't exist or force build
 active=$(read_active_slot)
 active_path=$(slot_path "$active")
 
-if [ ! -f "$active_path/MerryBot" ]; then
+if [ "$force_build" = true ]; then
+    echo "[launch] Force build: rebuilding slot $active..."
+    mkdir -p "$slot_dir"
+    if ! bash build.sh "$active_path"; then
+        echo "[launch] Force build failed, exiting"
+        exit 1
+    fi
+    echo -n "$active" > "$active_slot_file"
+elif [ ! -f "$active_path/MerryBot" ]; then
     echo "[launch] First boot: building slot $active..."
     mkdir -p "$slot_dir"
     if ! bash build.sh "$active_path"; then
