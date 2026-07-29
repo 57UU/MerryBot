@@ -10,11 +10,11 @@ public class Program
     public static void Main()
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        var historyRecorder = new HistoryRecorder($"{dataPath}/group_history.db", $"{dataPath}/storage");
+        var historyRecorder = new HistoryRecorder(Path.Combine(dataPath, "group_history.db"), Path.Combine(dataPath, "storage"));
         var app = CreateApp(historyRecorder);
         app.Run();
     }
-    public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://0.0.0.0:5000")
+    public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000")
     {
         var webAssembly = typeof(Program).Assembly;
 
@@ -94,9 +94,13 @@ public class Program
         return app;
     }
 
-    private static string GetImageContentType(string url)
+    private static string GetImageContentType(string? url)
     {
-        var extension = Path.GetExtension(url).ToLower();
+        if (string.IsNullOrEmpty(url))
+        {
+            return "image/jpeg";
+        }
+        var extension = Path.GetExtension(url).ToLowerInvariant();
         return extension switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",
@@ -108,9 +112,13 @@ public class Program
         };
     }
 
-    private static string GetFileContentType(string url)
+    private static string GetFileContentType(string? url)
     {
-        var extension = Path.GetExtension(url).ToLower();
+        if (string.IsNullOrEmpty(url))
+        {
+            return "application/octet-stream";
+        }
+        var extension = Path.GetExtension(url).ToLowerInvariant();
         return extension switch
         {
             ".pdf" => "application/pdf",
@@ -128,12 +136,5 @@ public class Program
             ".mkv" => "video/x-matroska",
             _ => "application/octet-stream"
         };
-    }
-
-    private static string GetFileName(string url)
-    {
-        var uri = new Uri(url);
-        var fileName = Path.GetFileName(uri.LocalPath);
-        return string.IsNullOrEmpty(fileName) ? "download" : fileName;
     }
 }

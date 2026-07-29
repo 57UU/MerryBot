@@ -1,12 +1,14 @@
+@inject IJSRuntime JSRuntime
+
 <div class="top-row ps-3">
     <div class="nav-container">
         <a class="nav-brand" href="">历史记录查看</a>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="nav-toggler" />
+<input type="checkbox" title="导航菜单" class="nav-toggler" />
 
-<div class="nav-scrollable" onclick="document.querySelector('.nav-toggler').click()">
+<div class="nav-scrollable" @onclick="CloseNavIfToggled">
     <nav class="nav-column">
         <NavMenuItem Href="" Match=NavLinkMatch.All>
             Home
@@ -22,3 +24,17 @@
     </nav>
 </div>
 
+@code {
+    private async Task CloseNavIfToggled()
+    {
+        // 移动端：点击导航项后关闭展开的菜单
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("closeNavMenu");
+        }
+        catch
+        {
+            // 忽略 JS 调用失败（例如电路已断开）
+        }
+    }
+}

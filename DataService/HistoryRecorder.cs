@@ -430,4 +430,9 @@ public class HistoryRecorder : IDisposable
     {
         return await aiMessagesCollection.CountAsync(x => x.GroupId == groupId);
     }
+
+    public async Task<int> GetMessageCountByGroupIdAsync(long groupId)
+    {
+        return await messagesCollection.CountAsync(x => x.GroupId == groupId);
+    }
 }

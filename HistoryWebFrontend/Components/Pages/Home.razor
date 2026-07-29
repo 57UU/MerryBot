@@ -1,20 +1,21 @@
 @page "/"
 @using DataService
+@using Microsoft.Extensions.Logging
 @inject HistoryRecorder HistoryRecorder
+@inject ILogger<Home> Logger
 
 <PageTitle>统计数据</PageTitle>
-<h1 style="margin-top: 1rem; margin-bottom: 1rem;">历史记录统计</h1>
+<h1 class="page-title">历史记录统计</h1>
 <h2>统计数据</h2>
-<div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-	<StatCard Title="活跃群聊" Value="@GroupCount" />
-	<StatCard Title="群聊消息数" Value="@MessageCount" />
-	<StatCard Title="AI 消息数" Value="@AiMessageCount" />
-	<StatCard Title="图片数量" Value="@ImageCount" />
-	<StatCard Title="文件/视频/语音数量" Value="@FileCount" />
+<div class="stat-row">
+	<StatCard Title="活跃群聊" Value="@(IsLoadingStats ? "—" : GroupCount.ToString())" />
+	<StatCard Title="群聊消息数" Value="@(IsLoadingStats ? "—" : MessageCount.ToString())" />
+	<StatCard Title="AI 消息数" Value="@(IsLoadingStats ? "—" : AiMessageCount.ToString())" />
+	<StatCard Title="图片数量" Value="@(IsLoadingStats ? "—" : ImageCount.ToString())" />
+	<StatCard Title="文件/视频/语音数量" Value="@(IsLoadingStats ? "—" : FileCount.ToString())" />
 </div>
-<br />
 <h2>文件大小</h2>
-<div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+<div class="stat-row">
 	<StatCard Title="群聊历史库" Value="@GroupHistoryDbSize" />
 	<StatCard Title="图片存储" Value="@ImageStorageSize" />
 	<StatCard Title="文件存储" Value="@FileStorageSize" />
@@ -27,15 +28,19 @@
 	private int AiMessageCount { get; set; } = 0;
 	private int ImageCount { get; set; } = 0;
 	private int FileCount { get; set; } = 0;
-	private string GroupHistoryDbSize { get; set; } = "Unavaliable";
-	private string ImageStorageSize { get; set; } = "Unavaliable";
-	private string FileStorageSize { get; set; } = "Unavaliable";
+	private string GroupHistoryDbSize { get; set; } = "加载中";
+	private string ImageStorageSize { get; set; } = "加载中";
+	private string FileStorageSize { get; set; } = "加载中";
+
+	private bool IsLoadingStats { get; set; } = true;
 
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadGroupIds();
-		await LoadStatistics();
-		await LoadDbSizesAsync();
+		// LoadStatistics 依赖 GroupIds；LoadDbSizesAsync 与统计无依赖，并行执行
+		var statsTask = LoadStatistics();
+		var sizesTask = LoadDbSizesAsync();
+		await Task.WhenAll(statsTask, sizesTask);
 	}
 
 	private async Task LoadGroupIds()
@@ -47,9 +52,9 @@
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Error loading group IDs: {ex.Message}");
-			GroupIds = new List<long> { 0 };
-			GroupCount = GroupIds.Count;
+			Logger.LogError(ex, "加载群聊列表失败");
+			GroupIds = new List<long>();
+			GroupCount = 0;
 		}
 	}
 
@@ -57,18 +62,17 @@
 	{
 		try
 		{
+			// 消息计数：使用 CountAsync，避免逐群拉取 1000 条消息
 			MessageCount = 0;
 			foreach (var gid in GroupIds)
 			{
-				var messages = await HistoryRecorder.GetMessagesByGroupIdAsync(gid, 1000);
-				MessageCount += messages.Count;
+				MessageCount += await HistoryRecorder.GetMessageCountByGroupIdAsync(gid);
 			}
 
 			AiMessageCount = 0;
 			foreach (var gid in GroupIds)
 			{
-				var count = await HistoryRecorder.GetAiMessageCountByGroupIdAsync(gid);
-				AiMessageCount += count;
+				AiMessageCount += await HistoryRecorder.GetAiMessageCountByGroupIdAsync(gid);
 			}
 
 			ImageCount = await HistoryRecorder.GetImageCountAsync();
@@ -76,9 +80,11 @@
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Error loading statistics: {ex.Message}");
-			MessageCount = 100;
-			AiMessageCount = 50;
+			Logger.LogError(ex, "加载统计数据失败");
+		}
+		finally
+		{
+			IsLoadingStats = false;
 		}
 	}
 
@@ -92,7 +98,10 @@
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Error loading database sizes: {ex.Message}");
+			Logger.LogError(ex, "加载文件大小失败");
+			GroupHistoryDbSize = "加载失败";
+			ImageStorageSize = "加载失败";
+			FileStorageSize = "加载失败";
 		}
 	}
 }

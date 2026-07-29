@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
 
 @{
@@ -20,10 +20,10 @@
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+<div id="blazor-error-ui" data-nosnippet role="alert" aria-live="assertive">
+    发生未处理的错误。
+    <a href="." class="reload">刷新</a>
+    <button type="button" class="dismiss" aria-label="关闭错误提示">×</button>
 </div>
 
 @code {
