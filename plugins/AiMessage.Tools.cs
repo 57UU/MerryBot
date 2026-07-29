@@ -267,7 +267,7 @@ public partial class AiMessage
     private ToolDef RegisterFileSenderTool(Func<string, (bool isValid, string reason)> validateAccess)
     {
         var fileSender = new ToolDef();
-        const int maxSize = 1024 * 1024 * 10; //10MB
+        const int maxSize = 1024 * 1024 * 100; //100MB
         fileSender.Function.Name = "send_file";
         fileSender.Function.Description = "发送文件";
         fileSender.Function.Parameters.AddRequired("path", new ParameterProperty() { Type = "string", Description = "绝对路径" });
