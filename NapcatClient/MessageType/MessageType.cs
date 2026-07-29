@@ -833,9 +833,10 @@ public class ForwardData : TypedMessage
 
     /// <summary>
     /// 转发的消息内容列表(仅当解析转发内容时)
+    /// 嵌套的转发消息也会一并包含在此列表中，无需递归请求
     /// </summary>
     [JsonPropertyName("content")]
-    public JsonElement? Content { get; set; }
+    public List<NapcatClient.GroupMessage>? Content { get; set; }
 
     public override TypedMessage Clone()
     {
@@ -853,7 +854,7 @@ public class ForwardData : TypedMessage
             return true;
         }
         var other = (ForwardData)obj;
-        return Id == other.Id && object.Equals(Content, other.Content);
+        return Id == other.Id && ReferenceEquals(Content, other.Content);
     }
 
     public override int GetHashCode()

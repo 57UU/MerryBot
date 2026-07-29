@@ -161,26 +161,35 @@ public partial class AiMessage
         {
             return "<转发消息/>";
         }
-        var referMessage = await Actions.GetForwardMessageById(msgId);
-        if (referMessage != null)
+
+        // 优先使用 content 中已包含的转发内容；若为空则请求获取（嵌套转发会一并返回，无需递归请求）
+        List<NapcatClient.GroupMessage> messages;
+        if (forwardData.Content != null && forwardData.Content.Count > 0)
         {
-            List<string> forwardLines = new();
-            forwardLines.Add("<转发消息>");
-            foreach (var msg in referMessage.Messages)
-            {
-                if (msg == null) continue;
-                var extractedMessage = await ExtractMessage(msg.Message, groupId, depth < 3, depth + 1);
-                var nickname = msg.SenderInfo?.nickname ?? "unknown";
-                forwardLines.Add($"{nickname}:{extractedMessage}");
-            }
-            forwardLines.Add("</转发消息>");
-            var forwardString = string.Join(Environment.NewLine, forwardLines);
-            return PluginUtils.ConstraintLength(forwardString, 600);
+            messages = forwardData.Content;
         }
         else
         {
-            return "<转发消息/>";
+            var referMessage = await Actions.GetForwardMessageById(msgId);
+            if (referMessage == null || referMessage.Messages == null || referMessage.Messages.Count == 0)
+            {
+                return "<转发消息/>";
+            }
+            messages = referMessage.Messages;
         }
+
+        List<string> forwardLines = new();
+        forwardLines.Add("<转发消息>");
+        foreach (var msg in messages)
+        {
+            if (msg == null) continue;
+            var extractedMessage = await ExtractMessage(msg.Message, groupId, depth < 3, depth + 1);
+            var nickname = msg.SenderInfo?.nickname ?? "unknown";
+            forwardLines.Add($"{nickname}:{extractedMessage}");
+        }
+        forwardLines.Add("</转发消息>");
+        var forwardString = string.Join(Environment.NewLine, forwardLines);
+        return PluginUtils.ConstraintLength(forwardString, 600);
     }
 
     async Task<string> AppendImageData(ImageData imageData, int depth, ResourceLimit limit)

@@ -367,29 +367,41 @@ public class MessageRecorderPlugin : Plugin
                 return;
             }
 
-            var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
-            if (forwardMessage != null && forwardMessage.Messages.Any())
+            // 优先使用 content 中已包含的转发内容；若为空则请求获取（嵌套转发会一并返回，无需递归请求）
+            List<NapcatClient.GroupMessage> messages;
+            if (forwardData.Content != null && forwardData.Content.Count > 0)
             {
-                var messages = new List<DataService.GroupMessage>();
-                foreach (var msg in forwardMessage.Messages)
-                {
-                    var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(msg);
-                    messages.Add(groupMessage);
-
-                    await ProcessMessageResources(msg.Message, groupId, depth);
-                }
-
-                var time = DateTimeOffset.FromUnixTimeSeconds(forwardMessage.Messages.First().Time).UtcDateTime;
-                var entry = new DataService.ForwardMessageEntry(
-                    forwardData.Id,
-                    groupId,
-                    messages,
-                    time
-                );
-
-                await historyRecorder.RecordForwardMessageAsync(entry);
-                Logger.Debug($"保存转发消息: {forwardData.Id}, 包含 {messages.Count} 条消息");
+                messages = forwardData.Content;
             }
+            else
+            {
+                var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
+                if (forwardMessage == null || !forwardMessage.Messages.Any())
+                {
+                    return;
+                }
+                messages = forwardMessage.Messages;
+            }
+
+            var groupMessages = new List<DataService.GroupMessage>();
+            foreach (var msg in messages)
+            {
+                var groupMessage = DataService.GroupMessage.FromNapcatGroupMessage(msg);
+                groupMessages.Add(groupMessage);
+
+                await ProcessMessageResources(msg.Message, groupId, depth);
+            }
+
+            var time = DateTimeOffset.FromUnixTimeSeconds(messages.First().Time).UtcDateTime;
+            var entry = new DataService.ForwardMessageEntry(
+                forwardData.Id,
+                groupId,
+                groupMessages,
+                time
+            );
+
+            await historyRecorder.RecordForwardMessageAsync(entry);
+            Logger.Debug($"保存转发消息: {forwardData.Id}, 包含 {groupMessages.Count} 条消息");
         }
         catch (Exception ex)
         {
