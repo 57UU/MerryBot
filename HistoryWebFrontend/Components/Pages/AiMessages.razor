@@ -195,13 +195,14 @@
         {
             GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
             var allGroupNames = await HistoryRecorder.GetAllGroupNamesAsync();
-            GroupNameCache = allGroupNames.ToDictionary(g => g.GroupId, g => g);
+            // 使用 GroupBy 防止重复 GroupId 导致 ToDictionary 抛 ArgumentException
+            GroupNameCache = allGroupNames.GroupBy(g => g.GroupId).ToDictionary(g => g.Key, g => g.First());
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "加载群聊列表失败");
             GroupIds = new List<long>();
-            GroupIdsLoadError = "加载群聊列表失败";
+            GroupIdsLoadError = $"加载群聊列表失败: {ex.Message}";
         }
         finally
         {

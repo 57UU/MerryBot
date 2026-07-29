@@ -7,15 +7,18 @@ namespace HistoryWebFrontend;
 
 public class Program
 {
-    public static void Main()
+    public static async Task Main()
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         var historyRecorder = new HistoryRecorder(Path.Combine(dataPath, "group_history.db"), Path.Combine(dataPath, "storage"));
         var app = CreateApp(historyRecorder);
-        app.Run();
+        await app.RunAsync();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000")
     {
+        // 执行数据库 schema 迁移（幂等，已是最新版本时直接返回）
+        historyRecorder.MigrateAsync().GetAwaiter().GetResult();
+
         var webAssembly = typeof(Program).Assembly;
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions()
