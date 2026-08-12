@@ -1,0 +1,169 @@
+@using NapcatClient.MessageType
+@inject IJSRuntime JSRuntime
+
+@try
+{
+	@if (Msg is TextData textData)
+	{
+		<span>@textData.Text</span>
+	}
+	else if (Msg is AtData atData)
+	{
+		<span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
+	}
+	else if (Msg is FaceData faceData)
+	{
+		<span class="text-muted-custom">[表情: @faceData.ToChinese()]</span>
+	}
+	else if (Msg is ImageData imageData)
+	{
+		<div class="mt-1-custom">
+			<div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
+			<img src="/api/image/@imageData.Url" alt="@(imageData.Summary ?? "图片")" class="img-fluid-custom rounded-custom"
+				loading="lazy" decoding="async"
+				style="max-height: 300px;" />
+		</div>
+	}
+	else if (Msg is FileData fileData)
+	{
+		<div class="mt-1-custom">
+			<a href="/api/file/@fileData.Url?name=@Uri.EscapeDataString(fileData.File ?? "")" download="@fileData.File" class="text-primary-custom"
+				title="点击下载文件">
+				[文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize ?? 0))
+			</a>
+		</div>
+	}
+	else if (Msg is RecordData recordData)
+	{
+		@if (Mode == MessageRenderMode.Inline)
+		{
+			<div class="mt-1-custom play-btn-row-custom">
+				<button type="button" class="play-btn-bare"
+					@onclick='() => PlayAmr($"/api/file/{recordData.Url}")' title="点击播放语音" aria-label="播放语音">
+					▶
+				</button>
+				<span class="text-primary-custom">@(recordData.Path ?? "语音消息")</span>
+			</div>
+		}
+		else
+		{
+			<div class="mt-1-custom">
+				<a href="/api/file/@recordData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放语音">
+					[语音] @(recordData.Path ?? "语音消息")
+				</a>
+			</div>
+		}
+	}
+	else if (Msg is VideoData videoData)
+	{
+		@if (Mode == MessageRenderMode.Inline)
+		{
+			<div class="mt-1-custom">
+				<video src="/api/file/@videoData.Url" controls preload="metadata"
+					class="inline-video"></video>
+			</div>
+		}
+		else
+		{
+			<div class="mt-1-custom">
+				<a href="/api/file/@videoData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放视频">
+					[视频] @(videoData.File ?? "视频消息")
+				</a>
+			</div>
+		}
+	}
+	else if (Msg is ForwardData forwardData)
+	{
+		@if (Mode == MessageRenderMode.Inline)
+		{
+			<div class="mt-1-custom">
+				<a href="javascript:void(0)" class="text-primary-custom"
+					@onclick="() => OnForwardClick.InvokeAsync(forwardData.Id)">
+					[转发消息] 点击查看详情
+				</a>
+			</div>
+		}
+		else
+		{
+			<div class="mt-1-custom">
+				<a href="/forwardedmessage?id=@Uri.EscapeDataString(forwardData.Id ?? "")&embed=1" class="text-primary-custom">
+					[转发消息] 点击查看详情
+				</a>
+			</div>
+		}
+	}
+	else if (Msg is ReplyData replyData)
+	{
+		<div class="mt-1-custom text-muted-custom">
+			[回复] 消息 ID: @replyData.Id
+		</div>
+	}
+	else if (Msg is JsonData)
+	{
+		<div class="mt-1-custom text-muted-custom">
+			[卡片消息]
+		</div>
+	}
+	else if (Msg is MusicData musicData)
+	{
+		<div class="mt-1-custom">
+			<span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
+		</div>
+	}
+	else if (Msg is DiceData diceData)
+	{
+		<div class="mt-1-custom">
+			<span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
+		</div>
+	}
+	else if (Msg is RpsData rpsData)
+	{
+		<div class="mt-1-custom">
+			<span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
+		</div>
+	}
+	else if (Msg is PokeData pokeData)
+	{
+		<div class="mt-1-custom text-muted-custom">
+			[戳一戳] @pokeData.Type
+		</div>
+	}
+	else if (Msg is MfaceData mfaceData)
+	{
+		<div class="mt-1-custom text-muted-custom">
+			[商城表情] @mfaceData.Summary
+		</div>
+	}
+	else
+	{
+		<span class="text-muted-custom">[未知消息类型: @Msg.GetType().Name]</span>
+	}
+}
+catch (Exception ex)
+{
+	<span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
+}
+
+@code {
+	[Parameter]
+	public TypedMessage Msg { get; set; } = null!;
+
+	[Parameter]
+	public MessageRenderMode Mode { get; set; } = MessageRenderMode.Inline;
+
+	/// <summary>Inline 模式下点击转发消息的回调，参数为转发 ID。</summary>
+	[Parameter]
+	public EventCallback<string> OnForwardClick { get; set; }
+
+	private async Task PlayAmr(string url)
+	{
+		try
+		{
+			await JSRuntime.InvokeVoidAsync("playAmrAudio", url);
+		}
+		catch (JSDisconnectedException)
+		{
+			// 电路已断开，忽略
+		}
+	}
+}

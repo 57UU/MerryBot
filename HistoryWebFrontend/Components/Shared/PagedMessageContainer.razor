@@ -1,0 +1,231 @@
+@typeparam TItem
+@implements IAsyncDisposable
+@using Microsoft.Extensions.Logging
+
+<div class="card-full-height">
+	<div class="card-header-custom">
+		@HeaderContent
+	</div>
+	<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;"
+		@onscroll="HandleScroll" id="@ElementId">
+		@if (GroupId <= 0)
+		{
+			<div class="text-center-custom text-muted-custom mt-5-custom">
+				请从左侧选择一个群聊
+			</div>
+		}
+		else if (IsLoadingMessages)
+		{
+			<div class="text-center-custom text-muted-custom mt-5-custom">
+				加载消息中...
+			</div>
+		}
+		else if (MessagesLoadError != null)
+		{
+			<div class="text-center-custom text-danger-custom mt-5-custom">
+				@MessagesLoadError
+			</div>
+		}
+		else if (Items.Count == 0)
+		{
+			<div class="text-center-custom text-muted-custom mt-5-custom">
+				@EmptyText
+			</div>
+		}
+		else
+		{
+			@if (IsLoadingMore)
+			{
+				<div class="text-center-custom text-muted-custom py-2-custom">
+					加载更多消息...
+				</div>
+			}
+			<div class="message-container-custom" id="@($"{ElementId}-list")">
+				@BodyContent(Items)
+			</div>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public string ElementId { get; set; } = string.Empty;
+
+	/// <summary>当前展示的群聊 ID，大于 0 时才会加载；变化时自动重新加载。</summary>
+	[Parameter]
+	public long GroupId { get; set; }
+
+	/// <summary>分页数据源：(page, pageSize) → 消息列表。</summary>
+	[Parameter]
+	public Func<int, int, Task<List<TItem>>> LoadPageAsync { get; set; } = null!;
+
+	[Parameter]
+	public RenderFragment<IReadOnlyList<TItem>> BodyContent { get; set; } = null!;
+
+	[Parameter]
+	public RenderFragment? HeaderContent { get; set; }
+
+	[Parameter]
+	public string EmptyText { get; set; } = "暂无消息";
+
+	/// <summary>加载后是否按时间倒序缓存（最新在顶）。</summary>
+	[Parameter]
+	public bool ReverseOrder { get; set; } = true;
+
+	[Inject]
+	private IJSRuntime JSRuntime { get; set; } = null!;
+
+	[Inject]
+	private ILogger<PagedMessageContainer<TItem>> Logger { get; set; } = null!;
+
+	private List<TItem> Items { get; set; } = new List<TItem>();
+
+	private bool IsLoadingMessages { get; set; } = true;
+
+	private bool IsLoadingMore { get; set; } = false;
+
+	private string? MessagesLoadError { get; set; }
+
+	private int CurrentPage { get; set; } = 1;
+
+	private const int PageSize = 50;
+
+	private bool HasMoreMessages { get; set; } = true;
+
+	private DotNetObjectReference<PagedMessageContainer<TItem>>? _dotNetRef;
+
+	private bool _isDisposed;
+
+	// 群聊切换竞态守护：每次加载自增，完成后比较，过期则丢弃结果
+	private long _loadSeq;
+
+	// 消息渲染完成（OnAfterRenderAsync）后滚动到底
+	private bool _pendingScrollToBottom;
+
+	private long _lastLoadedGroupId;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (GroupId <= 0 || _lastLoadedGroupId == GroupId) return;
+		_lastLoadedGroupId = GroupId;
+		await LoadAsync();
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			_dotNetRef = DotNetObjectReference.Create(this);
+		}
+
+		if (_pendingScrollToBottom && Items.Count > 0)
+		{
+			_pendingScrollToBottom = false;
+			await ScrollToBottom();
+		}
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		if (_isDisposed) return;
+
+		if (_dotNetRef != null)
+		{
+			_dotNetRef.Dispose();
+			_dotNetRef = null;
+		}
+		_isDisposed = true;
+		await ValueTask.CompletedTask;
+	}
+
+	private async Task LoadAsync()
+	{
+		var seq = Interlocked.Increment(ref _loadSeq);
+		CurrentPage = 1;
+		HasMoreMessages = true;
+		IsLoadingMessages = true;
+		MessagesLoadError = null;
+		_pendingScrollToBottom = false;
+
+		try
+		{
+			var messages = await LoadPageAsync(CurrentPage, PageSize);
+			// 过期结果丢弃，防止切换群聊后旧结果覆盖
+			if (seq != Interlocked.Read(ref _loadSeq) || _isDisposed) return;
+			Items = ReverseOrder ? messages.AsEnumerable().Reverse().ToList() : new List<TItem>(messages);
+			_pendingScrollToBottom = true;
+		}
+		catch (Exception ex)
+		{
+			if (seq != Interlocked.Read(ref _loadSeq) || _isDisposed) return;
+			Logger.LogError(ex, "加载消息失败");
+			Items = new List<TItem>();
+			MessagesLoadError = "加载消息失败";
+		}
+		finally
+		{
+			if (seq == Interlocked.Read(ref _loadSeq) && !_isDisposed)
+			{
+				IsLoadingMessages = false;
+			}
+		}
+	}
+
+	private record ScrollInfo(double ScrollHeight, double ScrollTop);
+
+	private async Task HandleScroll(EventArgs e)
+	{
+		if (_dotNetRef != null)
+		{
+			await JSRuntime.InvokeVoidAsync("handleScrollForLoadMore", ElementId, _dotNetRef);
+		}
+	}
+
+	// 由 scroll.js 的 handleScrollForLoadMore 调用（滚动到顶部时触发加载更早的消息）
+	[JSInvokable]
+	public async Task LoadMoreMessages()
+	{
+		if (IsLoadingMore || !HasMoreMessages)
+			return;
+
+		IsLoadingMore = true;
+		CurrentPage++;
+
+		try
+		{
+			var moreMessages = await LoadPageAsync(CurrentPage, PageSize);
+			if (moreMessages.Any())
+			{
+				var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+				Items.AddRange(ReverseOrder ? moreMessages.AsEnumerable().Reverse() : moreMessages);
+				await Task.Delay(50);
+				var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+				await JSRuntime.InvokeVoidAsync("setScrollTop", ElementId, before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
+			}
+			else
+			{
+				HasMoreMessages = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Logger.LogError(ex, "加载更多消息失败");
+		}
+		finally
+		{
+			IsLoadingMore = false;
+		}
+	}
+
+	private async Task ScrollToBottom()
+	{
+		try
+		{
+			await JSRuntime.InvokeVoidAsync("scrollToElementBottom", ElementId);
+		}
+		catch (JSDisconnectedException)
+		{
+			// 电路已断开，忽略
+		}
+	}
+}

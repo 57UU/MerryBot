@@ -1,0 +1,114 @@
+@using DataService
+@using Microsoft.Extensions.Logging
+
+<div class="card-full-height">
+	<div class="card-header-custom">
+		群聊列表
+	</div>
+	<div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
+		@if (IsLoadingGroups)
+		{
+			<div class="text-center-custom text-muted-custom py-2-custom">
+				加载群聊列表中...
+			</div>
+		}
+		else if (GroupIdsLoadError != null)
+		{
+			<div class="text-center-custom text-danger-custom py-2-custom">
+				@GroupIdsLoadError
+				<br />
+				<button type="button" class="btn-link-custom" @onclick="LoadGroupIds">点击重试</button>
+			</div>
+		}
+		else
+		{
+			<ul class="list-group-custom">
+				@foreach (var groupId in GroupIds)
+				{
+					<li class="list-group-item-custom @(SelectedGroupId == groupId ? "active-custom" : "")"
+						tabindex="0"
+						role="button"
+						aria-current="@(SelectedGroupId == groupId ? "true" : "false")"
+						@onclick="() => SelectGroup(groupId)"
+						@onkeydown="() => SelectGroupOnKey(groupId)">
+						@if (GroupNameCache.TryGetValue(groupId, out var groupNameEntry) &&
+								!string.IsNullOrEmpty(groupNameEntry.Name))
+						{
+							<span>@groupNameEntry.Name (@groupId)</span>
+						}
+						else
+						{
+							<span>@groupId</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter]
+	public long SelectedGroupId { get; set; }
+
+	[Parameter]
+	public EventCallback<long> OnGroupSelected { get; set; }
+
+	[Parameter]
+	public EventCallback<GroupListContext> OnLoaded { get; set; }
+
+	[Inject]
+	private HistoryRecorder HistoryRecorder { get; set; } = null!;
+
+	[Inject]
+	private ILogger<GroupListPanel> Logger { get; set; } = null!;
+
+	private List<long> GroupIds { get; set; } = new List<long>();
+
+	private Dictionary<long, GroupNameEntry> GroupNameCache { get; set; } = new Dictionary<long, GroupNameEntry>();
+
+	private bool IsLoadingGroups { get; set; } = true;
+
+	private string? GroupIdsLoadError { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadGroupIds();
+	}
+
+	private async Task LoadGroupIds()
+	{
+		IsLoadingGroups = true;
+		GroupIdsLoadError = null;
+		try
+		{
+			GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
+			var allGroupNames = await HistoryRecorder.GetAllGroupNamesAsync();
+			// 使用 GroupBy 防止重复 GroupId 导致 ToDictionary 抛 ArgumentException
+			GroupNameCache = allGroupNames.GroupBy(g => g.GroupId).ToDictionary(g => g.Key, g => g.First());
+			await OnLoaded.InvokeAsync(new GroupListContext(GroupIds, GroupNameCache));
+		}
+		catch (Exception ex)
+		{
+			Logger.LogError(ex, "加载群聊列表失败");
+			GroupIds = new List<long>();
+			GroupIdsLoadError = $"加载群聊列表失败: {ex.Message}";
+		}
+		finally
+		{
+			IsLoadingGroups = false;
+		}
+	}
+
+	private async Task SelectGroup(long groupId)
+	{
+		if (SelectedGroupId == groupId) return;
+		await OnGroupSelected.InvokeAsync(groupId);
+	}
+
+	private async Task SelectGroupOnKey(long groupId)
+	{
+		// 键盘激活（Enter/Space 等）触发选择
+		await SelectGroup(groupId);
+	}
+}

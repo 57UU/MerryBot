@@ -1,7 +1,5 @@
 @page "/forwardedmessage"
 @using DataService
-@using Microsoft.AspNetCore.Components
-@using Microsoft.JSInterop
 @using Microsoft.Extensions.Logging
 @rendermode InteractiveServer
 @inject HistoryRecorder HistoryRecorder
@@ -60,7 +58,7 @@
                             <div class="message-content-custom">
                                 @foreach (var msg in message.Messages)
                                 {
-                                    @RenderMessage(msg)
+                                    <MessageRenderer Msg="msg" Mode="MessageRenderMode.Link" />
                                 }
                             </div>
                         </div>
@@ -131,117 +129,5 @@
     {
         // 优先回退历史栈，无历史则回首页
         NavigationManager.NavigateTo("/");
-    }
-
-    private RenderFragment RenderMessage(object msg)
-    {
-        return __builder =>
-        {
-            try
-            {
-                if (msg is NapcatClient.MessageType.TextData textData)
-                {
-                    <span>@textData.Text</span>
-                }
-                else if (msg is NapcatClient.MessageType.AtData atData)
-                {
-                    <span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
-                }
-                else if (msg is NapcatClient.MessageType.FaceData faceData)
-                {
-                    <span class="text-muted-custom">[表情: @faceData.ToChinese()]</span>
-                }
-                else if (msg is NapcatClient.MessageType.ImageData imageData)
-                {
-                    <div class="mt-1-custom">
-                        <div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
-                        <img src="/api/image/@imageData.Url" alt="@(imageData.Summary ?? "图片")" class="img-fluid-custom rounded-custom"
-                            loading="lazy" decoding="async" style="max-height: 300px;" />
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.FileData fileData)
-                {
-                    <div class="mt-1-custom">
-                        <a href="/api/file/@fileData.Url?name=@Uri.EscapeDataString(fileData.File ?? "")" download="@fileData.File" class="text-primary-custom" title="点击下载文件">
-                            [文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize ?? 0))
-                        </a>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.RecordData recordData)
-                {
-                    <div class="mt-1-custom">
-                        <a href="/api/file/@recordData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放语音">
-                            [语音] @(recordData.Path ?? "语音消息")
-                        </a>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.VideoData videoData)
-                {
-                    <div class="mt-1-custom">
-                        <a href="/api/file/@videoData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放视频">
-                            [视频] @(videoData.File ?? "视频消息")
-                        </a>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.ForwardData forwardData)
-                {
-                    <div class="mt-1-custom">
-                        <a href="/forwardedmessage?id=@Uri.EscapeDataString(forwardData.Id ?? "")&embed=1" class="text-primary-custom">
-                            [转发消息] 点击查看详情
-                        </a>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.ReplyData replyData)
-                {
-                    <div class="mt-1-custom text-muted-custom">
-                        [回复] 消息 ID: @replyData.Id
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.JsonData)
-                {
-                    <div class="mt-1-custom text-muted-custom">
-                        [卡片消息]
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.MusicData musicData)
-                {
-                    <div class="mt-1-custom">
-                        <span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.DiceData diceData)
-                {
-                    <div class="mt-1-custom">
-                        <span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.RpsData rpsData)
-                {
-                    <div class="mt-1-custom">
-                        <span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.PokeData pokeData)
-                {
-                    <div class="mt-1-custom text-muted-custom">
-                        [戳一戳] @pokeData.Type
-                    </div>
-                }
-                else if (msg is NapcatClient.MessageType.MfaceData mfaceData)
-                {
-                    <div class="mt-1-custom text-muted-custom">
-                        [商城表情] @mfaceData.Summary
-                    </div>
-                }
-                else
-                {
-                    <span class="text-muted-custom">[未知消息类型: @msg.GetType().Name]</span>
-                }
-            }
-            catch (Exception ex)
-            {
-                <span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
-            }
-        };
     }
 }
