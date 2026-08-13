@@ -6,136 +6,76 @@ internal partial class Logic
 {
     private void OnNoticeEventReceived(NapcatClient.EventType.NoticeEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnNoticeEvent(eventData);
-        }
+        EventRegister.RaiseNoticeEventReceived(eventData);
     }
 
     private void OnGroupUploadEventReceived(NapcatClient.EventType.GroupUploadEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupUploadEvent(eventData);
-        }
+        EventRegister.RaiseGroupUploadEventReceived(eventData);
     }
 
     private void OnGroupAdminEventReceived(NapcatClient.EventType.GroupAdminEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupAdminEvent(eventData);
-        }
+        EventRegister.RaiseGroupAdminEventReceived(eventData);
     }
 
     private void OnGroupDecreaseEventReceived(NapcatClient.EventType.GroupDecreaseEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupDecreaseEvent(eventData);
-        }
+        EventRegister.RaiseGroupDecreaseEventReceived(eventData);
     }
 
     private void OnGroupIncreaseEventReceived(NapcatClient.EventType.GroupIncreaseEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupIncreaseEvent(eventData);
-        }
+        EventRegister.RaiseGroupIncreaseEventReceived(eventData);
     }
 
     private void OnGroupBanEventReceived(NapcatClient.EventType.GroupBanEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupBanEvent(eventData);
-        }
+        EventRegister.RaiseGroupBanEventReceived(eventData);
     }
 
     private void OnFriendAddEventReceived(NapcatClient.EventType.FriendAddEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnFriendAddEvent(eventData);
-        }
+        EventRegister.RaiseFriendAddEventReceived(eventData);
     }
 
     private void OnGroupRecallEventReceived(NapcatClient.EventType.GroupRecallEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupRecallEvent(eventData);
-        }
+        EventRegister.RaiseGroupRecallEventReceived(eventData);
     }
 
     private void OnFriendRecallEventReceived(NapcatClient.EventType.FriendRecallEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnFriendRecallEvent(eventData);
-        }
+        EventRegister.RaiseFriendRecallEventReceived(eventData);
     }
 
     private void OnPokeEventReceived(NapcatClient.EventType.PokeEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnPokeEvent(eventData);
-        }
+        EventRegister.RaisePokeEventReceived(eventData);
     }
 
     private void OnLuckyKingEventReceived(NapcatClient.EventType.LuckyKingEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnLuckyKingEvent(eventData);
-        }
+        EventRegister.RaiseLuckyKingEventReceived(eventData);
     }
 
     private void OnHonorEventReceived(NapcatClient.EventType.HonorEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnHonorEvent(eventData);
-        }
+        EventRegister.RaiseHonorEventReceived(eventData);
     }
 
     private void OnGroupMsgEmojiLikeEventReceived(NapcatClient.EventType.GroupMsgEmojiLikeEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupMsgEmojiLikeEvent(eventData);
-        }
+        EventRegister.RaiseGroupMsgEmojiLikeEventReceived(eventData);
     }
 
     private void OnEssenceEventReceived(NapcatClient.EventType.EssenceEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnEssenceEvent(eventData);
-        }
+        EventRegister.RaiseEssenceEventReceived(eventData);
     }
 
     private void OnGroupCardEventReceived(NapcatClient.EventType.GroupCardEvent eventData)
     {
-        foreach (var plugin in plugins)
-        {
-            if (!plugin.Instance.IsEnable) continue;
-            plugin.Instance.OnGroupCardEvent(eventData);
-        }
+        EventRegister.RaiseGroupCardEventReceived(eventData);
     }
 }

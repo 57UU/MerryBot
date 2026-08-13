@@ -34,7 +34,8 @@ public class ReceivedGroupMessage
     public List<TypedMessage> message { get; set; } = new();
     public string message_format { get; set; }
     public string post_type { get; set; }
-    public long group_id { get; set; }
+    [JsonPropertyName("group_id")]
+    public long GroupId { get; set; }
     public dynamic raw { get; set; }
 }
 

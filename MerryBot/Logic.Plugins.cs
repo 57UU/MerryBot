@@ -8,7 +8,6 @@ namespace MerryBot;
 internal partial class Logic
 {
     private readonly List<PluginInfo> plugins = new();
-    private MainPlugin? mainPlugin;
     private IEnumerable<Action>? _pluginsDisposeActions;
 
     private static List<long> QqGroupIDs
@@ -23,7 +22,7 @@ internal partial class Logic
     {
         List<(Type type, PluginTag attribute)> list = [];
         Assembly assembly = Assembly.GetAssembly(typeof(Plugin))!;
-        foreach (Type type in assembly.GetTypes().Append(typeof(MainPlugin)))
+        foreach (Type type in assembly.GetTypes())
         {
             PluginTag attribute = type.GetCustomAttribute<PluginTag>()!;
             if (attribute != null && !attribute.IsIgnore)
@@ -59,29 +58,22 @@ internal partial class Logic
                             (groupId, s) => PluginStorageDatabase.StoreGroupPluginData(attribute.Id, groupId, s),
                             groupId => PluginStorageDatabase.GetGroupPluginData(attribute.Id, groupId)
                             );
-                        var interop = new PluginInterop(
-                        new PluginLogger(attribute.Id),
-                        QqGroupIDs,
-                        () => plugins,
-                        pluginStorage,
-                        botClient,
-                        pluginVars,
-                        Shutdown,
-                        AuthorizedUser,
-                        CommandLineArguments,
-                        ConfigManager.Save,
-                        botClient.PathPrefix,
-                        f => OnRawGroupMessageReceived += f
-                        );
+                var interop = new PluginInterop(
+                new PluginLogger(attribute.Id),
+                QqGroupIDs,
+                () => plugins,
+                pluginStorage,
+                botClient,
+                pluginVars,
+                Shutdown,
+                AuthorizedUser,
+                CommandLineArguments,
+                ConfigManager.Save,
+                botClient.PathPrefix,
+                EventRegister
+                );
                 pluginInteropMap.Add(type, interop);
-                if (type == typeof(MainPlugin))
-                {
-                    pluginInitializer.AddDependency(type, new List<object> { this, interop });
-                }
-                else
-                {
-                    pluginInitializer.AddDependency(type, new List<object> { interop });
-                }
+                pluginInitializer.AddDependency(type, [interop]);
 
             }
             catch (Exception ex)
@@ -114,8 +106,6 @@ internal partial class Logic
             }
 
         }
-        mainPlugin = pluginInitializer.GetInstance<MainPlugin>();
-
         foreach (var i in plugins)
         {
             i.Instance.OnLoaded().ContinueWith(task =>

@@ -54,7 +54,7 @@ public class GroupMessage
     {
         var time = DateTimeOffset.FromUnixTimeSeconds(receivedGroupMessage.time).UtcDateTime;
         return new GroupMessage(
-            receivedGroupMessage.group_id,
+            receivedGroupMessage.GroupId,
             receivedGroupMessage.sender.user_id,
             receivedGroupMessage.sender.nickname,
             receivedGroupMessage.sender.card,

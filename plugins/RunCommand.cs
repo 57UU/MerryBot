@@ -30,37 +30,24 @@ public class RunCommand : Plugin
     /// 创建一个新的 ShellManager 实例（使用当前配置的 shell-user）
     /// </summary>
     public ShellManager CreateShellManager() => new(ShellUser);
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
+        if (!isMentioned || command?.Name != "sh") return;
+        long groupId = data.GroupId;
         long sender = data.sender.user_id;
         var isAuthorized = sender == authorized;
         if (useUnprivileged == false && !isAuthorized)
         {
-            _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nYou do not have the permission");
+            _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nYou do not have the permission");
             return;
         }
-        if (IsStartsWith(chain, "/sh"))
+        if (command.Args.Length == 0)
         {
-            var text = (chain[0] as TextData)!.Text.Trim();
-            //rm first /sh
-            var first = text.IndexOf(' ');
-            if (first == -1)
-            {
-                _ = Actions.SendGroupMessage(groupId, "请输入命令");
-                return;
-            }
-            text = text[first..];
-            if (text.Length == 0)
-            {
-                _ = Actions.SendGroupMessage(groupId, "请输入命令");
-                return;
-            }
-            if (text[0] == ' ')
-            {
-                text = text[1..];
-            }
-            _ = HandleCommand(text, groupId, data.sender.user_id, isAuthorized);
+            _ = Bot.SendGroupMessage(groupId, "请输入命令");
+            return;
         }
+        string text = string.Join(' ', command.Args);
+        _ = HandleCommand(text, groupId, sender, isAuthorized);
     }
     internal Terminal terminal;
     async Task HandleCommand(string command, long groupId, long sender, bool isAuthorized = false)
@@ -77,7 +64,7 @@ public class RunCommand : Plugin
 
         result = PluginUtils.ConstraintLength(result, 3000);
 
-        await Actions.ChooseBestReplyMethod(groupId, sender.ToString(), result);
+        await Bot.ChooseBestReplyMethod(groupId, sender.ToString(), result);
     }
 
 }

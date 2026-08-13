@@ -5,7 +5,6 @@ using MerryBot;
 using System.Reflection;
 using Tomlyn;
 using Tomlyn.Model;
-using OpenAiClient;
 
 public static partial class Program
 {
@@ -32,30 +31,6 @@ public static partial class Program
         string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_math_mermaid.png");
         await File.WriteAllBytesAsync(outputPath, img);
         Console.WriteLine($"Markdown 渲染图片已保存至: {outputPath}");
-    }
-
-
-    public static async Task TestZhipuAi()
-    {
-        var config = ConfigManager.Instance;
-
-        var model = ModelPreset.MiniMax3;
-        var token_key = model.ApiTokenDictKey;
-
-        PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
-
-        var aiVars = config.Variables[tag.Id];
-        string token = (string)aiVars[token_key];
-        string prompt = (string)aiVars["ai-prompt"];
-        OpenAiCompatible zhipu = new OpenAiCompatible(token, prompt, model);
-        while (true)
-        {
-            Console.Write("User: ");
-            await foreach (var i in zhipu.Ask(Console.ReadLine()!, 114514, "[default user]"))
-            {
-                Console.WriteLine(i);
-            }
-        }
     }
 
     public static async Task TestTerminal()
@@ -89,28 +64,6 @@ public static partial class Program
         Console.WriteLine(messages);
     }
 
-    public static async Task TestImagePainterDashscope()
-    {
-        var model = DashscopeModelPreset.QwenImageMax;
-        PluginTag tag = typeof(AiMessage).GetCustomAttribute<PluginTag>()!;
-        var aiVars = ConfigManager.Instance.Variables[tag.Id];
-        string? token = aiVars.TryGetValue(model.ApiTokenDictKey, out var tokenElem) ? (string)tokenElem : null;
-        if (string.IsNullOrEmpty(token))
-        {
-            Console.WriteLine("请设置环境变量 DASHSCOPE_API_KEY");
-            return;
-        }
-
-
-        var painter = new ImagePainterDashscope(model, token);
-
-        string prompt = "一副典雅庄重的对联悬挂于厅堂之中，房间是个安静古典的中式布置，桌子上放着一些青花瓷，对联上左书\"义本生知人机同道善思新\"，右书\"通云赋智乾坤启数高志远\"， 横批\"智启千问\"，字体飘逸，在中间挂着一幅中国风的画作，内容是岳阳楼。";
-        string negativePrompt = "低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲。";
-
-        Console.WriteLine("开始生成图片...");
-        string imageUrl = await painter.DrawImage(prompt, negativePrompt, 1664, 928);
-        Console.WriteLine($"图片生成成功: {imageUrl}");
-    }
     public static void TestToml()
     {
         string tomlContent = @"

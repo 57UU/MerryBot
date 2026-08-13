@@ -12,13 +12,13 @@ public class HeruiSaying : Plugin
     {
         AutoUpdate();
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
-        if (!IsStartsWith(chain, "/hr"))
+        if (!isMentioned || command?.Name != "hr")
         {
             return;
         }
-        _ = Actions.SendGroupMessage(groupId, PickOne());
+        _ = Bot.SendGroupMessage(data.GroupId, PickOne());
     }
     private string PickOne()
     {
@@ -53,7 +53,7 @@ public class HeruiSaying : Plugin
     {
         try
         {
-            var text = await Actions.HttpGetText(url);
+            var text = await Bot.HttpGetText(url);
             return text;
         }
         catch (Exception e)

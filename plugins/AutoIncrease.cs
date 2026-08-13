@@ -19,8 +19,9 @@ public class AutoIncrease : Plugin
     //store each group
     private readonly Dictionary<long, ChainWithSender> lastMessage = [];
 
-    public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
+        var groupId = data.GroupId;
         var _lastMessage = lastMessage.GetValueOrDefault(groupId);
         var chainList = data.message;
         if (_lastMessage == null)
@@ -37,7 +38,7 @@ public class AutoIncrease : Plugin
             //_lastMessage is not null
             //上一个消息存在
             if (
-                MessageUtils.IsEqual(chain, CollectionsMarshal.AsSpan(_lastMessage?.chain))
+                MessageUtils.IsEqual(CollectionsMarshal.AsSpan(data.message), CollectionsMarshal.AsSpan(_lastMessage?.chain))
                 //&& _lastMessage.sender != data.sender.user_id//not by same account
                 )
             {
@@ -48,7 +49,7 @@ public class AutoIncrease : Plugin
                 {
                     //this has not been sent
                     Logger.Info("+1 message detected");
-                    _ = Actions.SendGroupMessage(groupId, _lastMessage.chain!);
+                    _ = Bot.SendGroupMessage(groupId, _lastMessage.chain!);
                     _lastMessage.used = true;
                 }
             }

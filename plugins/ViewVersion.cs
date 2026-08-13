@@ -31,13 +31,13 @@ public partial class ViewVersion : Plugin
         //if contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
         {
-            await Actions.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
+            await Bot.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
             data.UpdateByGroupId = -1;
             changed = true;
         }
         if (data.ReloadByGroupId > 0)
         {
-            await Actions.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
+            await Bot.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
             data.ReloadByGroupId = -1;
             changed = true;
         }
@@ -182,7 +182,7 @@ public partial class ViewVersion : Plugin
         // No changes — skip update (unless forced)
         if (!hasChanges && !force)
         {
-            await Actions.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
+            await Bot.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
             return;
         }
 
@@ -195,7 +195,7 @@ public partial class ViewVersion : Plugin
         string? projectRoot = FindProjectRoot(baseDir);
         if (projectRoot == null)
         {
-            await Actions.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
+            await Bot.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
             return;
         }
         string buildDir = Path.Combine(projectRoot, "build");
@@ -212,7 +212,7 @@ public partial class ViewVersion : Plugin
         string targetSlot = activeSlot == "A" ? "B" : "A";
         string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
 
-        await Actions.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
+        await Bot.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
 
         // Run build.sh in background
         string buildScript = Path.Combine(projectRoot, "build.sh");
@@ -238,7 +238,7 @@ public partial class ViewVersion : Plugin
             {
                 string errMsg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
                 Logger.Error($"Build failed: {errMsg}");
-                await Actions.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                await Bot.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
                 return;
             }
 
@@ -247,13 +247,13 @@ public partial class ViewVersion : Plugin
             await File.WriteAllTextAsync(tempFile, targetSlot);
             File.Move(tempFile, activeSlotFile, overwrite: true);
             Logger.Info($"Build succeeded, switching to slot {targetSlot}");
-            await Actions.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            await Bot.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
             Interop.Shutdown(CommonLib.ExitCode.PREBUILT);
         }
         catch (Exception ex)
         {
             Logger.Error($"Build process error: {ex.Message}");
-            await Actions.SendGroupMessage(groupId, $"编译过程出错: {ex.Message}\n当前版本继续运行");
+            await Bot.SendGroupMessage(groupId, $"编译过程出错: {ex.Message}\n当前版本继续运行");
         }
     }
     private async Task Reload(long groupId)
@@ -263,25 +263,27 @@ public partial class ViewVersion : Plugin
         await Interop.PluginStorage.Save(data);
         Interop.Shutdown(CommonLib.ExitCode.RELOAD);
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
-        if (IsStartsWith(chain, "/version"))
+        if (!isMentioned || command == null) return;
+        long groupId = data.GroupId;
+        if (command.Name == "version")
         {
-            _ = Actions.SendGroupMessage(groupId, gitInfo);
+            _ = Bot.SendGroupMessage(groupId, gitInfo);
         }
-        else if (IsStartsWith(chain, "/update"))
+        else if (command.Name == "update")
         {
             if (authorized == data.sender.user_id)
             {
-                bool force = chain.ToString().Contains("-f");
+                bool force = command.Args.Contains("-f");
                 _ = Update(groupId, force: force);
             }
             else
             {
-                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
-        else if (IsStartsWith(chain, "/reload"))
+        else if (command.Name == "reload")
         {
             if (authorized == data.sender.user_id)
             {
@@ -289,7 +291,7 @@ public partial class ViewVersion : Plugin
             }
             else
             {
-                _ = Actions.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
     }

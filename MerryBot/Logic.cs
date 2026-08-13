@@ -3,7 +3,9 @@ using CommonLib;
 using DataProvider;
 using NapcatClient;
 using NapcatClient.MessageType;
+using System.Collections.Immutable;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace MerryBot;
 
@@ -14,6 +16,7 @@ internal partial class Logic
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     public static long AuthorizedUser { get { return ConfigManager.Instance.AuthorizedUser; } }
     readonly string[] CommandLineArguments = Environment.GetCommandLineArgs();
+    private readonly EventRegister EventRegister = new();
 
     public Logic(BotClient botClient, string dbPath)
     {
@@ -42,35 +45,42 @@ internal partial class Logic
         botClient.OnEssenceEventReceived += OnEssenceEventReceived;
         botClient.OnGroupCardEventReceived += OnGroupCardEventReceived;
     }
-    bool IsTargeted(ReceivedGroupMessage data)
+    private (bool isMentioned, string textMessage) ExtractMessage(ReceivedGroupMessage data)
     {
         var chain = data.message;
         var selfId = data.self_id;
         bool isTargeted = false;
-        if (chain[0] is AtData atData)
+        var sb = new StringBuilder();
+        foreach (var item in chain)
         {
-            string target = atData.Qq;
-            if (target == selfId.ToString())
+            if (item is TextData textData)
+            {
+                sb.Append(textData.Text);
+            }
+            else if (item is AtData atData && atData.Qq == selfId.ToString())
             {
                 isTargeted = true;
             }
+            else
+            {
+                sb.Append(item.ToString());
+            }
         }
-        return isTargeted;
+        return (isTargeted, sb.ToString());
     }
-    public void MainPluginInvokeNotInGroup(long groupId, List<TypedMessage> chain, ReceivedGroupMessage data)
+    private Command? ParseCommand(string textMessage)
     {
-        if (mainPlugin == null)
+        if (string.IsNullOrWhiteSpace(textMessage) || textMessage[0] != '/')
         {
-            logger.Error("Main Plugin is not loaded!");
-            return;
+            return null;
         }
-        if (IsTargeted(data))
-        {
-            mainPlugin.OnMessageMentionedNotInGroup(groupId, CollectionsMarshal.AsSpan(chain)[1..], data);
-        }
-    }
-    public event Action<ReceivedGroupMessage>? OnRawGroupMessageReceived;
+        textMessage = textMessage[1..];
+        var args = textMessage.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string name = args.Length > 0 ? args[0] : string.Empty;
+        string[] rest = args.Length > 0 ? args[1..] : [];
+        return new Command(name, [.. rest]);
 
+    }
     public void OnGroupMessageReceived(long groupId, List<TypedMessage> chain, ReceivedGroupMessage data)
     {
         if (chain.Count == 0)
@@ -79,17 +89,15 @@ internal partial class Logic
         }
         if (!QqGroupIDs.Contains(groupId))
         {
-            MainPluginInvokeNotInGroup(groupId, chain, data);
             return;
         }
         ReadOnlySpan<TypedMessage> span = CollectionsMarshal.AsSpan(chain);
-        bool isTargeted = false;
         long selfId = BotUtils.GetSelfId(data);
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
 
         long senderId = data.sender.user_id;
 
-        OnRawGroupMessageReceived?.Invoke(data);
+        EventRegister.RaiseRawGroupMessageReceived(data);
 
         bool isIntercepted = false;
         foreach (var plugInfo in plugins)
@@ -109,18 +117,9 @@ internal partial class Logic
             return;
         }
 
-        isTargeted = IsTargeted(data);
-
-        if (isTargeted)
-        {
-            // at消息
-            OnGroupMessageMentioned(groupId, span[1..], data);
-        }
-        else
-        {
-            OnGroupMessageNotMentioned(groupId, span, data);
-        }
-        OnGroupMessage(groupId, span, data);
+        var (isTargeted, textMessage) = ExtractMessage(data);
+        var command = ParseCommand(textMessage);
+        OnGroupMessage(isTargeted, command, data);
     }
 
 }

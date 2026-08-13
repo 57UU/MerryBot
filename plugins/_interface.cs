@@ -2,6 +2,7 @@ global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMe
 using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
+using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 
 namespace BotPlugin;
@@ -96,7 +97,7 @@ public record PluginInterop(
     string[] CommandLineArguments,
     Func<Task> ConfigSaver,
     string PathPrefix,
-    Action<Action<ReceivedGroupMessage>> OnRawGroupMessageReceivedRegister
+    EventRegister EventRegister
     )
 {
     /// <summary>
@@ -286,3 +287,6 @@ public class PluginNotUsableException : Exception
     {
     }
 }
+
+
+public record Command(string Name, ImmutableArray<string> Args);

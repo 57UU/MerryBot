@@ -14,17 +14,18 @@ public class Help : Plugin
     {
         pluginTags = Interop.PluginInfoGetter();
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
+        if (!isMentioned || command?.Name != "help")
+        {
+            return;
+        }
         if (pluginTags == null)
         {
-            _ = Actions.SendGroupMessage(groupId, "尚未完成加载");
+            _ = Bot.SendGroupMessage(data.GroupId, "尚未完成加载");
             return;
         }
-        if (!IsStartsWith(chain, "/help"))
-        {
-            return;
-        }
+        var groupId = data.GroupId;
         var sb = new StringBuilder();
         int count = 1;
 
@@ -56,6 +57,6 @@ public class Help : Plugin
             }
         }
         var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
-        _ = Actions.SendGroupMessage(groupId, help);
+        _ = Bot.SendGroupMessage(groupId, help);
     }
 }

@@ -20,11 +20,11 @@ Merry Bot
     {
         Logger.Info("about plugin start");
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
     {
-        if (IsStartsWith(chain, "/about"))
+        if (command?.Name == "about")
         {
-            _ = Actions.SendGroupMessage(groupId, aboutMessage);
+            _ = Bot.SendGroupMessage(data.GroupId, aboutMessage);
         }
     }
 }

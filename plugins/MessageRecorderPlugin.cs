@@ -10,19 +10,22 @@ namespace BotPlugin;
 public class MessageRecorderPlugin : Plugin
 {
     private HistoryRecorder historyRecorder;
-    private readonly ImageDescriptionPlugin descriptionPlugin;
     public long FileSizeLimit { get; set; } = 1024 * 1024 * 20; // 10MB
     private readonly RequestCaching _groupNameCheckCache = new(TimeSpan.FromHours(24));
 
-    public MessageRecorderPlugin(PluginInterop interop, StorageManagerPlugin storageManager, ImageDescriptionPlugin descriptionPlugin) : base(interop)
+    public MessageRecorderPlugin(PluginInterop interop, StorageManagerPlugin storageManager) : base(interop)
     {
         this.historyRecorder = storageManager.GroupHistoryRecorder;
-        this.descriptionPlugin = descriptionPlugin;
-        interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
+        interop.EventRegister.OnRawGroupMessageReceived += OnRawGroupMessageReceived;
+        interop.EventRegister.OnGroupAdminEventReceived += OnGroupAdminEvent;
+        interop.EventRegister.OnGroupDecreaseEventReceived += OnGroupDecreaseEvent;
+        interop.EventRegister.OnGroupIncreaseEventReceived += OnGroupIncreaseEvent;
+        interop.EventRegister.OnGroupBanEventReceived += OnGroupBanEvent;
+        interop.EventRegister.OnGroupRecallEventReceived += OnGroupRecallEvent;
     }
     private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
     {
-        _ = HandleGroupMessageAsync(data.group_id, data);
+        _ = HandleGroupMessageAsync(data.GroupId, data);
     }
 
     public override async Task OnLoaded()
@@ -33,12 +36,6 @@ public class MessageRecorderPlugin : Plugin
     private Task DelayRandomTime()
     {
         return Task.Delay(_randomWrapper.Value!.Next(1000, 5000));
-    }
-
-    public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
-    {
-        //use raw data
-        //_ = HandleGroupMessageAsync(groupId, data);
     }
 
     private async Task HandleGroupMessageAsync(long groupId, ReceivedGroupMessage data)
@@ -98,9 +95,6 @@ public class MessageRecorderPlugin : Plugin
             if (imageEntry == null || string.IsNullOrEmpty(imageEntry.Hash)) return;
             var bytes = await historyRecorder.GetImageDataAsync(imageEntry.Hash);
             if (bytes == null) return;
-            // fire-and-forget，plugin 内部处理 byte[] 缓存 / 解析 / 写 ImageEntry
-            _ = descriptionPlugin.GetOrComputeDescriptionAsync(
-                imageEntry.Hash, bytes, "image/jpeg");
         }
         catch (Exception ex)
         {
@@ -124,7 +118,7 @@ public class MessageRecorderPlugin : Plugin
             // 如果不存在，或者更新时间超过1天，则更新
             if (existingEntry == null || (now - existingEntry.UpdatedTime).TotalDays >= 1)
             {
-                var groupInfo = await Actions.GetGroupInfo(groupId.ToString());
+                var groupInfo = await Bot.GetGroupInfo(groupId.ToString());
                 if (groupInfo != null)
                 {
                     var groupNameEntry = new GroupNameEntry
@@ -155,7 +149,7 @@ public class MessageRecorderPlugin : Plugin
         // 克隆消息数据
         var cloned = new ReceivedGroupMessage
         {
-            group_id = original.group_id,
+            GroupId = original.GroupId,
             message_id = original.message_id,
             self_id = original.self_id,
             time = original.time,
@@ -221,7 +215,7 @@ public class MessageRecorderPlugin : Plugin
             try
             {
                 // 下载图片，使用 Actions 提供的 HTTP 接口
-                var imageDataBytes = await Actions.HttpGetBinary(imageData.Url);
+                var imageDataBytes = await Bot.HttpGetBinary(imageData.Url);
 
                 // 检查文件大小
                 if (imageDataBytes.Length > FileSizeLimit)
@@ -261,7 +255,7 @@ public class MessageRecorderPlugin : Plugin
                     return;
                 }
                 // 下载文件，使用 Actions 提供的 HTTP 接口
-                var fileDataBytes = await Actions.HttpGetBinary(fileData.Url);
+                var fileDataBytes = await Bot.HttpGetBinary(fileData.Url);
 
                 // 检查文件大小
                 if (fileDataBytes.Length > FileSizeLimit)
@@ -297,7 +291,7 @@ public class MessageRecorderPlugin : Plugin
                     return;
                 }
                 // 下载视频，使用 Actions 提供的 HTTP 接口
-                var videoDataBytes = await Actions.HttpGetBinary(videoData.Url);
+                var videoDataBytes = await Bot.HttpGetBinary(videoData.Url);
 
                 // 检查文件大小
                 if (videoDataBytes.Length > FileSizeLimit)
@@ -333,7 +327,7 @@ public class MessageRecorderPlugin : Plugin
                     return;
                 }
                 // 下载语音，使用 Actions 提供的 HTTP 接口
-                var recordDataBytes = await Actions.HttpGetBinary(recordData.Url);
+                var recordDataBytes = await Bot.HttpGetBinary(recordData.Url);
 
                 // 检查文件大小
                 if (recordDataBytes.Length > FileSizeLimit)
@@ -375,7 +369,7 @@ public class MessageRecorderPlugin : Plugin
             }
             else
             {
-                var forwardMessage = await Actions.GetForwardMessageById(forwardData.Id);
+                var forwardMessage = await Bot.GetForwardMessageById(forwardData.Id);
                 if (forwardMessage == null || !forwardMessage.Messages.Any())
                 {
                     return;
@@ -414,7 +408,7 @@ public class MessageRecorderPlugin : Plugin
         try
         {
             // 获取回复消息内容
-            var replyMessage = await Actions.GetMessageById(replyData.Id);
+            var replyMessage = await Bot.GetMessageById(replyData.Id);
             if (replyMessage != null)
             {
                 // 检查消息是否已存在，避免重复存储
@@ -436,7 +430,7 @@ public class MessageRecorderPlugin : Plugin
         }
     }
 
-    public override void OnGroupAdminEvent(GroupAdminEvent eventData)
+    private void OnGroupAdminEvent(GroupAdminEvent eventData)
     {
         _ = RecordGroupAdminEventAsync(eventData);
     }
@@ -470,7 +464,7 @@ public class MessageRecorderPlugin : Plugin
         }
     }
 
-    public override void OnGroupDecreaseEvent(GroupDecreaseEvent eventData)
+    private void OnGroupDecreaseEvent(GroupDecreaseEvent eventData)
     {
         _ = RecordGroupDecreaseEventAsync(eventData);
     }
@@ -504,7 +498,7 @@ public class MessageRecorderPlugin : Plugin
         }
     }
 
-    public override void OnGroupIncreaseEvent(GroupIncreaseEvent eventData)
+    private void OnGroupIncreaseEvent(GroupIncreaseEvent eventData)
     {
         _ = RecordGroupIncreaseEventAsync(eventData);
     }
@@ -538,7 +532,7 @@ public class MessageRecorderPlugin : Plugin
         }
     }
 
-    public override void OnGroupBanEvent(GroupBanEvent eventData)
+    private void OnGroupBanEvent(GroupBanEvent eventData)
     {
         _ = RecordGroupBanEventAsync(eventData);
     }
@@ -572,7 +566,7 @@ public class MessageRecorderPlugin : Plugin
         }
     }
 
-    public override void OnGroupRecallEvent(GroupRecallEvent eventData)
+    private void OnGroupRecallEvent(GroupRecallEvent eventData)
     {
         _ = RecordGroupRecallEventAsync(eventData);
     }

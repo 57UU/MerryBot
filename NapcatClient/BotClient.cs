@@ -9,7 +9,7 @@ public class BotClient
 {
     public WebSocketService WebSocketService { get; }
     public ISimpleLogger Logger { internal get; set; }
-    public Actions Actions { get; private set; }
+    public Actions Bot { get; private set; }
     public event GroupMessageCallback? OnGroupMessageReceived;
     public event NoticeEventCallback? OnNoticeEventReceived;
     public event GroupUploadEventCallback? OnGroupUploadEventReceived;
@@ -42,14 +42,14 @@ public class BotClient
         WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
 
         WebSocketService.Start();
-        this.Actions = new Actions(Logger, WebSocketService, () => SelfId);
+        this.Bot = new Actions(Logger, WebSocketService, () => SelfId);
         Initialize().Wait();
     }
 
     public async Task Initialize()
     {
         await Task.Delay(100);
-        var result = await Actions.GetAccountInfo();
+        var result = await Bot.GetAccountInfo();
         SelfId = result.userId;
         Nickname = result.nickname;
     }
@@ -70,7 +70,7 @@ public class BotClient
         var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
         if (message.TryGetValue("echo", out JsonElement echo))
         {
-            Actions.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
+            Bot.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
         }
         if (message.TryGetValue("message_type", out JsonElement value))
         {
@@ -79,7 +79,7 @@ public class BotClient
             if (messageType == "group")
             {
                 ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
-                var groupId = receivedGroupMessage.group_id;
+                var groupId = receivedGroupMessage.GroupId;
                 var rawChain = receivedGroupMessage.message!;
                 receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
                 OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
