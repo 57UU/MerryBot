@@ -1,6 +1,10 @@
 <div class="nav-item">
     <NavLink class="nav-link" href="@Href" Match=@Match>
-          @ChildContent
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <span class="nav-icon" aria-hidden="true">@Icon</span>
+        }
+        <span>@ChildContent</span>
     </NavLink>
 </div>
 
@@ -10,6 +14,9 @@
 
     [Parameter]
     public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+
+    [Parameter]
+    public string? Icon { get; set; }
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }

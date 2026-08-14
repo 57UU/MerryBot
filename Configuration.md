@@ -31,8 +31,19 @@ models.dev 只提供目录元数据，并会缓存在机器人运行目录的 `m
 ### 2. AI 机器人插件 (`[variables.agent]`)
 
 ```toml
-ai-prompt = "你是一个助人为乐的AI助手"    # AI 的 System Prompt（人设提示词）
+llm-model = "opencode-go/deepseek-v4-flash"   # 主对话模型（默认）
+ai-prompt = "你是一个助人为乐的AI助手"          # AI 的 System Prompt（人设提示词）
+max-iterations = 20                           # 单轮对话最大工具调用迭代次数（1-100）
+context-compact-ratio = 0.7                    # 上下文占用达到该比例时自动压缩（0.1-0.95）
+vision-llm = ""                               # 辅助视觉模型。主模型没有视觉能力时，
+                                              # 用这个模型描述图片（如 qwen-vl / gpt-4o 等）
+vision-prompt = "请详细描述这张图片的内容。"      # 辅助视觉模型的看图提示词
 ```
+
+> 💡 **视觉能力说明**：主模型具备 `ImageInput` 能力时（如 GLM-4V、Qwen-VL），
+> 群聊图片会直接注入对话供主模型查看；主模型无视觉能力时（如 DeepSeek），
+> 配置 `vision-llm` 后由辅助模型生成图片描述，未配置则图片工具会提示不可用。
+> 相关工具：`get_message_image`（查看对话消息中的图片）、bash 的 `image_path` 参数（查看命令生成的图片）。
 
 ### 3. 存储管理插件 (`[variables.storage-manager]`)
 

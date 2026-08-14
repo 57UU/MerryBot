@@ -18,8 +18,8 @@
         <div class="message-content-custom">
             <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
             <div class="mb-3-custom">
-                <label>1. 搜索 Provider</label>
-                <input class="form-control" @bind="CatalogProviderQuery" @bind:event="oninput" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
+                <label>1. 搜索 Provider（输入即过滤）</label>
+                <input class="form-control" value="@CatalogProviderQuery" @oninput="OnProviderQueryChanged" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
                 <button class="btn btn-primary mt-2" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
                 <button class="btn btn-secondary mt-2 ms-2" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
                 @if (CatalogStatus is not null)
@@ -61,8 +61,8 @@
                 <div class="mb-3-custom">
                     <h5>2. 为 @SelectedCatalogProvider.Name 添加模型</h5>
                     <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
-                    <label class="mt-2">筛选模型</label>
-                    <input class="form-control" @bind="CatalogModelQuery" @bind:event="oninput" placeholder="例如 gpt、deepseek、flash" />
+                    <label class="mt-2">筛选模型（输入即过滤）</label>
+                    <input class="form-control" value="@CatalogModelQuery" @oninput="OnModelQueryChanged" placeholder="例如 gpt、deepseek、flash" />
                     <button class="btn btn-secondary mt-2" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button>
                 </div>
                 <div class="mb-3-custom">
@@ -110,6 +110,12 @@
                 <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
                 <input class="form-control mt-2" @bind="EditProviderName" placeholder="显示名称" required />
                 <input class="form-control mt-2" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
+                <label class="mt-2">API 格式</label>
+                <select class="form-control" @bind="EditApiFormat">
+                    <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
+                    <option value="openai-responses">OpenAI Responses（/responses）</option>
+                    <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
+                </select>
                 <button class="btn btn-secondary mt-2" type="submit">保存 Provider</button>
             </form>
             <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
@@ -120,6 +126,18 @@
                 <input class="form-control mt-2" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
                 <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
                 <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
+                <label class="mt-2">思维强度（Reasoning Effort）</label>
+                <select class="form-control" @bind="EditModelReasoningEffort">
+                    <option value="">不开启</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                </select>
+                <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort</small>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
+                    <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
+                </div>
                 <button class="btn btn-secondary mt-2" type="submit">保存模型</button>
             </form>
         </div>
@@ -185,6 +203,14 @@
                                 <li @key="model.Id">
                                     <code>@model.Id</code> → <code>@model.RemoteModelId</code>
                                     （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
+                                    @if (!string.IsNullOrEmpty(model.ReasoningEffort))
+                                    {
+                                        <span class="badge ms-2">思维 @FormatReasoningEffort(model.ReasoningEffort)</span>
+                                    }
+                                    @if (model.EnablePromptCache)
+                                    {
+                                        <span class="badge ms-2">缓存</span>
+                                    }
                                     @if (Config.DefaultModelId == model.Id)
                                     {
                                         <strong> 默认</strong>
@@ -226,16 +252,73 @@
     private string EditProviderId { get; set; } = string.Empty;
     private string EditProviderName { get; set; } = string.Empty;
     private string EditProviderBaseUrl { get; set; } = string.Empty;
+    private string EditApiFormat { get; set; } = "openai-chat-completions";
     private string EditModelId { get; set; } = string.Empty;
     private string EditModelProviderId { get; set; } = string.Empty;
     private string EditModelName { get; set; } = string.Empty;
     private string EditModelRemoteId { get; set; } = string.Empty;
     private int EditModelContextLength { get; set; } = 32_768;
     private int EditModelMaxOutput { get; set; } = 4_096;
+    private string EditModelReasoningEffort { get; set; } = string.Empty;
+    private bool EditModelEnablePromptCache { get; set; }
+
+    // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
+    private CancellationTokenSource? _providerSearchCts;
+    private CancellationTokenSource? _modelSearchCts;
+    // 请求序号守卫：响应乱序时丢弃过期结果，只应用最后一次查询
+    private int _providerSearchSeq;
+    private int _modelSearchSeq;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadConfigAsync();
+        // 初始加载完整 Provider 列表，输入框实时过滤
+        await SearchProvidersAsync();
+    }
+
+    /// <summary>Provider 输入变化：更新查询词并防抖触发搜索。</summary>
+    private async Task OnProviderQueryChanged(ChangeEventArgs e)
+    {
+        CatalogProviderQuery = e.Value?.ToString() ?? string.Empty;
+        _providerSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _providerSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // 期间又有新输入，本次查询作废
+        }
+        await SearchProvidersAsync();
+    }
+
+    /// <summary>模型输入变化：更新查询词并防抖触发搜索。</summary>
+    private async Task OnModelQueryChanged(ChangeEventArgs e)
+    {
+        CatalogModelQuery = e.Value?.ToString() ?? string.Empty;
+        _modelSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _modelSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await LoadModelsAsync();
+    }
+
+    public void Dispose()
+    {
+        _providerSearchCts?.Cancel();
+        _providerSearchCts?.Dispose();
+        _modelSearchCts?.Cancel();
+        _modelSearchCts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async Task LoadConfigAsync()
@@ -257,22 +340,27 @@
 
     private async Task SearchProvidersAsync()
     {
+        var seq = ++_providerSearchSeq;
         try
         {
             Error = null;
             IsLoadingCatalog = true;
             var query = Uri.EscapeDataString(CatalogProviderQuery ?? string.Empty);
-            CatalogProviders = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
+            var providers = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
+            if (seq != _providerSearchSeq) return; // 已有更新的查询，丢弃过期结果
+            CatalogProviders = providers;
             CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("GET", "/api/plugins/llm-provider/catalog/status");
+            if (seq != _providerSearchSeq) return;
             HasSearchedProviders = true;
         }
         catch (Exception ex)
         {
+            if (seq != _providerSearchSeq) return;
             Error = $"读取本地 models.dev 目录失败：{ex.Message}";
         }
         finally
         {
-            IsLoadingCatalog = false;
+            if (seq == _providerSearchSeq) IsLoadingCatalog = false;
         }
     }
 
@@ -320,22 +408,26 @@
             return;
         }
 
+        var seq = ++_modelSearchSeq;
         try
         {
             Error = null;
             IsLoadingCatalog = true;
             var providerId = Uri.EscapeDataString(SelectedCatalogProvider.Id);
             var query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
-            CatalogModels = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            var models = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            if (seq != _modelSearchSeq) return; // 已有更新的查询，丢弃过期结果
+            CatalogModels = models;
             HasSearchedModels = true;
         }
         catch (Exception ex)
         {
+            if (seq != _modelSearchSeq) return;
             Error = $"读取 Provider 模型失败：{ex.Message}";
         }
         finally
         {
-            IsLoadingCatalog = false;
+            if (seq == _modelSearchSeq) IsLoadingCatalog = false;
         }
     }
 
@@ -344,10 +436,14 @@
         try
         {
             Error = null;
+            // 按 models.dev 的 provider 约定自动识别 API 格式；其余默认 OpenAI Chat Completions
+            var apiFormat = model.ProviderId.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+                ? "anthropic-messages"
+                : "openai-chat-completions";
             Config = await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
                 new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
                     string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
-                    "openai-chat-completions", ImportApiKey, true));
+                    apiFormat, ImportApiKey, true));
             ImportApiKey = string.Empty;
             KeyProviderId = model.ProviderId;
         }
@@ -392,7 +488,7 @@
         {
             Error = null;
             await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
-                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, "openai-chat-completions", true));
+                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, EditApiFormat, true));
             KeyProviderId = EditProviderId;
             await LoadConfigAsync();
         }
@@ -409,7 +505,7 @@
             Error = null;
             await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, 1, true));
+                    EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort, EditModelEnablePromptCache));
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -461,6 +557,13 @@
         => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
+    private static string FormatReasoningEffort(string effort) => effort switch
+    {
+        "low" => "低",
+        "medium" => "中",
+        "high" => "高",
+        _ => effort,
+    };
     private static string FormatCatalogSource(string source) => source switch
     {
         "local-cache" => "本地缓存",

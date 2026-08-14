@@ -29,7 +29,8 @@ public record LlmOptions(
     float? Temperature = null,
     int? MaxTokens = null,
     IEnumerable<ToolDef>? Tools = null,
-    IDictionary<string, object>? ExtraBody = null
+    IDictionary<string, object>? ExtraBody = null,
+    string? ReasoningEffort = null
     );
 public class GenerateResponse
 {
@@ -37,11 +38,20 @@ public class GenerateResponse
     public ToolCall[]? ToolCalls { get; }
     public string? ReasoningContent { get; }
 
-    public GenerateResponse(string? content, ToolCall[]? toolCalls, string? reasoningContent)
+    /// <summary>
+    /// Anthropic 格式的思考块（JSON 数组，元素为 {type:"thinking"|"redacted_thinking",
+    /// thinking, signature, data}）。深度思考（extended thinking）返回的 thinking 块
+    /// 带加密签名，tool calling 多轮中必须原样回传，否则 API 拒绝请求；
+    /// 仅 anthropic 后端写入，其他格式恒为 null。
+    /// </summary>
+    public string? ThinkingBlocks { get; }
+
+    public GenerateResponse(string? content, ToolCall[]? toolCalls, string? reasoningContent, string? thinkingBlocks = null)
     {
         Content = content;
         ToolCalls = toolCalls;
         ReasoningContent = reasoningContent;
+        ThinkingBlocks = thinkingBlocks;
     }
 }
 public class ToolCall
@@ -89,6 +99,14 @@ public class Message
     public IEnumerable<ToolCall> toolCalls = [];
 
     public string reasoningContent = string.Empty;
+
+    /// <summary>
+    /// Anthropic 思考块回放（JSON 数组，与 GenerateResponse.ThinkingBlocks 同格式）。
+    /// 深度思考开启后，assistant 消息的 thinking 块（含加密签名）必须在后续轮次
+    /// 原样回传，否则 API 拒绝请求；仅 anthropic 后端写入，其他格式恒为空。
+    /// </summary>
+    public string thinkingBlocks = string.Empty;
+
     public static Message User(string text) => new Message
     {
         role = Role.User,

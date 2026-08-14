@@ -43,6 +43,7 @@ public class ChatCompletionBackend : Backend
             ["messages"] = BuildMessages(messages, systemPrompt),
         };
         if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
+        if (options.ReasoningEffort != null) requestBody["reasoning_effort"] = options.ReasoningEffort;
         if (options.MaxTokens != null) requestBody["max_tokens"] = options.MaxTokens;
         if (options.Tools != null) requestBody["tools"] = options.Tools;
         if (options.ExtraBody != null)
@@ -110,46 +111,7 @@ public class ChatCompletionBackend : Backend
     /// 按 HTTP 状态码映射为标准 LlmException，供调用方判断是否可重试
     /// </summary>
     private static LlmException BuildLlmException(HttpStatusCode statusCode, string responseBody, TimeSpan? retryAfter)
-    {
-        string message = $"ChatCompletion API 错误 ({(int)statusCode} {statusCode})";
-        try
-        {
-            var error = JsonSerializer.Deserialize<ChatCompletionError>(responseBody);
-            if (!string.IsNullOrEmpty(error?.Error?.Message))
-            {
-                message += $": {error.Error.Message}";
-            }
-        }
-        catch (JsonException)
-        {
-            // 响应体不是 JSON，直接拼接原文
-        }
-        if (message.Length < responseBody.Length && responseBody.Length <= 500)
-        {
-            message += $": {responseBody}";
-        }
-
-        return statusCode switch
-        {
-            >= HttpStatusCode.InternalServerError or HttpStatusCode.RequestTimeout => new ServerErrorException(message, (int)statusCode),
-            HttpStatusCode.TooManyRequests => new RateLimitException(message, (int)statusCode, retryAfter),
-            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new AuthenticationException(message, (int)statusCode),
-            HttpStatusCode.NotFound => new ModelNotFoundException(message, (int)statusCode),
-            _ => IsContextLengthError(responseBody)
-                ? new ContextLengthExceededException(message, (int)statusCode)
-                : new InvalidRequestException(message, (int)statusCode),
-        };
-    }
-
-    private static readonly string[] ContextLengthKeywords = ["context length", "context_length", "maximum context", "max context", "too many tokens"];
-
-    /// <summary>
-    /// 检测 400 响应是否为上下文超长（常见于 deepseek/openai 的 context_length 错误）
-    /// </summary>
-    private static bool IsContextLengthError(string responseBody)
-    {
-        return ContextLengthKeywords.Any(keyword => responseBody.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-    }
+        => BackendErrors.Map(responseBody, statusCode, retryAfter);
 
     /// <summary>
     /// 合并 systemPrompt 与消息列表：systemPrompt 非空时作为首条系统消息，
@@ -350,17 +312,5 @@ internal class PromptTokensDetails
 {
     [JsonPropertyName("cached_tokens")]
     public int CachedTokens { get; set; }
-}
-
-internal class ChatCompletionError
-{
-    [JsonPropertyName("error")]
-    public ApiError? Error { get; set; }
-}
-
-internal class ApiError
-{
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
 }
 #pragma warning restore CS8618

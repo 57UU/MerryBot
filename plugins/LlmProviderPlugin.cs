@@ -103,10 +103,6 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         {
             throw new InvalidOperationException($"Provider 已禁用: {provider.Id}");
         }
-        if (provider.ApiFormat != LlmApiFormat.OpenAiChatCompletions)
-        {
-            throw new NotSupportedException($"当前只支持 OpenAI Chat Completions，Provider {provider.Id} 的格式为 {provider.ApiFormat}。");
-        }
         if (string.IsNullOrWhiteSpace(provider.BaseUrl))
         {
             throw new InvalidOperationException($"Provider {provider.Id} 未设置 API 地址。");
@@ -119,7 +115,13 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             .FirstOrDefault()
             ?? throw new PluginNotUsableException($"Provider {provider.Id} 没有可用 API Key。");
         var apiKey = keyProtector.Unprotect(key.ProtectedSecret);
-        var backend = new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId);
+        Backend backend = provider.ApiFormat switch
+        {
+            LlmApiFormat.OpenAiChatCompletions => new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
+            LlmApiFormat.OpenAiResponses => new ResponsesBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
+            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens, model.EnablePromptCache),
+            _ => throw new NotSupportedException($"不支持的 API 格式: {provider.ApiFormat}"),
+        };
         var client = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
         return new ResolvedLlmClient(ToDescriptor(model), client);
     }
@@ -225,7 +227,9 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
                         model.MaxOutputTokens,
                         model.Capabilities.ToString(),
                         model.Enabled,
-                        model.CatalogUpdatedAtUtc))
+                        model.CatalogUpdatedAtUtc,
+                        model.ReasoningEffort,
+                        model.EnablePromptCache))
                     .ToList(),
                 allKeys.Where(key => key.ProviderId == provider.Id)
                     .OrderBy(key => key.Priority)
@@ -473,6 +477,8 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         model.ContextLength = request.ContextLength;
         model.MaxOutputTokens = request.MaxOutputTokens;
         model.Capabilities = request.Capabilities;
+        model.ReasoningEffort = NormalizeReasoningEffort(request.ReasoningEffort);
+        model.EnablePromptCache = request.EnablePromptCache;
         model.Enabled = request.Enabled;
         model.UpdatedAtUtc = now;
         await models.UpsertAsync(model);
@@ -563,7 +569,7 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             model.Reasoning);
 
     private static LlmModelDescriptor ToDescriptor(ModelRecord source)
-        => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled);
+        => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort);
 
     private static LlmModelCapabilities ToCapabilities(ModelInfo model)
     {
@@ -587,7 +593,13 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             : $"{providerId}/{modelId}";
 
     private static string ToApiFormatName(LlmApiFormat format)
-        => format switch { LlmApiFormat.OpenAiChatCompletions => "openai-chat-completions", _ => throw new ArgumentOutOfRangeException(nameof(format)) };
+        => format switch
+        {
+            LlmApiFormat.OpenAiChatCompletions => "openai-chat-completions",
+            LlmApiFormat.OpenAiResponses => "openai-responses",
+            LlmApiFormat.AnthropicMessages => "anthropic-messages",
+            _ => throw new ArgumentOutOfRangeException(nameof(format)),
+        };
 
     private static LlmApiFormat ParseApiFormat(string? value)
     {
@@ -595,7 +607,22 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         {
             return LlmApiFormat.OpenAiChatCompletions;
         }
+        if (value.Equals("openai-responses", StringComparison.OrdinalIgnoreCase))
+        {
+            return LlmApiFormat.OpenAiResponses;
+        }
+        if (value.Equals("anthropic-messages", StringComparison.OrdinalIgnoreCase))
+        {
+            return LlmApiFormat.AnthropicMessages;
+        }
         throw new NotSupportedException($"不支持的 API 格式: {value}");
+    }
+
+    private static string? NormalizeReasoningEffort(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized is "low" or "medium" or "high" ? normalized : null;
     }
 
     private static string? NormalizeUrl(string? value)
@@ -650,6 +677,10 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         public int ContextLength { get; set; }
         public int MaxOutputTokens { get; set; }
         public LlmModelCapabilities Capabilities { get; set; }
+        /// <summary>深度思考档位（low/medium/high），空表示不开启；agent 生成时透传 LlmOptions.ReasoningEffort</summary>
+        public string? ReasoningEffort { get; set; }
+        /// <summary>anthropic 格式启用显式 prompt 缓存（cache_control 断点）；其他格式忽略</summary>
+        public bool EnablePromptCache { get; set; }
         public bool Enabled { get; set; } = true;
         public string? CatalogProviderId { get; set; }
         public string? CatalogModelId { get; set; }
@@ -679,12 +710,12 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
 
     private sealed record CatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
     private sealed record SaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-    private sealed record SaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, LlmModelCapabilities Capabilities, bool Enabled);
+    private sealed record SaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, LlmModelCapabilities Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false);
     private sealed record SaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
 
     private sealed record ConfigSnapshot(string? DefaultModelId, IReadOnlyList<ProviderDto> Providers);
     private sealed record ProviderDto(string Id, string Name, string BaseUrl, string ApiFormat, bool Enabled, string? CatalogProviderId, IReadOnlyList<ModelDto> Models, IReadOnlyList<KeyDto> Keys);
-    private sealed record ModelDto(string Id, string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, string Capabilities, bool Enabled, DateTimeOffset? CatalogUpdatedAtUtc);
+    private sealed record ModelDto(string Id, string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, string Capabilities, bool Enabled, DateTimeOffset? CatalogUpdatedAtUtc, string? ReasoningEffort, bool EnablePromptCache);
     private sealed record KeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
     private sealed record CatalogStatusDto(string Source, DateTimeOffset? UpdatedAtUtc, string? RefreshError);
     private sealed record CatalogProviderDto(string Id, string Name, string? SuggestedBaseUrl, int ModelCount);

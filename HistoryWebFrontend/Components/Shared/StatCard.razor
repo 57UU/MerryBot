@@ -1,7 +1,10 @@
 <div class="stat-card">
+    <div class="stat-icon" style="background:@(IconBg); color:@(IconColor);">
+        @Icon
+    </div>
     <div class="stat-card-body">
-        <h5 class="stat-card-title">@Title</h5>
         <p class="stat-card-value">@Value</p>
+        <h5 class="stat-card-title">@Title</h5>
     </div>
 </div>
 
@@ -11,4 +14,13 @@
 
     [Parameter]
     public object Value { get; set; } = 0;
+
+    [Parameter]
+    public string? Icon { get; set; } = "📊";
+
+    [Parameter]
+    public string IconBg { get; set; } = "rgba(99,102,241,0.12)";
+
+    [Parameter]
+    public string IconColor { get; set; } = "#6366f1";
 }
