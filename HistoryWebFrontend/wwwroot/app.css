@@ -1064,7 +1064,8 @@ textarea.form-control {
         display: none;
     }
 
-    .nav-toggler:checked ~ .nav-scrollable {
+    /* input 嵌套在 .top-row 内,nav-scrollable 是 .top-row 的兄弟,用 :has() 关联 */
+    .top-row:has(.nav-toggler:checked) ~ .nav-scrollable {
         display: flex;
     }
 

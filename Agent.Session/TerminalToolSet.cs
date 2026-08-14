@@ -95,7 +95,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         [Description("禁用超时，仅后台生效")]
         public bool? disable_timeout { get; set; }
 
-        [Description("命令执行后要查看的图片文件路径（可选）。命令生成了图片（如图表、截图）时提供，模型会直接查看或用辅助视觉模型描述")]
+        [Description("命令执行后要查看的图片文件路径（可选）。命令生成了图片（如图表、截图）时提供，模型会直接查看或用辅助视觉模型描述；相对路径按 shell 当前工作目录解析")]
         public string? image_path { get; set; }
     }
 
@@ -134,14 +134,15 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw new ArgumentException("timeout 必须大于 0");
         }
         var output = await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
-        return await AppendImageIfRequestedAsync(output, args.image_path);
+        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd);
     }
 
     /// <summary>
     /// 命令输出后按 image_path 附带查看图片：主模型有视觉能力时通过 OnIterationAdd
     /// 把图片注入对话，否则调用辅助视觉模型生成描述并追加到输出。
+    /// 相对路径按常驻 shell 的当前工作目录解析（cd 状态跨调用保留，进程 CWD 并不等于 shell CWD）。
     /// </summary>
-    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath)
+    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath, string? cwd)
     {
         if (string.IsNullOrWhiteSpace(imagePath))
         {
@@ -151,7 +152,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         string fullPath;
         try
         {
-            fullPath = Path.GetFullPath(imagePath);
+            fullPath = ResolveShellPath(imagePath, cwd);
         }
         catch (Exception e)
         {
@@ -159,7 +160,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         }
         if (!File.Exists(fullPath))
         {
-            return output + $"\n[图片文件不存在: {imagePath}]";
+            return output + $"\n[图片文件不存在: {imagePath}（按 shell 工作目录解析为 {fullPath}）]";
         }
 
         var data = await File.ReadAllBytesAsync(fullPath);
@@ -183,6 +184,32 @@ public class TerminalToolSet : ToolSet, IDisposable
 
         var description = await _visionRouter.DescribeImageAsync(data, mimeType, imagePath, CancellationToken.None);
         return output + $"\n[图片 {imagePath} 描述]: {description}";
+    }
+
+    /// <summary>
+    /// 解析图片路径：绝对路径直接用；相对路径先查常驻 shell 的 pwd（反映 cd 后的真实目录），
+    /// 查不到再退回 cwd 参数，最后退回进程工作目录。
+    /// </summary>
+    private async Task<string> ResolveShellPath(string imagePath, string? cwd)
+    {
+        if (Path.IsPathRooted(imagePath))
+        {
+            return Path.GetFullPath(imagePath);
+        }
+        try
+        {
+            var shellPwd = (await _sync.Value.RunCommandAsync("pwd", null, 5)).Trim();
+            if (!string.IsNullOrEmpty(shellPwd))
+            {
+                return Path.GetFullPath(Path.Combine(shellPwd, imagePath));
+            }
+        }
+        catch
+        {
+            // shell 查询失败时退回 cwd 参数解析
+        }
+        var baseDir = string.IsNullOrWhiteSpace(cwd) ? "." : cwd;
+        return Path.GetFullPath(Path.Combine(baseDir, imagePath));
     }
 
     /// <summary>启动后台任务：独立终端实例，立即返回 task_id</summary>
