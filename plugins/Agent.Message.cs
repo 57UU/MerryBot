@@ -115,7 +115,7 @@ public class MessageTool : ToolSet
         }
         if (string.IsNullOrWhiteSpace(contentType))
         {
-            contentType = GuessImageContentType(reference) ?? "image/png";
+            contentType = MimeTypes.GuessImageContentType(reference) ?? "image/png";
         }
 
         var caption = $"对话图片: {reference}";
@@ -153,7 +153,7 @@ public class MessageTool : ToolSet
             try
             {
                 var bytes = await ImageHttpClient.GetByteArrayAsync(reference);
-                return (bytes, GuessImageContentType(reference));
+                return (bytes, MimeTypes.GuessImageContentType(reference));
             }
             catch (Exception e)
             {
@@ -176,21 +176,6 @@ public class MessageTool : ToolSet
         }
 
         return (null, null);
-    }
-
-    private static string? GuessImageContentType(string? reference)
-    {
-        if (string.IsNullOrWhiteSpace(reference)) return null;
-        var lower = reference.ToLowerInvariant();
-        return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.Contains("jpeg") || lower.Contains("jpg")
-            ? "image/jpeg"
-            : lower.EndsWith(".gif") || lower.Contains("gif")
-                ? "image/gif"
-                : lower.EndsWith(".webp") || lower.Contains("webp")
-                    ? "image/webp"
-                    : lower.EndsWith(".png") || lower.Contains("png")
-                        ? "image/png"
-                        : null;
     }
 
     /// <summary>与群历史上下文相同的消息渲染格式：[时间] 昵称: 内容</summary>

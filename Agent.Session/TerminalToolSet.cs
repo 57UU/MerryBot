@@ -163,7 +163,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         }
 
         var data = await File.ReadAllBytesAsync(fullPath);
-        var mimeType = GuessImageContentType(fullPath) ?? "image/png";
+        var mimeType = MimeTypes.GuessImageContentType(fullPath) ?? "image/png";
         var caption = $"bash 命令输出中的图片: {imagePath}";
 
         if (_visionRouter.MainHasVision)
@@ -183,22 +183,6 @@ public class TerminalToolSet : ToolSet, IDisposable
 
         var description = await _visionRouter.DescribeImageAsync(data, mimeType, imagePath, CancellationToken.None);
         return output + $"\n[图片 {imagePath} 描述]: {description}";
-    }
-
-    private static string? GuessImageContentType(string path)
-    {
-        var lower = path.ToLowerInvariant();
-        return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg")
-            ? "image/jpeg"
-            : lower.EndsWith(".gif")
-                ? "image/gif"
-                : lower.EndsWith(".webp")
-                    ? "image/webp"
-                    : lower.EndsWith(".png")
-                        ? "image/png"
-                        : lower.EndsWith(".bmp")
-                            ? "image/bmp"
-                            : null;
     }
 
     /// <summary>启动后台任务：独立终端实例，立即返回 task_id</summary>

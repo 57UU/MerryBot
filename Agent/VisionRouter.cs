@@ -43,7 +43,7 @@ public sealed class VisionRouter
         {
             parts.Add(new MessagePartText { text = caption });
         }
-        parts.Add(new MessagePartImage { image = ToDataUrl(imageData, mimeType) });
+        parts.Add(new MessagePartImage { image = MimeTypes.ToDataUrl(imageData, mimeType) });
         return new Message { role = Role.User, content = parts };
     }
 
@@ -74,11 +74,5 @@ public sealed class VisionRouter
             systemPrompt: string.Empty,
             new LlmOptions());
         return response.Content ?? "（视觉模型未返回内容）";
-    }
-
-    private static string ToDataUrl(byte[] data, string mimeType)
-    {
-        var mime = string.IsNullOrWhiteSpace(mimeType) ? "image/png" : mimeType;
-        return $"data:{mime};base64,{Convert.ToBase64String(data)}";
     }
 }
