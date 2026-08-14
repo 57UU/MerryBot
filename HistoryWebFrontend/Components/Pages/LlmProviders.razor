@@ -110,6 +110,12 @@
                 <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
                 <input class="form-control mt-2" @bind="EditProviderName" placeholder="显示名称" required />
                 <input class="form-control mt-2" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
+                <label class="mt-2">API 格式</label>
+                <select class="form-control" @bind="EditApiFormat">
+                    <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
+                    <option value="openai-responses">OpenAI Responses（/responses）</option>
+                    <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
+                </select>
                 <button class="btn btn-secondary mt-2" type="submit">保存 Provider</button>
             </form>
             <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
@@ -226,6 +232,7 @@
     private string EditProviderId { get; set; } = string.Empty;
     private string EditProviderName { get; set; } = string.Empty;
     private string EditProviderBaseUrl { get; set; } = string.Empty;
+    private string EditApiFormat { get; set; } = "openai-chat-completions";
     private string EditModelId { get; set; } = string.Empty;
     private string EditModelProviderId { get; set; } = string.Empty;
     private string EditModelName { get; set; } = string.Empty;
@@ -407,10 +414,14 @@
         try
         {
             Error = null;
+            // 按 models.dev 的 provider 约定自动识别 API 格式；其余默认 OpenAI Chat Completions
+            var apiFormat = model.ProviderId.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+                ? "anthropic-messages"
+                : "openai-chat-completions";
             Config = await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
                 new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
                     string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
-                    "openai-chat-completions", ImportApiKey, true));
+                    apiFormat, ImportApiKey, true));
             ImportApiKey = string.Empty;
             KeyProviderId = model.ProviderId;
         }
@@ -455,7 +466,7 @@
         {
             Error = null;
             await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
-                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, "openai-chat-completions", true));
+                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, EditApiFormat, true));
             KeyProviderId = EditProviderId;
             await LoadConfigAsync();
         }

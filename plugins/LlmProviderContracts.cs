@@ -7,6 +7,8 @@ namespace BotPlugin;
 public enum LlmApiFormat
 {
     OpenAiChatCompletions,
+    OpenAiResponses,
+    AnthropicMessages,
 }
 
 /// <summary>本地模型配置的安全描述，不包含任何 API Key。</summary>

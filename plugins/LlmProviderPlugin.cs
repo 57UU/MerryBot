@@ -103,10 +103,6 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         {
             throw new InvalidOperationException($"Provider 已禁用: {provider.Id}");
         }
-        if (provider.ApiFormat != LlmApiFormat.OpenAiChatCompletions)
-        {
-            throw new NotSupportedException($"当前只支持 OpenAI Chat Completions，Provider {provider.Id} 的格式为 {provider.ApiFormat}。");
-        }
         if (string.IsNullOrWhiteSpace(provider.BaseUrl))
         {
             throw new InvalidOperationException($"Provider {provider.Id} 未设置 API 地址。");
@@ -119,7 +115,13 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             .FirstOrDefault()
             ?? throw new PluginNotUsableException($"Provider {provider.Id} 没有可用 API Key。");
         var apiKey = keyProtector.Unprotect(key.ProtectedSecret);
-        var backend = new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId);
+        Backend backend = provider.ApiFormat switch
+        {
+            LlmApiFormat.OpenAiChatCompletions => new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
+            LlmApiFormat.OpenAiResponses => new ResponsesBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
+            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens),
+            _ => throw new NotSupportedException($"不支持的 API 格式: {provider.ApiFormat}"),
+        };
         var client = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
         return new ResolvedLlmClient(ToDescriptor(model), client);
     }
@@ -587,13 +589,27 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             : $"{providerId}/{modelId}";
 
     private static string ToApiFormatName(LlmApiFormat format)
-        => format switch { LlmApiFormat.OpenAiChatCompletions => "openai-chat-completions", _ => throw new ArgumentOutOfRangeException(nameof(format)) };
+        => format switch
+        {
+            LlmApiFormat.OpenAiChatCompletions => "openai-chat-completions",
+            LlmApiFormat.OpenAiResponses => "openai-responses",
+            LlmApiFormat.AnthropicMessages => "anthropic-messages",
+            _ => throw new ArgumentOutOfRangeException(nameof(format)),
+        };
 
     private static LlmApiFormat ParseApiFormat(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Equals("openai-chat-completions", StringComparison.OrdinalIgnoreCase))
         {
             return LlmApiFormat.OpenAiChatCompletions;
+        }
+        if (value.Equals("openai-responses", StringComparison.OrdinalIgnoreCase))
+        {
+            return LlmApiFormat.OpenAiResponses;
+        }
+        if (value.Equals("anthropic-messages", StringComparison.OrdinalIgnoreCase))
+        {
+            return LlmApiFormat.AnthropicMessages;
         }
         throw new NotSupportedException($"不支持的 API 格式: {value}");
     }
