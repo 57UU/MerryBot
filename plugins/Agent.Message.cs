@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using Agent;
 using BrowserService;
 using CommonLib;
@@ -57,9 +58,6 @@ public class MessageTool : ToolSet
     {
         [Description("包含图片的消息 ID（可用 get_reply_message 返回中的消息 ID）")]
         public string messageId { get; set; } = string.Empty;
-
-        [Description("图片序号，从 0 开始；一条消息有多张图片时指定要查看第几张，默认 0")]
-        public int? imageIndex { get; set; }
     }
 
     private sealed class MarkdownMessageArgs
@@ -99,8 +97,8 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 加载对话消息中的图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
-    /// 否则调用辅助视觉模型生成文字描述。
+    /// 加载对话消息中的全部图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
+    /// 否则调用辅助视觉模型逐张生成文字描述。
     /// </summary>
     private async Task<string> GetMessageImageAsync(GetMessageImageArgs args)
     {
@@ -116,24 +114,28 @@ public class MessageTool : ToolSet
             return $"消息 {args.messageId} 不包含图片。";
         }
 
-        var index = args.imageIndex ?? 0;
-        if (index < 0 || index >= images.Count)
+        var loaded = new List<(byte[] Data, string ContentType)>();
+        var failedCount = 0;
+        foreach (var image in images)
         {
-            return $"图片序号越界：该消息共有 {images.Count} 张图片，序号从 0 开始。";
+            var (data, contentType) = await LoadImageAsync(image);
+            if (data == null || data.Length == 0)
+            {
+                failedCount++;
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(contentType))
+            {
+                contentType = GuessImageContentType(image.File) ?? "image/png";
+            }
+            loaded.Add((data, contentType));
         }
-
-        var image = images[index];
-        var (data, contentType) = await LoadImageAsync(image);
-        if (data == null || data.Length == 0)
+        if (loaded.Count == 0)
         {
             return "图片数据为空，无法查看。";
         }
-        if (string.IsNullOrWhiteSpace(contentType))
-        {
-            contentType = GuessImageContentType(image.File) ?? "image/png";
-        }
 
-        var caption = $"对话图片（消息 {message.MessageId}，第 {index + 1}/{images.Count} 张）{DescribeImage(image)}".Trim();
+        var caption = $"对话图片（消息 {message.MessageId}，共 {images.Count} 张）";
         if (visionRouter.MainHasVision)
         {
             var add = OnIterationAdd;
@@ -141,20 +143,31 @@ public class MessageTool : ToolSet
             {
                 return "当前无法把图片注入对话（回调不可用），请稍后重试。";
             }
-            add(VisionRouter.BuildImageMessage(data, contentType, caption));
-            return $"已加载图片并注入对话（共 {images.Count} 张，当前第 {index + 1} 张），请直接查看图片内容。";
+            add(VisionRouter.BuildImageMessage(loaded, caption));
+            var failedNote = failedCount > 0 ? $"（{failedCount} 张加载失败）" : string.Empty;
+            return $"已加载 {loaded.Count}/{images.Count} 张图片并注入对话{failedNote}，请直接查看图片内容。";
         }
 
         if (!visionRouter.HasVisionFallback)
         {
             return "主模型不具备视觉能力，且未配置辅助视觉模型（vision-llm），无法查看图片。";
         }
-        var description = await visionRouter.DescribeImageAsync(data, contentType, image.Summary, CancellationToken.None);
-        return $"图片描述（消息 {message.MessageId}，第 {index + 1}/{images.Count} 张）：{description}";
+        var sb = new StringBuilder($"消息 {message.MessageId} 共 {images.Count} 张图片：");
+        for (var i = 0; i < loaded.Count; i++)
+        {
+            var description = await visionRouter.DescribeImageAsync(
+                loaded[i].Data,
+                loaded[i].ContentType,
+                i < images.Count ? images[i].Summary : null,
+                CancellationToken.None);
+            sb.AppendLine($"\n第 {i + 1} 张：{description}");
+        }
+        if (failedCount > 0)
+        {
+            sb.AppendLine($"\n（另有 {failedCount} 张图片加载失败）");
+        }
+        return sb.ToString();
     }
-
-    private static string DescribeImage(ImageData image)
-        => string.IsNullOrWhiteSpace(image.Summary) ? string.Empty : $"（{image.Summary}）";
 
     /// <summary>解析图片数据：本地资源 → 本地库；http(s) → 下载；base64:// → 解码。</summary>
     private async Task<(byte[]? Data, string? ContentType)> LoadImageAsync(ImageData image)
