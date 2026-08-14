@@ -1,6 +1,10 @@
 using BotPlugin;
 using CommonLib;
 using DataProvider;
+using DataService;
+using HistoryWebFrontend;
+using MerryBot.Api;
+using Microsoft.AspNetCore.Builder;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
@@ -17,12 +21,28 @@ internal partial class Logic
     public static long AuthorizedUser { get { return ConfigManager.Instance.AuthorizedUser; } }
     readonly string[] CommandLineArguments = Environment.GetCommandLineArgs();
     private readonly EventRegister EventRegister = new();
+    private readonly HistoryRecorder historyRecorder;
+    private readonly MessageService messageService;
+    private readonly WebApplication historyWebApplication;
 
     public Logic(BotClient botClient, string dbPath)
     {
         this.botClient = botClient;
         PluginStorageDatabase = new(dbPath);
+        var historyDbPath = Path.Combine(botClient.PathPrefix, "group_history.db");
+        var historyStoragePath = Path.Combine(botClient.PathPrefix, "storage");
+        historyRecorder = new HistoryRecorder(historyDbPath, historyStoragePath, GetCoreMachineCode());
+        historyRecorder.MigrateAsync().GetAwaiter().GetResult();
+        messageService = new MessageService(botClient.Bot, historyRecorder, logger);
+        historyWebApplication = HistoryWebFrontend.Program.CreateApp(historyRecorder, GetCoreWebAddress());
+        ConfigApiMapper.Map(
+            historyWebApplication,
+            typeof(Config),
+            () => ConfigManager.Instance,
+            ConfigManager.Save,
+            Shutdown);
         LoadPlugins();
+        _ = historyWebApplication.RunAsync();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
         RegisterEventHandlers();
     }
@@ -45,10 +65,8 @@ internal partial class Logic
         botClient.OnEssenceEventReceived += OnEssenceEventReceived;
         botClient.OnGroupCardEventReceived += OnGroupCardEventReceived;
     }
-    private (bool isMentioned, string textMessage) ExtractMessage(ReceivedGroupMessage data)
+    private static (bool isMentioned, string textMessage) ExtractMessage(IReadOnlyList<TypedMessage> chain, long selfId)
     {
-        var chain = data.message;
-        var selfId = data.self_id;
         bool isTargeted = false;
         var sb = new StringBuilder();
         foreach (var item in chain)
@@ -92,12 +110,9 @@ internal partial class Logic
             return;
         }
         ReadOnlySpan<TypedMessage> span = CollectionsMarshal.AsSpan(chain);
-        long selfId = BotUtils.GetSelfId(data);
         logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
 
-        long senderId = data.sender.user_id;
-
-        EventRegister.RaiseRawGroupMessageReceived(data);
+        var ingress = messageService.Ingest(data);
 
         bool isIntercepted = false;
         foreach (var plugInfo in plugins)
@@ -114,12 +129,62 @@ internal partial class Logic
         }
         if (isIntercepted)
         {
+            _ = messageService.PrefetchAsync(ingress);
             return;
         }
 
-        var (isTargeted, textMessage) = ExtractMessage(data);
+        var (isTargeted, textMessage) = ExtractMessage(ingress.MessageChain, data.self_id);
         var command = ParseCommand(textMessage);
-        OnGroupMessage(isTargeted, command, data);
+        OnGroupMessage(isTargeted, command, ingress.MessageChain, data);
+        _ = messageService.PrefetchAsync(ingress);
+    }
+
+    private static int GetCoreMachineCode()
+    {
+        const string coreId = "core";
+        const string machineCodeKey = "machine-code";
+        if (!ConfigManager.Instance.Variables.TryGetValue(coreId, out var variables))
+        {
+            variables = new Tomlyn.Model.TomlTable();
+            ConfigManager.Instance.Variables[coreId] = variables;
+        }
+        if (variables.TryGetValue(machineCodeKey, out var stored) && int.TryParse(stored?.ToString(), out var machineCode))
+        {
+            return machineCode;
+        }
+        if (TryGetLegacyStorageValue(machineCodeKey, out stored) && int.TryParse(stored?.ToString(), out machineCode))
+        {
+            variables[machineCodeKey] = machineCode;
+            ConfigManager.Save().GetAwaiter().GetResult();
+            return machineCode;
+        }
+        machineCode = Random.Shared.Next(0, 32);
+        variables[machineCodeKey] = machineCode;
+        ConfigManager.Save().GetAwaiter().GetResult();
+        return machineCode;
+    }
+
+    private static string GetCoreWebAddress()
+    {
+        const string coreId = "core";
+        const string webAddressKey = "web-address";
+        if (ConfigManager.Instance.Variables.TryGetValue(coreId, out var variables)
+            && variables.TryGetValue(webAddressKey, out var value) && !string.IsNullOrWhiteSpace(value?.ToString()))
+        {
+            return value.ToString()!;
+        }
+        if (TryGetLegacyStorageValue(webAddressKey, out value) && !string.IsNullOrWhiteSpace(value?.ToString()))
+        {
+            return value.ToString()!;
+        }
+        return "http://0.0.0.0:5000";
+    }
+
+    private static bool TryGetLegacyStorageValue(string key, out object? value)
+    {
+        value = null;
+        return ConfigManager.Instance.Variables.TryGetValue("storage-manager", out var legacy)
+            && legacy.TryGetValue(key, out value);
     }
 
 }

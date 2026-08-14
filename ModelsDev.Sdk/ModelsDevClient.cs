@@ -74,14 +74,15 @@ public sealed class ModelsDevClient
     /// <exception cref="JsonException">Thrown when the response cannot be parsed.</exception>
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _httpClient.GetStringAsync(_apiUrl, cancellationToken);
-        var providers = JsonSerializer.Deserialize<Dictionary<string, Provider>>(json, JsonOptions.Default);
-
-        if (providers is null)
-            throw new JsonException("Failed to deserialize provider data from models.dev");
-
-        _providers = providers;
+        LoadFromJson(await DownloadAsync(cancellationToken));
     }
+
+    /// <summary>
+    /// Downloads the raw models.dev catalog JSON without loading it.
+    /// This enables callers to persist an offline cache before parsing it.
+    /// </summary>
+    public Task<string> DownloadAsync(CancellationToken cancellationToken = default)
+        => _httpClient.GetStringAsync(_apiUrl, cancellationToken);
 
     /// <summary>
     /// Loads data from a pre-fetched JSON string (useful for testing or offline scenarios).

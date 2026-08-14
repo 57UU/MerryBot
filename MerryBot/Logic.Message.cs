@@ -8,7 +8,7 @@ namespace MerryBot;
 
 internal partial class Logic
 {
-    private void OnGroupMessage(bool isMentioned,Command? command, ReceivedGroupMessage data)
+    private void OnGroupMessage(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
     {
         foreach (var i in plugins)
         {
@@ -17,14 +17,20 @@ internal partial class Logic
                 //if the plugin is not enable, skip it
                 continue;
             }
-            try
-            {
-                i.Instance.OnGroupMessage(isMentioned, command, data);
-            }
-            catch (Exception e)
-            {
-                logger.Warn(e);
-            }
+            var pluginChain = messageChain.Select(message => message.Clone()).ToList();
+            _ = InvokePluginAsync(i, isMentioned, command, pluginChain, data);
+        }
+    }
+
+    private async Task InvokePluginAsync(PluginInfo plugin, bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage raw)
+    {
+        try
+        {
+            await plugin.Instance.OnGroupMessageAsync(isMentioned, command, messageChain, raw);
+        }
+        catch (Exception exception)
+        {
+            logger.Warn(exception, "插件消息处理失败: {0}", plugin.PluginTag.Id);
         }
     }
 }

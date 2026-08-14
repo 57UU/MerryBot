@@ -70,6 +70,21 @@ public class ModelsDevClientTests
     }
 
     [Fact]
+    public async Task DownloadAsync_ReturnsRawCatalogWithoutLoadingIt()
+    {
+        var handler = new TestData.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(TestData.Json),
+        });
+        var client = new ModelsDevClient(new HttpClient(handler));
+
+        var json = await client.DownloadAsync();
+
+        Assert.Equal(TestData.Json, json);
+        Assert.False(client.IsLoaded);
+    }
+
+    [Fact]
     public async Task LoadAsync_HttpFailure_ThrowsHttpRequestException()
     {
         var handler = new TestData.StubHttpMessageHandler(

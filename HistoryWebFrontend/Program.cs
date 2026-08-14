@@ -94,6 +94,32 @@ public class Program
             return Results.File(data, contentType, fileName);
         });
 
+        // 新版处理链只保存 merrybot://resource/... 本地 URI；前端绝不直连远端 URL。
+        app.MapGet("/api/resource", async ([FromQuery] string reference, HistoryRecorder historyRecorder) =>
+        {
+            if (string.IsNullOrWhiteSpace(reference)) return Results.BadRequest();
+            var resource = await historyRecorder.GetResourceReferenceAsync(reference);
+            if (resource?.StoredObjectId is not long objectId)
+            {
+                return Results.StatusCode(StatusCodes.Status202Accepted);
+            }
+
+            if (resource.IsImage)
+            {
+                var image = await historyRecorder.GetImageByIdAsync(objectId);
+                if (image == null) return Results.NotFound();
+                var data = await historyRecorder.GetImageDataAsync(image.Hash);
+                return data == null ? Results.NotFound() : Results.File(data, GetImageContentType(image.OriginalUrl));
+            }
+
+            var file = await historyRecorder.GetFileByIdAsync(objectId);
+            if (file == null) return Results.NotFound();
+            var fileData = await historyRecorder.GetFileDataAsync(file.Hash);
+            return fileData == null
+                ? Results.NotFound()
+                : Results.File(fileData, GetFileContentType(file.OriginalUrl), resource.OriginalName ?? objectId.ToString());
+        });
+
         return app;
     }
 

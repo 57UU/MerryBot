@@ -7,13 +7,13 @@ namespace LlmBackend;
 
 public class ToolDef
 {
-    public string type;
-    public FunctionDef function;
+    public string type = string.Empty;
+    public FunctionDef function = new();
 }
 
 public class FunctionDef
 {
-    public string name;
-    public string description;
+    public string name = string.Empty;
+    public string description = string.Empty;
     public JsonElement? parameters;
 }

@@ -13,8 +13,7 @@ qq-groups = [114514, 1919810]             # 要监听的qq群号列表
 authorized-user = 114514                  # 授权用户（Bot管理员）qq号
 
 [variables.agent]                         # 每个插件有独立的命名空间
-llm-model = "deepseek-chat"               # 选择的默认llm模型
-ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
+ai-prompt = "你是一个助人为乐的AI助手"     # Agent 的系统提示词
 ```
 
 > 💡 配置文件的**详细说明和完整参数**（包括所有插件的配置）请参阅 [Configuration.md](Configuration.md)。
@@ -33,13 +32,7 @@ ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 # 主要内置插件
 
 ## AI机器人
-使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。另外，可以通过`extra-models.toml`添加自定义Openai-compatible模型。
-
-支持以下命令：
-- `#新对话` 或 `/new` - 开启新对话（清除上下文）
-- `/new 你好` - 开启新对话并发送首条消息
-- `/setllm [model-tag]` - 切换当前会话的 LLM 模型
-- `/getllm` - 查看当前使用的模型及可用模型列表
+在历史后台的“LLM 配置”页搜索并选择 models.dev Provider，再添加所需模型；目录会本地缓存，点击刷新才联网更新。填写 OpenAI Chat Completions 兼容的 API 地址和 Key 后，Agent 会使用设为默认的模型。Provider、模型和 Key 都保存在插件数据库；Key 不写入 `setting.toml`，页面也不会读回原文。
 
 内置了如下function call:
 - bing搜索
@@ -145,13 +138,13 @@ AI 会分析聊天记录中的梗和热点，自动提取目录并生成包含�
 # 插件开发
 1. 一个插件应当放在`plugins`项目的一个文件中
 2. 应当继承于`Plugin`抽象类
-3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数，可通过依赖注入接收其他插件实例
-4. 在类前面使用属性`PluginTag(string id, string name, string description, [bool isIgnore=false], [int priority=0], [PluginType type=PluginType.Interactive])`
+3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数；插件之间不再依赖消息记录器或存储管理器
+4. 在类前面使用属性`PluginTag(string id, string name, string description, [bool isIgnore=false], [PluginType type=PluginType.Interactive])`
 
 主程序会通过反射加载`plugins`项目下的所有插件类，因此需要满足上述条件。
 
 ## 示例
-插件通过构造函数接收 `PluginInterop` 和其他插件实例，主程序会自动解析依赖顺序（确保能够拓扑排序）并初始化：
+插件通过构造函数接收 `PluginInterop`；消息、资源和历史记录均由 Core 提供：
 ```csharp
 [PluginTag("about", "About", "使用 /about 来查看关于")]
 public class About : Plugin
@@ -167,19 +160,21 @@ Merry Bot
 访问Github仓库 https://github.com/57UU/MerryBot 以获取更多信息
 """;
 
-    private readonly StorageManagerPlugin _storage;
-
-    public About(PluginInterop interop, StorageManagerPlugin storage) : base(interop)
+    public About(PluginInterop interop) : base(interop)
     {
-        _storage = storage;
         Logger.Info("about plugin start");
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override Task OnGroupMessageAsync(
+        bool isMentioned,
+        Command? command,
+        IReadOnlyList<TypedMessage> messageChain,
+        ReceivedGroupMessage raw)
     {
-        if (IsStartsWith(chain, "/about"))
+        if (isMentioned && command?.Name == "about")
         {
-            Actions.SendGroupMessage(groupId, aboutMessage);
+            _ = Bot.SendGroupMessage(raw.GroupId, aboutMessage);
         }
+        return Task.CompletedTask;
     }
 }
 ```
@@ -189,33 +184,26 @@ Merry Bot
 ## 事件
 | 函数 | 描述 |
 | --- | --- |
-| `OnGroupMessage` 函数 | 当收到新消息时，此函数会被调用 |
-|`OnGroupMessageMentioned`|当收到新消息时bot被@，此函数会被调用|
-|`OnGroupMessageNotMentioned`|当收到新消息时bot未被@，此函数会被调用|
+| `OnGroupMessageAsync` 函数 | 当收到新消息时，此函数会被调用 |
 | `OnLoaded` 函数 | 当插件全部被加载完后会执行的函数，可以放一些互操作性的初始化代码。 |
 
-### 原始消息事件
-`OnRawGroupMessageReceived` 事件允许插件在消息被其他插件处理之前访问原始消息数据。
+### 消息处理链
+插件通过异步回调同时获得处理后的消息链和 Napcat 原始消息：
 
-**注册方式**：
 ```csharp
-
-public MyPlugin(PluginInterop interop) : base(interop)
+public override Task OnGroupMessageAsync(
+    bool isMentioned,
+    Command? command,
+    IReadOnlyList<TypedMessage> messageChain,
+    ReceivedGroupMessage raw)
 {
-    interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
+    // messageChain 中的 Reply、Forward、图片、文件等均为 merrybot:// 本地引用。
+    // raw 保持 OneBot/Napcat 原始值，仅在需要协议字段时使用。
+    return Task.CompletedTask;
 }
-
-private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
-{
-    // 在这里处理原始消息
-    // 此回调在其他插件的 OnGroupMessage 等方法之前被调用
-}
-
 ```
 
-**使用场景**：
-- 需要在消息被其他插件修改或拦截前记录原始数据
-- 需要获取未经插件系统处理的消息
+使用 `Interop.MessageService` 可按本地引用读取 Reply、Forward 或媒体资源；Core 会复用正在进行的请求并负责持久化。
 
 
 
@@ -238,6 +226,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性(其实笔者更推荐直接在构造函数中直接注入其他插件实例)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
+|PluginDatabaseScope PluginDatabase {get;}|获取当前插件的 scoped LiteDB 数据库|
 |T? GetVariable<T>(string key)|获取当前插件命名空间下`Variable`中的配置项|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
 |Action<int> Shutdown|关闭程序，参数为退出码|
@@ -259,6 +248,25 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 |Task\<T\> Load\<T\>(T defaultValue)|异步加载对象，如果不存在则返回默认值|
 |Task Save\<T\>(T data)|异步存储对象|
 
+### Scoped 数据库-PluginDatabase
+
+`PluginStorage` 适合保存一个简单的插件对象或群级对象。需要多个表、索引或复杂查询时，可使用 `Interop.PluginDatabase`；每个插件只会访问以自身 `PluginTag.Id` 为 scope 的 collection。
+
+```csharp
+public sealed class Todo
+{
+    public int Id { get; set; }
+    public long GroupId { get; set; }
+    public string Content { get; set; } = "";
+}
+
+var todos = Interop.PluginDatabase.GetCollection<Todo>("todos");
+await todos.EnsureIndexAsync(x => x.GroupId);
+await todos.UpsertAsync(new Todo { Id = 1, GroupId = 123, Content = "example" });
+```
+
+`GetCollection<T>(name)` 会按需创建当前插件的表；`DropCollectionAsync(name)` 只能删除当前插件 scope 内的表。底层数据库由 Core 管理，插件不需要、也不能自行释放连接。
+
 ### 工具类-`MessageUtils`
 |API|Description|
 |:---:|:---|
@@ -278,7 +286,7 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### PluginTag类属性标签
 
-构造函数为`(string id, string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
+构造函数为`(string id, string name, string description, bool isIgnore=false, PluginType type=PluginType.Interactive)`
 
 参数说明：
 - `id` - 插件标识符（英文），用于配置文件命名空间隔离

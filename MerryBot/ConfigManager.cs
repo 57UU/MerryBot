@@ -1,3 +1,4 @@
+using MerryBot.Api;
 using Tomlyn;
 using Tomlyn.Model;
 using Tomlyn.Serialization;
@@ -55,12 +56,16 @@ public static class ConfigManager
 public class Config
 {
     [TomlPropertyName("napcat-server")]
+    [ConfigRule(Required = true, Scheme = "ws,wss")]
     public string NapcatServer { set; get; } = "ws://<host>:<port>/";
     [TomlPropertyName("napcat-token")]
+    [ConfigRule(Required = true)]
     public string NapcatToken { set; get; } = "napcat";
     [TomlPropertyName("qq-groups")]
+    [ConfigRule(Positive = true)]
     public List<long> QqGroups { set; get; } = [];
     [TomlPropertyName("authorized-user")]
+    [ConfigRule(Positive = true)]
     public long AuthorizedUser { set; get; } = -1;
     [TomlPropertyName("variables")]
     public Dictionary<string, TomlTable> Variables { set; get; } = new();

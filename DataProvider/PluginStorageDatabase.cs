@@ -21,6 +21,15 @@ public partial class PluginStorageDatabase : IDisposable
         _ = _groupCollection.EnsureIndexAsync(x => x.Key);
     }
 
+    /// <summary>
+    /// Creates a database view that can only access collections owned by the specified plugin.
+    /// </summary>
+    public PluginDatabaseScope CreateScope(string pluginId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        return new PluginDatabaseScope(_db, pluginId);
+    }
+
     // Plugin-level
     public async Task StorePluginData(string pluginName, object data)
     {

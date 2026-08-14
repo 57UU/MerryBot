@@ -106,9 +106,9 @@ static class PluginUtils
         }
         return s;
     }
-    public static List<TypedMessage> MessageSpan2List(MessageChain span)
+    public static List<TypedMessage> MessageSpan2List(IReadOnlyList<TypedMessage> messageChain)
     {
-        List<TypedMessage> list = [.. span];
+        List<TypedMessage> list = messageChain.Select(message => message.Clone()).ToList();
         return list;
     }
 }

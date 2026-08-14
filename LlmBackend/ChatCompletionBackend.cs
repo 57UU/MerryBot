@@ -13,6 +13,13 @@ public class ChatCompletionBackend : Backend
 {
     private static readonly HttpClient Client = new();
     private static readonly SemaphoreSlim _semaphore = new(5, 5);
+    // ToolDef and FunctionDef intentionally expose OpenAI-shaped public fields
+    // (type/function/name/parameters). Include fields when serializing a request
+    // so providers receive the required top-level `type: "function"` member.
+    private static readonly JsonSerializerOptions RequestJsonOptions = new()
+    {
+        IncludeFields = true,
+    };
 
     private readonly string _baseUrl;
     private readonly string _apiKey;
@@ -46,7 +53,7 @@ public class ChatCompletionBackend : Backend
             }
         }
 
-        string jsonData = JsonSerializer.Serialize(requestBody);
+        string jsonData = JsonSerializer.Serialize(requestBody, RequestJsonOptions);
 
         await _semaphore.WaitAsync(cancellationToken);
         string responseBody;

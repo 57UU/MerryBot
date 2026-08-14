@@ -4,12 +4,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using LlmBackend;
 
-namespace Agent.Tools;
+namespace Agent.Session;
 
 /// <summary>
 /// 终端工具集：注册 bash / task_list / task_output / task_stop 四个工具，效果对齐内置 Bash 工具。
 /// bash 进程懒加载——构造时不启动，首次前台调用时才创建共享常驻终端，之后跨调用保留 shell 状态（如 cd）。
 /// user 构造参数非空时以 sudo -u user 运行 bash；后台任务各自使用独立终端实例。
+/// 后台任务完成时通过 sessionManager 主动通知所属 session 的 Agent（stackable 类型，避免积压）。
 /// </summary>
 public class TerminalToolSet : ToolSet, IDisposable
 {
@@ -19,16 +20,22 @@ public class TerminalToolSet : ToolSet, IDisposable
     public const int DefaultBackgroundTimeoutSeconds = 600;
     /// <summary>后台任务最大存活时间，超龄任务在查询时顺带清理，防泄漏</summary>
     private static readonly TimeSpan MaxTaskAge = TimeSpan.FromMinutes(5);
+    /// <summary>后台任务完成通知的结果摘要长度限制（字符）</summary>
+    private const int NotifyResultLimit = 2000;
 
     private readonly ToolSetBridge bridge;
+    private readonly AgentSessionManager _sessionManager;
+    private readonly string _sessionId;
     private readonly string? user;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
 
     private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime);
 
-    public TerminalToolSet(string? user = null)
+    public TerminalToolSet(AgentSessionManager sessionManager, string sessionId, string? user = null)
     {
+        _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+        _sessionId = sessionId;
         this.user = user;
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -133,7 +140,10 @@ public class TerminalToolSet : ToolSet, IDisposable
                 throw new ArgumentException("timeout 必须大于 0");
             }
             var task = terminal.RunCommandAsync(command, cwd, effectiveTimeout);
-            _tasks[id] = new BackgroundTask(id, description ?? string.Empty, terminal, task, DateTime.Now);
+            var info = new BackgroundTask(id, description ?? string.Empty, terminal, task, DateTime.Now);
+            _tasks[id] = info;
+            // 完成后主动通知所属会话的 Agent（fire-and-forget）
+            _ = NotifyOnCompletionAsync(info);
             return $"后台任务已启动，task_id: {id}"
                 + (string.IsNullOrEmpty(description) ? string.Empty : $"，说明：{description}")
                 + "\n可用 task_list 查看状态，task_output 查询结果。";
@@ -144,6 +154,43 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw;
         }
     }
+
+    /// <summary>
+    /// 后台任务完成（成功或失败）后，主动通知所属会话的 Agent，让它拿到结果继续处理。
+    /// 结果摘要限制长度避免撑爆上下文，完整输出仍可通过 task_output 获取；
+    /// 通知使用 stackable 类型，Agent 忙碌时同类型通知会合并，避免积压。
+    /// </summary>
+    private async Task NotifyOnCompletionAsync(BackgroundTask info)
+    {
+        string message;
+        try
+        {
+            var result = await info.Task;
+            message = $"后台任务 {Label(info)} 已完成：\n{CapResult(result)}";
+        }
+        catch (Exception ex)
+        {
+            message = $"后台任务 {Label(info)} 执行失败：{ex.Message}";
+        }
+
+        try
+        {
+            var session = await _sessionManager.GetSessionAsync(_sessionId);
+            await session.Chat(message, type: "task_result", stackable: true);
+        }
+        catch (Exception)
+        {
+            // 通知失败（如会话已关闭）不影响后台任务本身，忽略即可
+        }
+    }
+
+    private static string Label(BackgroundTask info) =>
+        string.IsNullOrEmpty(info.Description) ? info.Id : $"{info.Id}（{info.Description}）";
+
+    private static string CapResult(string text) =>
+        text.Length <= NotifyResultLimit
+            ? text
+            : text[..NotifyResultLimit] + $"\n…（输出过长已截断，全文共 {text.Length} 字符，可用 task_output 获取完整结果）";
 
     private string ListTasks()
     {

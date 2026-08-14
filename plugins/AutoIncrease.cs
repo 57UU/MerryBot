@@ -1,10 +1,9 @@
 using NapcatClient;
 using NapcatClient.MessageType;
-using System.Runtime.InteropServices;
 
 namespace BotPlugin;
 
-[PluginTag("auto-increase", "自动+1", "如果有刷屏消息，将会自动+1", priority: -1, type: PluginType.Background)]
+[PluginTag("auto-increase", "自动+1", "如果有刷屏消息，将会自动+1", type: PluginType.Background)]
 public class AutoIncrease : Plugin
 {
     const int REPEAT_TIME = 3;
@@ -18,48 +17,44 @@ public class AutoIncrease : Plugin
     }
     //store each group
     private readonly Dictionary<long, ChainWithSender> lastMessage = [];
+    private readonly object lastMessageLock = new();
 
-    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
+    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
     {
-        var groupId = data.GroupId;
-        var _lastMessage = lastMessage.GetValueOrDefault(groupId);
-        var chainList = data.message;
-        if (_lastMessage == null)
+        lock (lastMessageLock)
         {
-            _lastMessage = new()
+            var groupId = data.GroupId;
+            var _lastMessage = lastMessage.GetValueOrDefault(groupId);
+            var chainList = messageChain.Select(message => message.Clone()).ToList();
+            if (_lastMessage == null)
             {
-                chain = chainList,
-                sender = data.sender.user_id
-            };
-            lastMessage[groupId] = _lastMessage;
-        }
-        else
-        {
-            //_lastMessage is not null
-            //上一个消息存在
-            if (
-                MessageUtils.IsEqual(CollectionsMarshal.AsSpan(data.message), CollectionsMarshal.AsSpan(_lastMessage?.chain))
-                //&& _lastMessage.sender != data.sender.user_id//not by same account
-                )
-            {
-                //this is a duplicated message
-                _lastMessage!.repeatTime++;
-
-                if (!_lastMessage.used && _lastMessage.repeatTime >= REPEAT_TIME)
+                _lastMessage = new()
                 {
-                    //this has not been sent
-                    Logger.Info("+1 message detected");
-                    _ = Bot.SendGroupMessage(groupId, _lastMessage.chain!);
-                    _lastMessage.used = true;
-                }
+                    chain = chainList,
+                    sender = data.sender.user_id
+                };
+                lastMessage[groupId] = _lastMessage;
             }
             else
             {
-                //不是重复消息
-                _lastMessage!.Renew(chainList, data.sender.user_id);
+                if (MessageUtils.IsEqual(messageChain, _lastMessage.chain))
+                {
+                    _lastMessage.repeatTime++;
+                    if (!_lastMessage.used && _lastMessage.repeatTime >= REPEAT_TIME)
+                    {
+                        Logger.Info("+1 message detected");
+                        _ = Bot.SendGroupMessage(groupId, _lastMessage.chain!);
+                        _lastMessage.used = true;
+                    }
+                }
+                else
+                {
+                    _lastMessage.Renew(chainList, data.sender.user_id);
+                }
 
             }
         }
+        return Task.CompletedTask;
     }
 }
 internal class ChainWithSender

@@ -1,0 +1,470 @@
+@page "/llmproviders"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>LLM 配置</PageTitle>
+
+<div class="container-custom">
+    <h1>LLM Provider</h1>
+    <p class="text-muted-custom">models.dev 用于目录导入；真正使用的 API 地址、模型启用状态和 Key 都保存在本机数据库。Key 仅可写入，不会再次显示。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+
+    <section class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>从 models.dev 添加模型</strong></div>
+        <div class="message-content-custom">
+            <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
+            <div class="mb-3-custom">
+                <label>1. 搜索 Provider</label>
+                <input class="form-control" @bind="CatalogProviderQuery" @bind:event="oninput" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
+                <button class="btn btn-primary mt-2" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
+                <button class="btn btn-secondary mt-2 ms-2" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
+                @if (CatalogStatus is not null)
+                {
+                    <div><small class="text-muted-custom">目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
+                    @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
+                    {
+                        <div><small class="text-muted-custom">刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
+                    }
+                }
+            </div>
+
+            @if (HasSearchedProviders && CatalogProviders.Count == 0)
+            {
+                <span>没有找到匹配的 Provider。</span>
+            }
+            else if (CatalogProviders.Count > 0)
+            {
+                <div style="overflow-x:auto" class="mb-3-custom">
+                    <table class="table">
+                        <thead><tr><th>Provider</th><th>ID</th><th>可用模型</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var provider in CatalogProviders)
+                        {
+                            <tr @key="provider.Id">
+                                <td>@provider.Name</td>
+                                <td><code>@provider.Id</code></td>
+                                <td>@provider.ModelCount</td>
+                                <td><button class="btn btn-secondary" @onclick="() => SelectProviderAsync(provider)">选择并查看模型</button></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @if (SelectedCatalogProvider is not null)
+            {
+                <div class="mb-3-custom">
+                    <h5>2. 为 @SelectedCatalogProvider.Name 添加模型</h5>
+                    <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
+                    <label class="mt-2">筛选模型</label>
+                    <input class="form-control" @bind="CatalogModelQuery" @bind:event="oninput" placeholder="例如 gpt、deepseek、flash" />
+                    <button class="btn btn-secondary mt-2" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button>
+                </div>
+                <div class="mb-3-custom">
+                    <label>首次添加此 Provider 时使用的 API 地址</label>
+                    <input class="form-control" @bind="ImportBaseUrl" placeholder="https://api.example.com/v1" />
+                    <small class="text-muted-custom">默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。</small>
+                </div>
+                <div class="mb-3-custom">
+                    <label>添加模型时一并保存的 API Key（可留空，随后单独添加）</label>
+                    <input class="form-control" type="password" @bind="ImportApiKey" autocomplete="new-password" />
+                </div>
+                @if (HasSearchedModels && CatalogModels.Count == 0)
+                {
+                    <span>这个 Provider 中没有匹配的模型。</span>
+                }
+                else if (CatalogModels.Count > 0)
+                {
+                    <div style="overflow-x:auto">
+                        <table class="table">
+                            <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var model in CatalogModels)
+                            {
+                                <tr @key="@($"{model.ProviderId}/{model.ModelId}")">
+                                    <td><code>@model.ModelId</code><br /><small>@model.Name</small></td>
+                                    <td>@FormatLimit(model.ContextLength)</td>
+                                    <td>@FormatLimit(model.MaxOutputTokens)</td>
+                                    <td>@model.Capabilities</td>
+                                    <td><button class="btn btn-primary" @onclick="() => ImportAsync(model)">添加模型</button></td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+        </div>
+    </section>
+
+    <section class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>手工维护配置</strong></div>
+        <div class="message-content-custom">
+            <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
+                <h5>Provider</h5>
+                <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
+                <input class="form-control mt-2" @bind="EditProviderName" placeholder="显示名称" required />
+                <input class="form-control mt-2" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
+                <button class="btn btn-secondary mt-2" type="submit">保存 Provider</button>
+            </form>
+            <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
+                <h5>模型</h5>
+                <input class="form-control" @bind="EditModelId" placeholder="本地模型 ID，例如 provider/model" required />
+                <input class="form-control mt-2" @bind="EditModelProviderId" placeholder="Provider ID" required />
+                <input class="form-control mt-2" @bind="EditModelName" placeholder="显示名称" required />
+                <input class="form-control mt-2" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
+                <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
+                <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
+                <button class="btn btn-secondary mt-2" type="submit">保存模型</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>添加或替换 Provider Key</strong></div>
+        <div class="message-content-custom">
+            @if (Config?.Providers.Count > 0)
+            {
+                <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
+                    <label>Provider</label>
+                    <select class="form-control" @bind="KeyProviderId">
+                        @foreach (var provider in Config.Providers)
+                        {
+                            <option value="@provider.Id">@provider.Name (@provider.Id)</option>
+                        }
+                    </select>
+                    <label class="mt-2">名称</label>
+                    <input class="form-control" @bind="KeyName" placeholder="生产 Key" />
+                    <label class="mt-2">API Key</label>
+                    <input class="form-control" type="password" @bind="KeySecret" autocomplete="new-password" required />
+                    <label class="mt-2">优先级（数字越小越优先）</label>
+                    <input class="form-control" type="number" @bind="KeyPriority" />
+                    <button class="btn btn-primary mt-2" type="submit">保存 Key</button>
+                </form>
+            }
+            else
+            {
+                <span>请先从 models.dev 导入至少一个模型。</span>
+            }
+        </div>
+    </section>
+
+    <section class="message-item-custom">
+        <div class="message-header-custom"><strong>本地运行配置</strong></div>
+        <div class="message-content-custom">
+            @if (Config == null)
+            {
+                <span>加载中…</span>
+            }
+            else if (Config.Providers.Count == 0)
+            {
+                <span>暂无已导入的配置。</span>
+            }
+            else
+            {
+                @foreach (var provider in Config.Providers)
+                {
+                    <div class="mb-3-custom" @key="provider.Id">
+                        <strong>@provider.Name</strong> <code>@provider.Id</code>
+                        <div><small>@provider.ApiFormat · @provider.BaseUrl · @(provider.Enabled ? "启用" : "禁用")</small></div>
+                        <div>
+                            <small>Key：</small>
+                            @foreach (var key in provider.Keys)
+                            {
+                                <span class="me-2" @key="key.Id">@key.Name @key.Fingerprint <button class="btn btn-danger" @onclick="() => DeleteKeyAsync(key.Id)">删除</button></span>
+                            }
+                        </div>
+                        <ul>
+                            @foreach (var model in provider.Models)
+                            {
+                                <li @key="model.Id">
+                                    <code>@model.Id</code> → <code>@model.RemoteModelId</code>
+                                    （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
+                                    @if (Config.DefaultModelId == model.Id)
+                                    {
+                                        <strong> 默认</strong>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-secondary ms-2" @onclick="() => SetDefaultAsync(model.Id)">设为默认</button>
+                                    }
+                                    <button class="btn btn-danger ms-2" @onclick="() => DeleteModelAsync(model.Id)">删除模型</button>
+                                </li>
+                            }
+                        </ul>
+                        <button class="btn btn-danger" @onclick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</button>
+                    </div>
+                }
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private LlmConfigSnapshot? Config;
+    private List<LlmCatalogProviderDto> CatalogProviders { get; set; } = [];
+    private List<LlmCatalogModelDto> CatalogModels { get; set; } = [];
+    private LlmCatalogProviderDto? SelectedCatalogProvider { get; set; }
+    private LlmCatalogStatusDto? CatalogStatus { get; set; }
+    private string CatalogProviderQuery { get; set; } = string.Empty;
+    private string CatalogModelQuery { get; set; } = string.Empty;
+    private string ImportApiKey { get; set; } = string.Empty;
+    private string ImportBaseUrl { get; set; } = string.Empty;
+    private string KeyProviderId { get; set; } = string.Empty;
+    private string KeyName { get; set; } = "API Key";
+    private string KeySecret { get; set; } = string.Empty;
+    private int KeyPriority { get; set; }
+    private string? Error { get; set; }
+    private bool IsLoadingCatalog { get; set; }
+    private bool HasSearchedProviders { get; set; }
+    private bool HasSearchedModels { get; set; }
+    private string EditProviderId { get; set; } = string.Empty;
+    private string EditProviderName { get; set; } = string.Empty;
+    private string EditProviderBaseUrl { get; set; } = string.Empty;
+    private string EditModelId { get; set; } = string.Empty;
+    private string EditModelProviderId { get; set; } = string.Empty;
+    private string EditModelName { get; set; } = string.Empty;
+    private string EditModelRemoteId { get; set; } = string.Empty;
+    private int EditModelContextLength { get; set; } = 32_768;
+    private int EditModelMaxOutput { get; set; } = 4_096;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            Error = null;
+            Config = await RequestAsync<LlmConfigSnapshot>("GET", "/api/plugins/llm-provider/config");
+            if (string.IsNullOrWhiteSpace(KeyProviderId))
+            {
+                KeyProviderId = Config?.Providers.FirstOrDefault()?.Id ?? string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = $"无法加载 LLM 配置：{ex.Message}";
+        }
+    }
+
+    private async Task SearchProvidersAsync()
+    {
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            var query = Uri.EscapeDataString(CatalogProviderQuery ?? string.Empty);
+            CatalogProviders = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
+            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("GET", "/api/plugins/llm-provider/catalog/status");
+            HasSearchedProviders = true;
+        }
+        catch (Exception ex)
+        {
+            Error = $"读取本地 models.dev 目录失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoadingCatalog = false;
+        }
+    }
+
+    private async Task RefreshCatalogAsync()
+    {
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("POST", "/api/plugins/llm-provider/catalog/refresh");
+        }
+        catch (Exception ex)
+        {
+            Error = $"刷新 models.dev 失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoadingCatalog = false;
+        }
+
+        if (Error is null)
+        {
+            await SearchProvidersAsync();
+            if (SelectedCatalogProvider is not null)
+            {
+                await LoadModelsAsync();
+            }
+        }
+    }
+
+    private async Task SelectProviderAsync(LlmCatalogProviderDto provider)
+    {
+        SelectedCatalogProvider = provider;
+        CatalogModelQuery = string.Empty;
+        CatalogModels = [];
+        HasSearchedModels = false;
+        ImportBaseUrl = provider.SuggestedBaseUrl ?? string.Empty;
+        await LoadModelsAsync();
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        if (SelectedCatalogProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            var providerId = Uri.EscapeDataString(SelectedCatalogProvider.Id);
+            var query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
+            CatalogModels = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            HasSearchedModels = true;
+        }
+        catch (Exception ex)
+        {
+            Error = $"读取 Provider 模型失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoadingCatalog = false;
+        }
+    }
+
+    private async Task ImportAsync(LlmCatalogModelDto model)
+    {
+        try
+        {
+            Error = null;
+            Config = await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
+                new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
+                    string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
+                    "openai-chat-completions", ImportApiKey, true));
+            ImportApiKey = string.Empty;
+            KeyProviderId = model.ProviderId;
+        }
+        catch (Exception ex)
+        {
+            Error = $"导入失败：{ex.Message}";
+        }
+    }
+
+    private async Task SaveKeyAsync()
+    {
+        try
+        {
+            Error = null;
+            await RequestAsync<object>("POST", "/api/plugins/llm-provider/keys",
+                new LlmSaveKeyRequest(KeyProviderId, KeyName, KeySecret, KeyPriority, true));
+            KeySecret = string.Empty;
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"保存 Key 失败：{ex.Message}";
+        }
+    }
+
+    private async Task DeleteKeyAsync(string keyId)
+    {
+        try
+        {
+            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}");
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"删除 Key 失败：{ex.Message}";
+        }
+    }
+
+    private async Task SaveProviderAsync()
+    {
+        try
+        {
+            Error = null;
+            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
+                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, "openai-chat-completions", true));
+            KeyProviderId = EditProviderId;
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"保存 Provider 失败：{ex.Message}";
+        }
+    }
+
+    private async Task SaveModelAsync()
+    {
+        try
+        {
+            Error = null;
+            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
+                new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
+                    EditModelContextLength, EditModelMaxOutput, 1, true));
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"保存模型失败：{ex.Message}";
+        }
+    }
+
+    private async Task SetDefaultAsync(string modelId)
+    {
+        try
+        {
+            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/default/{Uri.EscapeDataString(modelId)}");
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"设置默认模型失败：{ex.Message}";
+        }
+    }
+
+    private async Task DeleteModelAsync(string modelId)
+    {
+        try
+        {
+            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}");
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"删除模型失败：{ex.Message}";
+        }
+    }
+
+    private async Task DeleteProviderAsync(string providerId)
+    {
+        try
+        {
+            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(providerId)}");
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"删除 Provider 失败：{ex.Message}";
+        }
+    }
+
+    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
+        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
+
+    private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
+    private static string FormatCatalogSource(string source) => source switch
+    {
+        "local-cache" => "本地缓存",
+        "models.dev" => "models.dev（刚刷新）",
+        _ => source,
+    };
+}

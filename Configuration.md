@@ -18,31 +18,20 @@ authorized-user = 114514                  # 授权用户（Bot 管理员）QQ号
 
 每个插件在 `setting.toml` 中都有独立的命名空间，表名即为插件的 ID。各插件的配置项相互隔离。
 
-### 1. LLM 服务 (`[variables.llm-service]`)
+### 1. LLM Provider（数据库管理）
 
-管理全局模型和 Token，供所有 AI 相关插件使用。
+打开历史后台的“LLM 配置”页，先搜索并选择 models.dev Provider，再从该 Provider 的模型目录中添加所需模型；也可手工维护 OpenAI Chat Completions 兼容的 Provider、模型和默认模型。
 
-```toml
-default-llm = "deepseek/deepseek-v4-flash"  # 全局默认 LLM 模型（格式 provider/model）
-ai-token-zhipu = "xxxxxxxxxx"             # 智谱 AI 的 API Token
-ai-token-deepseek = "xxxxxxxxxx"          # DeepSeek 的 API Token
-ai-token-ali = "xxxxxxxxxx"               # 阿里通义千问的 API Token
-ai-token-xiaomi = "xxxxxxxxxx"            # 小米 MiMo 的 API Token
-ai-token-minimax = "xxxxxxxxxx"           # MiniMax 的 API Token
-```
+Provider、模型和 API Key 都保存于 `plugin_data.db` 的 `llm-provider` 作用域表中；`setting.toml` 不再保存 Token。Key 写入数据库前会用本机 Data Protection 密钥加密，列表和 API 响应只会显示末四位及指纹，无法读取原文。
 
-> **注意**：Token key 格式为 `ai-token-{provider}`，需与模型的 provider 对应。支持的模型定义在 `OpenAiClient/ModelPreset.cs` 中，也可以通过 `extra-models.toml` 添加自定义模型。
+models.dev 只提供目录元数据，并会缓存在机器人运行目录的 `models.dev-api.json`：平时目录搜索优先使用本地缓存，点击“刷新 models.dev”才联网更新。导入时会带入模型上下文/输出上限和能力标签，但不会覆盖已手工设置的 API 地址、格式或启用状态；请确认 API 地址兼容 OpenAI `/chat/completions` 并填入自己的 Key。
+
+> 如果后台监听在 `0.0.0.0`，请只经受控内网或 HTTPS 反向代理访问“LLM 配置”页。Key 虽不会由页面读回，但写入时仍会通过浏览器提交。
 
 ### 2. AI 机器人插件 (`[variables.agent]`)
 
 ```toml
-llm-model = "deepseek/deepseek-v4-flash"  # 本插件使用的 LLM 模型（覆盖全局默认）
 ai-prompt = "你是一个助人为乐的AI助手"    # AI 的 System Prompt（人设提示词）
-use_function_call_reply = false           # 是否启用 Function Call 回复
-webview-summarizer-model = ""             # 用于网页总结的特定模型（留空则禁用，格式同 llm-model）
-auto-compress-enabled = true              # 启用自动压缩上下文管理（默认 true），禁用则回退到滑动窗口删除
-compress-model = ""                       # 压缩用模型（格式 provider/model），留空则用主模型
-compress-token-threshold = 64000          # 触发压缩的 token 数阈值（默认 64000，本地字符估算）
 ```
 
 ### 3. 存储管理插件 (`[variables.storage-manager]`)
@@ -74,4 +63,3 @@ highlights-prompt = """你是一个有趣的群刊编辑...""" # 群刊 AI 生�
 ```toml
 shell-user = "merrybot"                   # Shell 终端使用的 Linux 用户名（默认 merrybot）
 ```
-                                                                                                                                                                                                                                                                        

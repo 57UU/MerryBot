@@ -1,5 +1,6 @@
-global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
 using CommonLib;
+using DataProvider;
+using Microsoft.AspNetCore.Builder;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
@@ -90,6 +91,7 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
+    PluginDatabaseScope PluginDatabase,
     BotClient BotClient,
     IDictionary<string, object> Variables,
     Action<int> Shutdown,
@@ -97,7 +99,9 @@ public record PluginInterop(
     string[] CommandLineArguments,
     Func<Task> ConfigSaver,
     string PathPrefix,
-    EventRegister EventRegister
+    EventRegister EventRegister,
+    IMessageService MessageService,
+    WebApplication WebApplication
     )
 {
     /// <summary>
@@ -210,10 +214,6 @@ public class PluginTag : Attribute
     /// 当为真时，加载插件时将会忽略这个插件。
     /// </summary>
     public readonly bool IsIgnore;
-    /// <summary>
-    /// 插件的优先级，决定加载顺序。值越小，优先级越高
-    /// </summary>
-    public readonly int Priority;
     public readonly PluginType Type;
     /// <summary>
     /// 插件的tag，用于标记插件
@@ -222,13 +222,12 @@ public class PluginTag : Attribute
     /// <param name="name">名称</param>
     /// <param name="description">描述</param>
     /// <param name="isIgnore">加载插件时是否忽略这个插件</param>
-    public PluginTag(string id, string name, string description, bool isIgnore = false, int priority = 0, PluginType type = PluginType.Interactive)
+    public PluginTag(string id, string name, string description, bool isIgnore = false, PluginType type = PluginType.Interactive)
     {
         Id = id;
         Name = name;
         Description = description;
         IsIgnore = isIgnore;
-        Priority = priority;
         Type = type;
     }
 }
@@ -243,19 +242,17 @@ public static class MessageUtils
     /// <param name="a"></param>
     /// <param name="b"></param>
     /// <returns></returns>
-    public static bool IsEqual(MessageChain a, MessageChain b)
+    public static bool IsEqual(IReadOnlyList<TypedMessage>? a, IReadOnlyList<TypedMessage>? b)
     {
-        if (a.IsEmpty || b.IsEmpty) { return false; }
-        var a1 = a.ToArray();
-        var b1 = b.ToArray();
-        if (a1.Length != b1.Length)
+        if (a == null || b == null || a.Count == 0 || b.Count == 0) { return false; }
+        if (a.Count != b.Count)
         {
             return false;
         }
-        for (var i = 0; i < a1.Length; i++)
+        for (var i = 0; i < a.Count; i++)
         {
-            var o1 = a1[i];
-            var o2 = b1[i];
+            var o1 = a[i];
+            var o2 = b[i];
             if (o1 == null || o2 == null)
             {
                 return false;
@@ -270,13 +267,6 @@ public static class MessageUtils
             }
         }
         return true;
-    }
-    public static bool IsEqual(List<TypedMessage>? a, List<TypedMessage>? b)
-    {
-        return IsEqual(
-            CollectionsMarshal.AsSpan(a),
-            CollectionsMarshal.AsSpan(b)
-            );
     }
 }
 

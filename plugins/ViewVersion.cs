@@ -4,7 +4,7 @@ using System.Text;
 
 namespace BotPlugin;
 
-[PluginTag("view-version", "版本查看", "/version查看当前版本;/update [-f]更新软件;/reload重启程序", priority: 114514)]
+[PluginTag("view-version", "版本查看", "/version查看当前版本;/update [-f]更新软件;/reload重启程序")]
 public partial class ViewVersion : Plugin
 {
     private string gitInfo;
@@ -263,9 +263,9 @@ public partial class ViewVersion : Plugin
         await Interop.PluginStorage.Save(data);
         Interop.Shutdown(CommonLib.ExitCode.RELOAD);
     }
-    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
+    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<NapcatClient.MessageType.TypedMessage> messageChain, ReceivedGroupMessage data)
     {
-        if (!isMentioned || command == null) return;
+        if (!isMentioned || command == null) return Task.CompletedTask;
         long groupId = data.GroupId;
         if (command.Name == "version")
         {
@@ -294,6 +294,7 @@ public partial class ViewVersion : Plugin
                 _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
+        return Task.CompletedTask;
     }
     /// <summary>
     /// Find project root by searching for .git directory or MerryBot.sln, starting from the given directory and walking up.

@@ -1,0 +1,334 @@
+@page "/config"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@using System.Text.Json
+
+<PageTitle>配置</PageTitle>
+
+<div class="container-custom">
+    <h1>配置</h1>
+    <p class="text-muted-custom">
+        表单项由 Config 类型反射动态生成,新增字段无需改动页面。修改 <code>napcat-server</code> / <code>napcat-token</code> 后需重启 bot 才能生效,其余项即时生效;保存时会校验配置准确性。
+    </p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+
+    {
+            <div class="message-item-custom mb-3-custom" style="border-color:#dc3545;color:#dc3545;white-space:pre-line;">@Error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Status))
+
+    {
+            <div class="message-item-custom mb-3-custom">@Status</div>
+    }
+
+    @if (Snapshot == null)
+
+    {
+            <span>加载中…</span>
+    }
+
+    else
+
+    {
+            <section class="message-item-custom mb-3-custom">
+                <div class="message-header-custom"><strong>基础配置</strong></div>
+                <div class="message-content-custom">
+                @foreach (var field in Snapshot.Fields)
+                {
+                            <div class="mb-3-custom" @key="field.TomlName">
+                                <label class="form-label">@field.TomlName</label>
+                        @switch (field.Type)
+
+                        {
+
+                            case "string":
+                                                <input class="form-control" value="@GetString(field.TomlName)"
+                                @onchange="(e) => SetString(field.TomlName, e.Value?.ToString() ?? string.Empty)" />
+                                break;
+
+                            case "long":
+                                                <input class="form-control" type="number" value="@GetLong(field.TomlName)"
+                                @onchange="(e) => SetLong(field.TomlName, e.Value?.ToString() ?? string.Empty)" />
+                                break;
+
+                            case "bool":
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" checked="@GetBool(field.TomlName)"
+                                    @onchange="(e) => SetBool(field.TomlName, e.Value != null)" />
+                                                </div>
+                                break;
+
+                            case "list":
+                                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    @foreach (var item in GetList(field.TomlName))
+
+                                    {
+                                                            <span class="badge bg-secondary" style="font-size:.95rem;" @key="item">
+                                            @item
+                                                                <button type="button" class="btn-close btn-close-white ms-1" style="font-size:.6rem;"
+                                            @onclick="() => RemoveListItem(field.TomlName, item)"></button>
+                                                            </span>
+                                    }
+                                                </div>
+                                                <div class="d-flex gap-2">
+                                                    <input class="form-control" placeholder="输入数字后回车或点添加" value="@GetAddInput(field.TomlName)"
+                                    @onkeydown="(e) => OnAddKeyDown(field.TomlName, e)" />
+                                                    <button class="btn btn-secondary" @onclick="() => AddListItem(field.TomlName)">添加</button>
+                                                </div>
+                                break;
+
+                            default:
+                                                <input class="form-control" value="@GetString(field.TomlName)"
+                                @onchange="(e) => SetString(field.TomlName, e.Value?.ToString() ?? string.Empty)" />
+                                                <small class="text-muted-custom">(未知类型,按文本保存)</small>
+                                break;
+
+                        }
+                            </div>
+                }
+                </div>
+            </section>
+
+            <section class="message-item-custom mb-3-custom">
+                <div class="message-header-custom"><strong>插件变量 [variables]</strong></div>
+                <div class="message-content-custom">
+                    <p class="text-muted-custom">
+                        以 TOML 格式编辑各插件的配置小节(如 <code>[agent]</code>)。每个顶层小节必须是一个表,格式错误会被拒绝保存。
+                    </p>
+                    <textarea class="form-control" rows="12" style="font-family:Consolas,Menlo,monospace;font-size:.9rem;"
+                @bind="VariablesToml"></textarea>
+                </div>
+            </section>
+
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@Saving">@(Saving ? "保存中…" : "保存配置")</button>
+    }
+</div>
+
+@code {
+    private ConfigSnapshotDto? Snapshot;
+
+    private readonly Dictionary<string, object?> Edits = new();
+
+    private readonly Dictionary<string, string> AddInputs = new();
+
+    private string VariablesToml = string.Empty;
+
+    private string? Error;
+
+    private string? Status;
+
+    private bool Saving;
+
+
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+
+
+    private async Task LoadAsync()
+
+    {
+
+        try
+
+        {
+
+            Error = null;
+
+            Snapshot = await JSRuntime.InvokeAsync<ConfigSnapshotDto>("configApi.request", "GET", "/api/config");
+
+            Edits.Clear();
+
+            foreach (var field in Snapshot.Fields)
+
+            {
+
+                Edits[field.TomlName] = Normalize(field.Value);
+
+            }
+
+            VariablesToml = Snapshot.VariablesToml;
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            Error = $"无法加载配置:{ex.Message}";
+
+        }
+
+    }
+
+
+
+    private static object? Normalize(object? value)
+
+    {
+
+        if (value is not JsonElement je) return value;
+
+        return je.ValueKind switch
+
+        {
+
+            JsonValueKind.String => je.GetString(),
+
+            JsonValueKind.Number => je.TryGetInt64(out var l) ? l : je.GetDouble(),
+
+            JsonValueKind.True => true,
+
+            JsonValueKind.False => false,
+
+            JsonValueKind.Array => je.EnumerateArray().Select(e => Normalize(e)).OfType<long>().ToList(),
+
+            _ => null
+
+        };
+
+    }
+
+
+
+    private string GetString(string key)
+
+        => Edits.TryGetValue(key, out var v) && v is string s ? s : string.Empty;
+
+
+
+    private void SetString(string key, string value) => Edits[key] = value;
+
+
+
+    private long GetLong(string key)
+
+        => Edits.TryGetValue(key, out var v) && v is long l ? l : 0;
+
+
+
+    private void SetLong(string key, string text)
+
+        => Edits[key] = long.TryParse(text, out var l) ? l : 0;
+
+
+
+    private bool GetBool(string key)
+
+        => Edits.TryGetValue(key, out var v) && v is bool b && b;
+
+
+
+    private void SetBool(string key, bool value) => Edits[key] = value;
+
+
+
+    private List<long> GetList(string key)
+
+        => Edits.TryGetValue(key, out var v) && v is List<long> list ? list : [];
+
+
+
+    private void AddListItem(string key)
+
+    {
+
+        if (!long.TryParse(AddInputs.GetValueOrDefault(key), out var value) || value <= 0) return;
+
+        if (!Edits.TryGetValue(key, out var v) || v is not List<long> list)
+
+        {
+
+            list = new List<long>();
+
+            Edits[key] = list;
+
+        }
+
+        list.Add(value);
+
+        AddInputs[key] = string.Empty;
+
+    }
+
+
+
+    private void RemoveListItem(string key, long item)
+
+    {
+
+        if (Edits.TryGetValue(key, out var v) && v is List<long> list)
+
+        {
+
+            list.Remove(item);
+
+        }
+
+    }
+
+
+
+    private string GetAddInput(string key) => AddInputs.GetValueOrDefault(key) ?? string.Empty;
+
+
+
+    private void OnAddKeyDown(string key, KeyboardEventArgs e)
+
+    {
+
+        if (e.Key == "Enter")
+
+        {
+
+            AddListItem(key);
+
+        }
+
+    }
+
+
+
+    private async Task SaveAsync()
+
+    {
+
+        try
+
+        {
+
+            Error = null;
+
+            Status = null;
+
+            Saving = true;
+
+            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", "/api/config",
+
+                new ConfigUpdateDto(Edits, VariablesToml));
+
+            Status = "已保存。修改 napcat-server / napcat-token 后请重启 bot 生效。";
+
+            await LoadAsync();
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            Error = $"保存失败:{ex.Message}";
+
+        }
+
+        finally
+
+        {
+
+            Saving = false;
+
+        }
+
+    }
+}

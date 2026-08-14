@@ -48,13 +48,17 @@ internal class PluginInitializer<T>
         {
             foreach (var i in specificDependency)
             {
-                if (i.GetType() == actualType)
+                if (actualType.IsInstanceOfType(i))
                 {
                     return i;
                 }
             }
         }
-        return instances.GetValueOrDefault(actualType);
+        if (instances.TryGetValue(actualType, out var direct))
+        {
+            return direct;
+        }
+        return instances.Values.FirstOrDefault(candidate => actualType.IsInstanceOfType(candidate));
 
     }
     public T2? GetInstance<T2>() where T2 : T
@@ -63,7 +67,9 @@ internal class PluginInitializer<T>
     }
     public T? GetInstance(Type type)
     {
-        return instances.GetValueOrDefault(type);
+        return instances.TryGetValue(type, out var direct)
+            ? direct
+            : instances.Values.FirstOrDefault(candidate => type.IsInstanceOfType(candidate));
     }
     /// <summary>
     /// get all dispose actions by inversed dependency order
@@ -143,7 +149,19 @@ internal class PluginInitializer<T>
         foreach (var edge in edges)
         {
             var source = typeToIndex[edge.source];
-            var target = typeToIndex[edge.target];
+            if (!typeToIndex.TryGetValue(edge.target, out var target))
+            {
+                var implementations = nodes
+                    .Select((node, index) => (node, index))
+                    .Where(candidate => edge.target.IsAssignableFrom(candidate.node))
+                    .ToList();
+                if (implementations.Count != 1)
+                {
+                    throw new ChainException(
+                        $"{edge.source.Name} 依赖 {edge.target.Name}，但找到 {implementations.Count} 个可用实现");
+                }
+                target = implementations[0].index;
+            }
             if (dependencies[target] == null)
             {
                 dependencies[target] = [];

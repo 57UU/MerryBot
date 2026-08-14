@@ -5,6 +5,20 @@ public enum BackendType
 {
     ChatCompletion,
 }
+
+/// <summary>模型的输入和推理能力，与具体 Provider 或客户端重试策略无关。</summary>
+[Flags]
+public enum LlmModelCapabilities
+{
+    None = 0,
+    Text = 1 << 0,
+    ImageInput = 1 << 1,
+    AttachmentInput = 1 << 2,
+    ToolCalls = 1 << 3,
+    Reasoning = 1 << 4,
+    StructuredOutput = 1 << 5,
+}
+
 public interface Backend
 {
     public Task<(GenerateResponse, TokenUsage)> Generate(CancellationToken cancellationToken, IList<Message> messages, string systemPrompt, LlmOptions options);
@@ -58,23 +72,23 @@ public class MessagePart
 }
 public class MessagePartText : MessagePart
 {
-    public string text;
+    public string text = string.Empty;
 }
 public class MessagePartImage : MessagePart
 {
-    public string image;
+    public string image = string.Empty;
 }
 
 public class Message
 {
-    public Role role;
-    public IEnumerable<MessagePart> content;
+    public Role role = Role.User;
+    public IEnumerable<MessagePart> content = [];
     //tool response
-    public string toolCallId;
+    public string toolCallId = string.Empty;
     //assistant response
-    public IEnumerable<ToolCall> toolCalls;
+    public IEnumerable<ToolCall> toolCalls = [];
 
-    public string reasoningContent;
+    public string reasoningContent = string.Empty;
     public static Message User(string text) => new Message
     {
         role = Role.User,
@@ -88,4 +102,13 @@ public record TokenUsage(
     int promptUsage,
     int completionUsage,
     int cachedUsage = 0
-    );
+    )
+{
+    public static TokenUsage Zero => new(0, 0, 0, 0);
+
+    public static TokenUsage operator +(TokenUsage a, TokenUsage b) => new(
+        a.totalUsage + b.totalUsage,
+        a.promptUsage + b.promptUsage,
+        a.completionUsage + b.completionUsage,
+        a.cachedUsage + b.cachedUsage);
+};

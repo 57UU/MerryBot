@@ -19,7 +19,7 @@
 	{
 		<div class="mt-1-custom">
 			<div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
-			<img src="/api/image/@imageData.Url" alt="@(imageData.Summary ?? "图片")" class="img-fluid-custom rounded-custom"
+			<img src="@GetImageUrl(imageData.Url)" alt="@(imageData.Summary ?? "图片")" class="img-fluid-custom rounded-custom"
 				loading="lazy" decoding="async"
 				style="max-height: 300px;" />
 		</div>
@@ -27,7 +27,7 @@
 	else if (Msg is FileData fileData)
 	{
 		<div class="mt-1-custom">
-			<a href="/api/file/@fileData.Url?name=@Uri.EscapeDataString(fileData.File ?? "")" download="@fileData.File" class="text-primary-custom"
+			<a href="@GetFileUrl(fileData.Url, fileData.File)" download="@fileData.File" class="text-primary-custom"
 				title="点击下载文件">
 				[文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize ?? 0))
 			</a>
@@ -39,7 +39,7 @@
 		{
 			<div class="mt-1-custom play-btn-row-custom">
 				<button type="button" class="play-btn-bare"
-					@onclick='() => PlayAmr($"/api/file/{recordData.Url}")' title="点击播放语音" aria-label="播放语音">
+					@onclick='() => PlayAmr(GetFileUrl(recordData.Url, recordData.File))' title="点击播放语音" aria-label="播放语音">
 					▶
 				</button>
 				<span class="text-primary-custom">@(recordData.Path ?? "语音消息")</span>
@@ -48,7 +48,7 @@
 		else
 		{
 			<div class="mt-1-custom">
-				<a href="/api/file/@recordData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放语音">
+				<a href="@GetFileUrl(recordData.Url, recordData.File)" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放语音">
 					[语音] @(recordData.Path ?? "语音消息")
 				</a>
 			</div>
@@ -59,14 +59,14 @@
 		@if (Mode == MessageRenderMode.Inline)
 		{
 			<div class="mt-1-custom">
-				<video src="/api/file/@videoData.Url" controls preload="metadata"
+				<video src="@GetFileUrl(videoData.Url, videoData.File)" controls preload="metadata"
 					class="inline-video"></video>
 			</div>
 		}
 		else
 		{
 			<div class="mt-1-custom">
-				<a href="/api/file/@videoData.File" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放视频">
+				<a href="@GetFileUrl(videoData.Url, videoData.File)" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放视频">
 					[视频] @(videoData.File ?? "视频消息")
 				</a>
 			</div>
@@ -166,4 +166,15 @@ catch (Exception ex)
 			// 电路已断开，忽略
 		}
 	}
+
+	private static string GetImageUrl(string? reference)
+		=> IsLocalResource(reference) ? $"/api/resource?reference={Uri.EscapeDataString(reference!)}" : $"/api/image/{reference}";
+
+	private static string GetFileUrl(string? reference, string? name)
+		=> IsLocalResource(reference)
+			? $"/api/resource?reference={Uri.EscapeDataString(reference!)}"
+			: $"/api/file/{reference}?name={Uri.EscapeDataString(name ?? string.Empty)}";
+
+	private static bool IsLocalResource(string? reference)
+		=> reference?.StartsWith("merrybot://resource/", StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -16,21 +16,25 @@ internal partial class Logic
 
     private void OnGroupAdminEventReceived(NapcatClient.EventType.GroupAdminEvent eventData)
     {
+        messageService.RecordGroupAdmin(eventData);
         EventRegister.RaiseGroupAdminEventReceived(eventData);
     }
 
     private void OnGroupDecreaseEventReceived(NapcatClient.EventType.GroupDecreaseEvent eventData)
     {
+        messageService.RecordGroupDecrease(eventData);
         EventRegister.RaiseGroupDecreaseEventReceived(eventData);
     }
 
     private void OnGroupIncreaseEventReceived(NapcatClient.EventType.GroupIncreaseEvent eventData)
     {
+        messageService.RecordGroupIncrease(eventData);
         EventRegister.RaiseGroupIncreaseEventReceived(eventData);
     }
 
     private void OnGroupBanEventReceived(NapcatClient.EventType.GroupBanEvent eventData)
     {
+        messageService.RecordGroupBan(eventData);
         EventRegister.RaiseGroupBanEventReceived(eventData);
     }
 
@@ -41,6 +45,7 @@ internal partial class Logic
 
     private void OnGroupRecallEventReceived(NapcatClient.EventType.GroupRecallEvent eventData)
     {
+        messageService.RecordGroupRecall(eventData);
         EventRegister.RaiseGroupRecallEventReceived(eventData);
     }
 

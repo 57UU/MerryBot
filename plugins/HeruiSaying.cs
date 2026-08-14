@@ -1,4 +1,5 @@
 using NapcatClient;
+using NapcatClient.MessageType;
 
 namespace BotPlugin;
 
@@ -12,13 +13,14 @@ public class HeruiSaying : Plugin
     {
         AutoUpdate();
     }
-    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
+    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
     {
         if (!isMentioned || command?.Name != "hr")
         {
-            return;
+            return Task.CompletedTask;
         }
         _ = Bot.SendGroupMessage(data.GroupId, PickOne());
+        return Task.CompletedTask;
     }
     private string PickOne()
     {

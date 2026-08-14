@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Agent.Tools;
+namespace Agent.Session;
 
 /// <summary>
 /// 常驻 bash 进程封装（参考 plugins/RunCommand.Terminal.cs 精简实现）。

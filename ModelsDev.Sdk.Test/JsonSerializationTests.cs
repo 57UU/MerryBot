@@ -20,6 +20,7 @@ public class JsonSerializationTests
         Assert.True(gpt4o.ToolCall);
         Assert.True(gpt4o.StructuredOutput);
         Assert.True(gpt4o.Temperature);
+        Assert.True(gpt4o.Interleaved!.Enabled);
         Assert.Equal("reasoning_content", gpt4o.Interleaved!.Field);
         Assert.Equal("2024-10", gpt4o.Knowledge);
         Assert.Equal("2024-05-13", gpt4o.ReleaseDate);
@@ -124,5 +125,35 @@ public class JsonSerializationTests
         Assert.Equal(500, model.Limit.Output);
         Assert.Equal(1.5m, model.Cost!.Input);
         Assert.Equal(3.0m, model.Cost.Output);
+    }
+
+    [Fact]
+    public void Deserialize_InterleavedBoolean_RepresentsEnabledCapability()
+    {
+        const string json = """
+            {
+              "cloudflare-workers-ai": {
+                "id": "cloudflare-workers-ai",
+                "name": "Cloudflare Workers AI",
+                "models": {
+                  "@cf/nvidia/nemotron-3-120b-a12b": {
+                    "id": "@cf/nvidia/nemotron-3-120b-a12b",
+                    "name": "Nemotron",
+                    "interleaved": true
+                  }
+                }
+              }
+            }
+            """;
+
+        var client = new ModelsDevClient();
+        client.LoadFromJson(json);
+        var interleaved = client
+            .GetModel("cloudflare-workers-ai", "@cf/nvidia/nemotron-3-120b-a12b")!
+            .Interleaved;
+
+        Assert.NotNull(interleaved);
+        Assert.True(interleaved.Enabled);
+        Assert.Null(interleaved.Field);
     }
 }

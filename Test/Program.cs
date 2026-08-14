@@ -76,6 +76,11 @@ enabled = false
     {
         public long Value;
     }
+    class ScopedData
+    {
+        public int Id;
+        public string Value = "";
+    }
     public static async Task TestPluginStorageDatabase()
     {
         string testDbPath = "test_plugin_data.db";
@@ -139,6 +144,36 @@ enabled = false
                 return;
             }
             Console.WriteLine("modify测试通过");
+
+            var alphaTodos = db2.CreateScope("alpha").GetCollection<ScopedData>("todos");
+            var betaTodos = db2.CreateScope("beta").GetCollection<ScopedData>("todos");
+            await alphaTodos.UpsertAsync(new ScopedData { Id = 1, Value = "alpha" });
+            if (await betaTodos.FindByIdAsync(1) is not null)
+            {
+                Console.WriteLine("测试失败: scoped collection 未隔离");
+                return;
+            }
+            await betaTodos.UpsertAsync(new ScopedData { Id = 1, Value = "beta" });
+        }
+
+        using (var db3 = new PluginStorageDatabase(testDbPath))
+        {
+            var alphaTodos = db3.CreateScope("alpha").GetCollection<ScopedData>("todos");
+            var betaTodos = db3.CreateScope("beta").GetCollection<ScopedData>("todos");
+            if ((await alphaTodos.FindByIdAsync(1))?.Value != "alpha" ||
+                (await betaTodos.FindByIdAsync(1))?.Value != "beta")
+            {
+                Console.WriteLine("测试失败: scoped collection 未持久化");
+                return;
+            }
+            if (!await db3.CreateScope("alpha").DropCollectionAsync("todos") ||
+                await alphaTodos.FindByIdAsync(1) is not null ||
+                (await betaTodos.FindByIdAsync(1))?.Value != "beta")
+            {
+                Console.WriteLine("测试失败: scoped collection 删除错误");
+                return;
+            }
+            Console.WriteLine("scope 测试通过");
         }
 
         if (File.Exists(testDbPath))

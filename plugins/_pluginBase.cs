@@ -43,10 +43,11 @@ public abstract class Plugin : IDisposable
         this.Interop = interop;
         Bot = interop.BotClient.Bot;
     }
-    public virtual void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage raw)
-    {
-
-    }
+    public virtual Task OnGroupMessageAsync(
+        bool isMentioned,
+        Command? command,
+        IReadOnlyList<TypedMessage> messageChain,
+        ReceivedGroupMessage raw) => Task.CompletedTask;
 
     public virtual Task OnLoaded()
     {

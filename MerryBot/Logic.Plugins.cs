@@ -36,10 +36,6 @@ internal partial class Logic
     private void LoadPlugins()
     {
         var allPlugins = FindPlugins();
-        allPlugins.Sort((a, b) =>
-        {
-            return a.attribute.Priority.CompareTo(b.attribute.Priority);
-        });
         PluginInitializer<Plugin> pluginInitializer = new();
         Dictionary<Type, PluginInterop> pluginInteropMap = new();
         logger.Debug($"find plugin: {string.Join(",", allPlugins.Select(p => p.attribute.Id))}");
@@ -63,6 +59,7 @@ internal partial class Logic
                 QqGroupIDs,
                 () => plugins,
                 pluginStorage,
+                PluginStorageDatabase.CreateScope(attribute.Id),
                 botClient,
                 pluginVars,
                 Shutdown,
@@ -70,7 +67,9 @@ internal partial class Logic
                 CommandLineArguments,
                 ConfigManager.Save,
                 botClient.PathPrefix,
-                EventRegister
+                EventRegister,
+                messageService,
+                historyWebApplication
                 );
                 pluginInteropMap.Add(type, interop);
                 pluginInitializer.AddDependency(type, [interop]);
@@ -124,6 +123,9 @@ internal partial class Logic
         {
             dispose();
         }
+        historyWebApplication.StopAsync().GetAwaiter().GetResult();
+        historyWebApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        historyRecorder.Dispose();
         PluginStorageDatabase.Dispose();
         botClient.Close();
         NLog.LogManager.Shutdown();

@@ -1,4 +1,5 @@
 using NapcatClient;
+using NapcatClient.MessageType;
 
 namespace BotPlugin;
 
@@ -20,11 +21,12 @@ Merry Bot
     {
         Logger.Info("about plugin start");
     }
-    public override void OnGroupMessage(bool isMentioned, Command? command, ReceivedGroupMessage data)
+    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
     {
         if (command?.Name == "about")
         {
             _ = Bot.SendGroupMessage(data.GroupId, aboutMessage);
         }
+        return Task.CompletedTask;
     }
 }

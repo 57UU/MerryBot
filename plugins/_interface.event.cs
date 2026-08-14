@@ -10,8 +10,6 @@ namespace BotPlugin;
 /// </summary>
 public class EventRegister
 {
-    /// <summary>所有群聊消息（拦截器之前，未经过滤）</summary>
-    public event Action<ReceivedGroupMessage>? OnRawGroupMessageReceived;
     /// <summary>通知类事件基类，收到任意通知事件都会触发</summary>
     public event Action<NoticeEvent>? OnNoticeEventReceived;
     public event Action<GroupUploadEvent>? OnGroupUploadEventReceived;
@@ -29,7 +27,6 @@ public class EventRegister
     public event Action<EssenceEvent>? OnEssenceEventReceived;
     public event Action<GroupCardEvent>? OnGroupCardEventReceived;
 
-    public void RaiseRawGroupMessageReceived(ReceivedGroupMessage data) => OnRawGroupMessageReceived?.Invoke(data);
     public void RaiseNoticeEventReceived(NoticeEvent eventData) => OnNoticeEventReceived?.Invoke(eventData);
     public void RaiseGroupUploadEventReceived(GroupUploadEvent eventData) => OnGroupUploadEventReceived?.Invoke(eventData);
     public void RaiseGroupAdminEventReceived(GroupAdminEvent eventData) => OnGroupAdminEventReceived?.Invoke(eventData);

@@ -11,12 +11,10 @@ public class Client
     private readonly Backend backend;
     private readonly ClientConfig clientConfig;
 
-    public Modality Modality {  get; private set; }
-    public Client(Backend backend, ClientConfig clientConfig,Modality modality)
+    public Client(Backend backend, ClientConfig clientConfig)
     {
         this.backend = backend;
         this.clientConfig = clientConfig;
-        this.Modality = modality;
     }
 
     /// <summary>
@@ -56,10 +54,3 @@ public record ClientConfig(
     int maxAttempt,
     TimeSpan initialDelay
     );
-
-[Flags]
-public enum Modality
-{
-    None = 0,
-    Image = 1 << 0,
-}
