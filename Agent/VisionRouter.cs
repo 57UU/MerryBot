@@ -37,19 +37,13 @@ public sealed class VisionRouter
     /// 构造携带图片的用户消息（主模型视觉路径使用）。caption 非空时作为文字 part 放在图片之前。
     /// </summary>
     public static Message BuildImageMessage(byte[] imageData, string mimeType, string? caption)
-        => BuildImageMessage([(imageData, mimeType)], caption);
-
-    /// <summary>
-    /// 构造携带多张图片的用户消息（主模型视觉路径使用）。caption 非空时作为文字 part 放在图片之前。
-    /// </summary>
-    public static Message BuildImageMessage(IReadOnlyList<(byte[] Data, string MimeType)> images, string? caption)
     {
         var parts = new List<MessagePart>();
         if (!string.IsNullOrWhiteSpace(caption))
         {
             parts.Add(new MessagePartText { text = caption });
         }
-        parts.AddRange(images.Select(img => new MessagePartImage { image = ToDataUrl(img.Data, img.MimeType) }));
+        parts.Add(new MessagePartImage { image = ToDataUrl(imageData, mimeType) });
         return new Message { role = Role.User, content = parts };
     }
 

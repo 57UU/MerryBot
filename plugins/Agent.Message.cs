@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Agent;
 using BrowserService;
 using CommonLib;
@@ -39,10 +38,10 @@ public class MessageTool : ToolSet
 
         var builder = new ToolSetBridge.Builder(
             "当消息链中出现合并转发（forward）或回复（reply）引用、需要查看被引用消息的完整内容时，使用 get_forward_message / get_reply_message；" +
-            "当被引用消息或对话中包含图片、需要查看图片内容时，使用 get_message_image。仅当用户明确要求向当前群发送 Markdown 图片时，使用 send_markdown_message。");
+            "当消息内容中包含图片、需要查看图片时，使用 get_message_image，把消息文本中显示的图片引用（image merrybot://... 或 image http(s)://... 后面的引用）原样传入。仅当用户明确要求向当前群发送 Markdown 图片时，使用 send_markdown_message。");
         builder.AddFunction<MessageArgs>("get_forward_message", "获取合并转发消息的完整内容（含每条消息的发送者、时间与内容）", args => GetForwardMessage(args.messageId));
         builder.AddFunction<MessageArgs>("get_reply_message", "获取被回复消息的完整内容（发送者、时间与内容）", args => GetReplyMessage(args.messageId));
-        builder.AddFunction<GetMessageImageArgs>("get_message_image", "获取对话中某条消息的图片并查看（支持被回复/转发消息里的图片）。主模型有视觉能力时直接查看原图，否则会用辅助视觉模型描述图片内容。", args => GetMessageImageAsync(args));
+        builder.AddFunction<GetMessageImageArgs>("get_message_image", "获取对话中的图片并查看。传入消息文本中显示的图片引用（image 后跟的 merrybot:// 本地引用或 http(s):// 地址）。主模型有视觉能力时直接查看原图，否则会用辅助视觉模型描述图片内容。", args => GetMessageImageAsync(args));
         builder.AddFunction<MarkdownMessageArgs>("send_markdown_message", "将 Markdown（支持 LaTeX、Mermaid）渲染为图片并发送到当前群。仅在用户明确要求发送时调用。", args => SendMarkdownMessage(args.markdown));
         bridge = builder.Build();
     }
@@ -56,8 +55,8 @@ public class MessageTool : ToolSet
 
     private sealed class GetMessageImageArgs
     {
-        [Description("包含图片的消息 ID（可用 get_reply_message 返回中的消息 ID）")]
-        public string messageId { get; set; } = string.Empty;
+        [Description("图片引用：get_reply_message / get_forward_message 内容中显示的图片标识（如 merrybot://resource/image/xxx 或 http(s):// 图片地址），原样传入即可")]
+        public string image { get; set; } = string.Empty;
     }
 
     private sealed class MarkdownMessageArgs
@@ -97,45 +96,29 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 加载对话消息中的全部图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
-    /// 否则调用辅助视觉模型逐张生成文字描述。
+    /// 按图片引用加载并查看图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
+    /// 否则调用辅助视觉模型生成文字描述。引用来自消息文本中显示的 image 标识
+    /// （pipeline 已把图片 Url/File 改写为 merrybot://resource/image/{hash} 本地引用）。
     /// </summary>
     private async Task<string> GetMessageImageAsync(GetMessageImageArgs args)
     {
-        var message = await messageService.GetMessageAsync(groupId, args.messageId);
-        if (message == null)
+        var reference = args.image?.Trim() ?? string.Empty;
+        if (reference.Length == 0)
         {
-            return $"未找到消息: {args.messageId}（可能已被撤回、未记录或不在当前群）";
+            return "image 参数不能为空：请传入消息文本中显示的图片引用（如 merrybot://resource/image/xxx 或 http(s):// 图片地址）。";
         }
 
-        var images = message.MessageChain.OfType<ImageData>().ToList();
-        if (images.Count == 0)
+        var (data, contentType) = await LoadImageByReferenceAsync(reference);
+        if (data == null || data.Length == 0)
         {
-            return $"消息 {args.messageId} 不包含图片。";
+            return $"无法读取图片: {reference}（引用无效或资源不存在）";
+        }
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            contentType = GuessImageContentType(reference) ?? "image/png";
         }
 
-        var loaded = new List<(byte[] Data, string ContentType)>();
-        var failedCount = 0;
-        foreach (var image in images)
-        {
-            var (data, contentType) = await LoadImageAsync(image);
-            if (data == null || data.Length == 0)
-            {
-                failedCount++;
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(contentType))
-            {
-                contentType = GuessImageContentType(image.File) ?? "image/png";
-            }
-            loaded.Add((data, contentType));
-        }
-        if (loaded.Count == 0)
-        {
-            return "图片数据为空，无法查看。";
-        }
-
-        var caption = $"对话图片（消息 {message.MessageId}，共 {images.Count} 张）";
+        var caption = $"对话图片: {reference}";
         if (visionRouter.MainHasVision)
         {
             var add = OnIterationAdd;
@@ -143,41 +126,21 @@ public class MessageTool : ToolSet
             {
                 return "当前无法把图片注入对话（回调不可用），请稍后重试。";
             }
-            add(VisionRouter.BuildImageMessage(loaded, caption));
-            var failedNote = failedCount > 0 ? $"（{failedCount} 张加载失败）" : string.Empty;
-            return $"已加载 {loaded.Count}/{images.Count} 张图片并注入对话{failedNote}，请直接查看图片内容。";
+            add(VisionRouter.BuildImageMessage(data, contentType, caption));
+            return $"已加载图片 {reference} 并注入对话，请直接查看图片内容。";
         }
 
         if (!visionRouter.HasVisionFallback)
         {
             return "主模型不具备视觉能力，且未配置辅助视觉模型（vision-llm），无法查看图片。";
         }
-        var sb = new StringBuilder($"消息 {message.MessageId} 共 {images.Count} 张图片：");
-        for (var i = 0; i < loaded.Count; i++)
-        {
-            var description = await visionRouter.DescribeImageAsync(
-                loaded[i].Data,
-                loaded[i].ContentType,
-                i < images.Count ? images[i].Summary : null,
-                CancellationToken.None);
-            sb.AppendLine($"\n第 {i + 1} 张：{description}");
-        }
-        if (failedCount > 0)
-        {
-            sb.AppendLine($"\n（另有 {failedCount} 张图片加载失败）");
-        }
-        return sb.ToString();
+        var description = await visionRouter.DescribeImageAsync(data, contentType, reference, CancellationToken.None);
+        return $"图片描述（{reference}）：{description}";
     }
 
-    /// <summary>解析图片数据：本地资源 → 本地库；http(s) → 下载；base64:// → 解码。</summary>
-    private async Task<(byte[]? Data, string? ContentType)> LoadImageAsync(ImageData image)
+    /// <summary>按引用解析图片数据：本地资源 → 本地库；http(s) → 下载；base64:// → 解码。</summary>
+    private async Task<(byte[]? Data, string? ContentType)> LoadImageByReferenceAsync(string reference)
     {
-        var reference = image.Url ?? image.File;
-        if (string.IsNullOrWhiteSpace(reference))
-        {
-            return (null, null);
-        }
-
         if (LocalMessageReference.IsResource(reference))
         {
             var resource = await messageService.GetResourceAsync(reference);
@@ -190,8 +153,7 @@ public class MessageTool : ToolSet
             try
             {
                 var bytes = await ImageHttpClient.GetByteArrayAsync(reference);
-                var contentType = GuessImageContentType(reference);
-                return (bytes, contentType);
+                return (bytes, GuessImageContentType(reference));
             }
             catch (Exception e)
             {
