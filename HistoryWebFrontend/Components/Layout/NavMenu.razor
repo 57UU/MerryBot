@@ -1,32 +1,37 @@
 @inject IJSRuntime JSRuntime
 
-<div class="top-row ps-3">
+<div class="top-row">
     <div class="nav-container">
-        <a class="nav-brand" href="">历史记录查看</a>
+        <a class="nav-brand" href="">
+            <span class="nav-brand-logo">M</span>
+            <span>
+                MerryBot
+                <span class="nav-brand-sub">QQ Bot Framework</span>
+            </span>
+        </a>
     </div>
+    <input type="checkbox" title="导航菜单" class="nav-toggler" />
 </div>
-
-<input type="checkbox" title="导航菜单" class="nav-toggler" />
 
 <div class="nav-scrollable" @onclick="CloseNavIfToggled">
     <nav class="nav-column">
-        <NavMenuItem Href="" Match=NavLinkMatch.All>
+        <NavMenuItem Href="" Match=NavLinkMatch.All Icon="🏠">
             Home
         </NavMenuItem>
 
-        <NavMenuItem Href="groupmessages">
+        <NavMenuItem Href="groupmessages" Icon="💬">
             群聊消息
         </NavMenuItem>
 
-        <NavMenuItem Href="aimessages">
+        <NavMenuItem Href="aimessages" Icon="🤖">
             AI 消息
         </NavMenuItem>
 
-        <NavMenuItem Href="llmproviders">
+        <NavMenuItem Href="llmproviders" Icon="🧠">
             LLM 配置
         </NavMenuItem>
 
-        <NavMenuItem Href="config">
+        <NavMenuItem Href="config" Icon="⚙️">
             配置
         </NavMenuItem>
     </nav>
