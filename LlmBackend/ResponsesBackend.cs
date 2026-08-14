@@ -52,6 +52,10 @@ public class ResponsesBackend : Backend
         }
         if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
         if (options.MaxTokens != null) requestBody["max_output_tokens"] = options.MaxTokens;
+        if (options.ReasoningEffort != null)
+        {
+            requestBody["reasoning"] = new Dictionary<string, object> { ["effort"] = options.ReasoningEffort };
+        }
         if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
         if (options.ExtraBody != null)
         {

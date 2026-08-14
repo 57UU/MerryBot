@@ -43,6 +43,7 @@ public class ChatCompletionBackend : Backend
             ["messages"] = BuildMessages(messages, systemPrompt),
         };
         if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
+        if (options.ReasoningEffort != null) requestBody["reasoning_effort"] = options.ReasoningEffort;
         if (options.MaxTokens != null) requestBody["max_tokens"] = options.MaxTokens;
         if (options.Tools != null) requestBody["tools"] = options.Tools;
         if (options.ExtraBody != null)

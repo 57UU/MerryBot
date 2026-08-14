@@ -20,7 +20,8 @@ public sealed record LlmModelDto(
     int MaxOutputTokens,
     string Capabilities,
     bool Enabled,
-    DateTimeOffset? CatalogUpdatedAtUtc);
+    DateTimeOffset? CatalogUpdatedAtUtc,
+    string? ReasoningEffort);
 public sealed record LlmKeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
 public sealed record LlmCatalogModelDto(
     string ProviderId,
@@ -39,4 +40,4 @@ public sealed record LlmCatalogStatusDto(string Source, DateTimeOffset? UpdatedA
 public sealed record LlmCatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
 public sealed record LlmSaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
 public sealed record LlmSaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-public sealed record LlmSaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled);
+public sealed record LlmSaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled, string? ReasoningEffort = null);

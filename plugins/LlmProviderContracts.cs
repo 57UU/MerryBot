@@ -20,7 +20,8 @@ public sealed record LlmModelDescriptor(
     int ContextLength,
     int MaxOutputTokens,
     LlmModelCapabilities Capabilities,
-    bool Enabled);
+    bool Enabled,
+    string? ReasoningEffort = null);
 
 /// <summary>由 Provider 与模型配置解析出的可直接使用客户端。</summary>
 public sealed record ResolvedLlmClient(

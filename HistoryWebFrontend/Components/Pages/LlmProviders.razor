@@ -126,6 +126,14 @@
                 <input class="form-control mt-2" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
                 <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
                 <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
+                <label class="mt-2">思维强度（Reasoning Effort）</label>
+                <select class="form-control" @bind="EditModelReasoningEffort">
+                    <option value="">不开启</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                </select>
+                <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort</small>
                 <button class="btn btn-secondary mt-2" type="submit">保存模型</button>
             </form>
         </div>
@@ -191,6 +199,10 @@
                                 <li @key="model.Id">
                                     <code>@model.Id</code> → <code>@model.RemoteModelId</code>
                                     （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
+                                    @if (!string.IsNullOrEmpty(model.ReasoningEffort))
+                                    {
+                                        <span class="badge ms-2">思维 @FormatReasoningEffort(model.ReasoningEffort)</span>
+                                    }
                                     @if (Config.DefaultModelId == model.Id)
                                     {
                                         <strong> 默认</strong>
@@ -239,6 +251,7 @@
     private string EditModelRemoteId { get; set; } = string.Empty;
     private int EditModelContextLength { get; set; } = 32_768;
     private int EditModelMaxOutput { get; set; } = 4_096;
+    private string EditModelReasoningEffort { get; set; } = string.Empty;
 
     // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
     private CancellationTokenSource? _providerSearchCts;
@@ -483,7 +496,7 @@
             Error = null;
             await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, 1, true));
+                    EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort));
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -535,6 +548,13 @@
         => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
+    private static string FormatReasoningEffort(string effort) => effort switch
+    {
+        "low" => "低",
+        "medium" => "中",
+        "high" => "高",
+        _ => effort,
+    };
     private static string FormatCatalogSource(string source) => source switch
     {
         "local-cache" => "本地缓存",

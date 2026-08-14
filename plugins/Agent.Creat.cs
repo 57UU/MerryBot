@@ -61,6 +61,8 @@ public partial class AgentPlugin : Plugin
                 MaxOutputTokens = resolved.Model.MaxOutputTokens,
                 MaxIterations = Math.Clamp(maxIterations, 1, 100),
                 ContextCompactRatio = Math.Clamp(contextCompactRatio, 0.1, 0.95),
+                // 思维强度跟随模型配置（ModelRecord.ReasoningEffort），换模型自动跟随
+                ReasoningEffort = resolved.Model.ReasoningEffort,
             },
             [
                 new MessageTool(Interop.MessageService, Bot, browser, long.Parse(sessionKey.Id), visionRouter),
