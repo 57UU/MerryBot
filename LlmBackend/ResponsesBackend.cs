@@ -149,7 +149,7 @@ public class ResponsesBackend : Backend
                     var assistant = new Dictionary<string, object>
                     {
                         ["role"] = "assistant",
-                        ["content"] = BuildContent(message.content, imageType: "input_image"),
+                        ["content"] = BuildContent(message.content, imageType: "input_image", textType: "output_text"),
                     };
                     if (message.toolCalls?.Any() == true)
                     {
@@ -176,7 +176,7 @@ public class ResponsesBackend : Backend
     }
 
     /// <summary>Responses 内容块：文本 input_text / output_text，图片 input_image(image_url 传 data URL)。</summary>
-    private static List<object> BuildContent(IEnumerable<MessagePart>? parts, string imageType)
+    private static List<object> BuildContent(IEnumerable<MessagePart>? parts, string imageType, string textType = "input_text")
     {
         var list = parts?.ToList() ?? [];
         if (list.Count == 0)
@@ -187,7 +187,7 @@ public class ResponsesBackend : Backend
         {
             MessagePartText t => (object)new Dictionary<string, object>
             {
-                ["type"] = "input_text",
+                ["type"] = textType,
                 ["text"] = t.text ?? string.Empty,
             },
             MessagePartImage img => new Dictionary<string, object>
@@ -195,7 +195,7 @@ public class ResponsesBackend : Backend
                 ["type"] = imageType,
                 ["image_url"] = img.image,
             },
-            _ => new Dictionary<string, object> { ["type"] = "input_text", ["text"] = string.Empty },
+            _ => new Dictionary<string, object> { ["type"] = textType, ["text"] = string.Empty },
         }).ToList();
     }
 
