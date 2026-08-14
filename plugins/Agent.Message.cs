@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Agent;
 using BrowserService;
+using CommonLib;
 using LlmBackend;
 using NapcatClient.Action;
 using NapcatClient.MessageType;
@@ -15,24 +16,32 @@ public class MessageTool : ToolSet
     /// <summary>工具输出最大长度（字符），避免撑爆上下文</summary>
     private const int MaxOutputLength = 6000;
     private const int MaxMarkdownLength = 30_000;
+    private static readonly HttpClient ImageHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+    };
 
     private readonly IMessageService messageService;
     private readonly Actions bot;
     private readonly Browser browser;
     private readonly long groupId;
+    private readonly VisionRouter visionRouter;
     private readonly ToolSetBridge bridge;
 
-    public MessageTool(IMessageService messageService, Actions bot, Browser browser, long groupId)
+    public MessageTool(IMessageService messageService, Actions bot, Browser browser, long groupId, VisionRouter visionRouter)
     {
         this.messageService = messageService;
         this.bot = bot;
         this.browser = browser;
         this.groupId = groupId;
+        this.visionRouter = visionRouter;
 
         var builder = new ToolSetBridge.Builder(
-            "当消息链中出现合并转发（forward）或回复（reply）引用、需要查看被引用消息的完整内容时，使用 get_forward_message / get_reply_message。仅当用户明确要求向当前群发送 Markdown 图片时，使用 send_markdown_message。");
+            "当消息链中出现合并转发（forward）或回复（reply）引用、需要查看被引用消息的完整内容时，使用 get_forward_message / get_reply_message；" +
+            "当被引用消息或对话中包含图片、需要查看图片内容时，使用 get_message_image。仅当用户明确要求向当前群发送 Markdown 图片时，使用 send_markdown_message。");
         builder.AddFunction<MessageArgs>("get_forward_message", "获取合并转发消息的完整内容（含每条消息的发送者、时间与内容）", args => GetForwardMessage(args.messageId));
         builder.AddFunction<MessageArgs>("get_reply_message", "获取被回复消息的完整内容（发送者、时间与内容）", args => GetReplyMessage(args.messageId));
+        builder.AddFunction<GetMessageImageArgs>("get_message_image", "获取对话中某条消息的图片并查看（支持被回复/转发消息里的图片）。主模型有视觉能力时直接查看原图，否则会用辅助视觉模型描述图片内容。", args => GetMessageImageAsync(args));
         builder.AddFunction<MarkdownMessageArgs>("send_markdown_message", "将 Markdown（支持 LaTeX、Mermaid）渲染为图片并发送到当前群。仅在用户明确要求发送时调用。", args => SendMarkdownMessage(args.markdown));
         bridge = builder.Build();
     }
@@ -42,6 +51,15 @@ public class MessageTool : ToolSet
     {
         [Description("QQ 消息 ID：转发消息填转发 ID，回复消息填被回复消息的 ID")]
         public string messageId { get; set; } = string.Empty;
+    }
+
+    private sealed class GetMessageImageArgs
+    {
+        [Description("包含图片的消息 ID（可用 get_reply_message 返回中的消息 ID）")]
+        public string messageId { get; set; } = string.Empty;
+
+        [Description("图片序号，从 0 开始；一条消息有多张图片时指定要查看第几张，默认 0")]
+        public int? imageIndex { get; set; }
     }
 
     private sealed class MarkdownMessageArgs
@@ -78,6 +96,126 @@ public class MessageTool : ToolSet
             return $"未找到消息: {messageId}（可能已被撤回、未记录或不在当前群）";
         }
         return FormatMessage(message);
+    }
+
+    /// <summary>
+    /// 加载对话消息中的图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
+    /// 否则调用辅助视觉模型生成文字描述。
+    /// </summary>
+    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args)
+    {
+        var message = await messageService.GetMessageAsync(groupId, args.messageId);
+        if (message == null)
+        {
+            return $"未找到消息: {args.messageId}（可能已被撤回、未记录或不在当前群）";
+        }
+
+        var images = message.MessageChain.OfType<ImageData>().ToList();
+        if (images.Count == 0)
+        {
+            return $"消息 {args.messageId} 不包含图片。";
+        }
+
+        var index = args.imageIndex ?? 0;
+        if (index < 0 || index >= images.Count)
+        {
+            return $"图片序号越界：该消息共有 {images.Count} 张图片，序号从 0 开始。";
+        }
+
+        var image = images[index];
+        var (data, contentType) = await LoadImageAsync(image);
+        if (data == null || data.Length == 0)
+        {
+            return "图片数据为空，无法查看。";
+        }
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            contentType = GuessImageContentType(image.File) ?? "image/png";
+        }
+
+        var caption = $"对话图片（消息 {message.MessageId}，第 {index + 1}/{images.Count} 张）{DescribeImage(image)}".Trim();
+        if (visionRouter.MainHasVision)
+        {
+            var add = OnIterationAdd;
+            if (add == null)
+            {
+                return "当前无法把图片注入对话（回调不可用），请稍后重试。";
+            }
+            add(VisionRouter.BuildImageMessage(data, contentType, caption));
+            return $"已加载图片并注入对话（共 {images.Count} 张，当前第 {index + 1} 张），请直接查看图片内容。";
+        }
+
+        if (!visionRouter.HasVisionFallback)
+        {
+            return "主模型不具备视觉能力，且未配置辅助视觉模型（vision-llm），无法查看图片。";
+        }
+        var description = await visionRouter.DescribeImageAsync(data, contentType, image.Summary, CancellationToken.None);
+        return $"图片描述（消息 {message.MessageId}，第 {index + 1}/{images.Count} 张）：{description}";
+    }
+
+    private static string DescribeImage(ImageData image)
+        => string.IsNullOrWhiteSpace(image.Summary) ? string.Empty : $"（{image.Summary}）";
+
+    /// <summary>解析图片数据：本地资源 → 本地库；http(s) → 下载；base64:// → 解码。</summary>
+    private async Task<(byte[]? Data, string? ContentType)> LoadImageAsync(ImageData image)
+    {
+        var reference = image.Url ?? image.File;
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            return (null, null);
+        }
+
+        if (LocalMessageReference.IsResource(reference))
+        {
+            var resource = await messageService.GetResourceAsync(reference);
+            return resource == null ? (null, null) : (resource.Data, resource.ContentType);
+        }
+
+        if (reference.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || reference.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var bytes = await ImageHttpClient.GetByteArrayAsync(reference);
+                var contentType = GuessImageContentType(reference);
+                return (bytes, contentType);
+            }
+            catch (Exception e)
+            {
+                ConsoleLogger.Instance.Warn($"下载图片失败: {reference}: {e.Message}");
+                return (null, null);
+            }
+        }
+
+        if (reference.StartsWith("base64://", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(reference["base64://".Length..]);
+                return (bytes, "image/png");
+            }
+            catch (FormatException)
+            {
+                return (null, null);
+            }
+        }
+
+        return (null, null);
+    }
+
+    private static string? GuessImageContentType(string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference)) return null;
+        var lower = reference.ToLowerInvariant();
+        return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.Contains("jpeg") || lower.Contains("jpg")
+            ? "image/jpeg"
+            : lower.EndsWith(".gif") || lower.Contains("gif")
+                ? "image/gif"
+                : lower.EndsWith(".webp") || lower.Contains("webp")
+                    ? "image/webp"
+                    : lower.EndsWith(".png") || lower.Contains("png")
+                        ? "image/png"
+                        : null;
     }
 
     /// <summary>与群历史上下文相同的消息渲染格式：[时间] 昵称: 内容</summary>

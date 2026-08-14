@@ -27,16 +27,22 @@ public class TerminalToolSet : ToolSet, IDisposable
     private readonly AgentSessionManager _sessionManager;
     private readonly string _sessionId;
     private readonly string? user;
+    private readonly VisionRouter _visionRouter;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
 
     private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime);
 
-    public TerminalToolSet(AgentSessionManager sessionManager, string sessionId, string? user = null)
+    public TerminalToolSet(
+        AgentSessionManager sessionManager,
+        string sessionId,
+        string? user = null,
+        VisionRouter? visionRouter = null)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _sessionId = sessionId;
         this.user = user;
+        _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClient: null);
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             throw new PlatformNotSupportedException("user（sudo 模式）仅支持 Linux");
@@ -45,10 +51,12 @@ public class TerminalToolSet : ToolSet, IDisposable
         _sync = new Lazy<Terminal>(() => Terminal.Create(user));
 
         var builder = new ToolSetBridge.Builder(
-            "如需执行命令，调用 bash 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。");
+            "如需执行命令，调用 bash 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。" +
+            "命令执行后如需查看生成的图片（如图表、截图），提供 image_path 参数，模型会直接查看或用辅助视觉模型描述。");
         builder.AddFunction<BashArgs>("bash",
             "执行 bash 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
-            "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时。",
+            "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
+            "image_path 用于命令生成图片后附带查看（如 python 绘图输出的 png），主模型有视觉能力时直接查看，否则由辅助视觉模型描述。",
             RunAsync);
         builder.AddFunction<TaskListArgs>("task_list",
             "列出所有后台 bash 任务：id、说明、运行中/已完成、已耗时。",
@@ -86,6 +94,9 @@ public class TerminalToolSet : ToolSet, IDisposable
 
         [Description("禁用超时，仅后台生效")]
         public bool? disable_timeout { get; set; }
+
+        [Description("命令执行后要查看的图片文件路径（可选）。命令生成了图片（如图表、截图）时提供，模型会直接查看或用辅助视觉模型描述")]
+        public string? image_path { get; set; }
     }
 
     /// <summary>工具参数：task_output</summary>
@@ -122,7 +133,72 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             throw new ArgumentException("timeout 必须大于 0");
         }
-        return await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
+        var output = await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
+        return await AppendImageIfRequestedAsync(output, args.image_path);
+    }
+
+    /// <summary>
+    /// 命令输出后按 image_path 附带查看图片：主模型有视觉能力时通过 OnIterationAdd
+    /// 把图片注入对话，否则调用辅助视觉模型生成描述并追加到输出。
+    /// </summary>
+    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            return output;
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(imagePath);
+        }
+        catch (Exception e)
+        {
+            return output + $"\n[image_path 无效: {imagePath}: {e.Message}]";
+        }
+        if (!File.Exists(fullPath))
+        {
+            return output + $"\n[图片文件不存在: {imagePath}]";
+        }
+
+        var data = await File.ReadAllBytesAsync(fullPath);
+        var mimeType = GuessImageContentType(fullPath) ?? "image/png";
+        var caption = $"bash 命令输出中的图片: {imagePath}";
+
+        if (_visionRouter.MainHasVision)
+        {
+            var add = OnIterationAdd;
+            if (add != null)
+            {
+                add(VisionRouter.BuildImageMessage(data, mimeType, caption));
+                return output + $"\n[图片已注入对话: {imagePath}]";
+            }
+            return output + $"\n[图片加载失败: 注入回调不可用]";
+        }
+        if (!_visionRouter.HasVisionFallback)
+        {
+            return output + $"\n[无法查看图片 {imagePath}: 主模型无视觉能力且未配置 vision-llm]";
+        }
+
+        var description = await _visionRouter.DescribeImageAsync(data, mimeType, imagePath, CancellationToken.None);
+        return output + $"\n[图片 {imagePath} 描述]: {description}";
+    }
+
+    private static string? GuessImageContentType(string path)
+    {
+        var lower = path.ToLowerInvariant();
+        return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg")
+            ? "image/jpeg"
+            : lower.EndsWith(".gif")
+                ? "image/gif"
+                : lower.EndsWith(".webp")
+                    ? "image/webp"
+                    : lower.EndsWith(".png")
+                        ? "image/png"
+                        : lower.EndsWith(".bmp")
+                            ? "image/bmp"
+                            : null;
     }
 
     /// <summary>启动后台任务：独立终端实例，立即返回 task_id</summary>
