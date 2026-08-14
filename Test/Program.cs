@@ -33,21 +33,6 @@ public static partial class Program
         Console.WriteLine($"Markdown 渲染图片已保存至: {outputPath}");
     }
 
-    public static async Task TestTerminal()
-    {
-        Terminal terminal = Terminal.CreateUserTerminal();
-        while (true)
-        {
-            Console.Write("User: ");
-            string input = Console.ReadLine()!;
-            if (input == "exit")
-            {
-                break;
-            }
-            var result = await terminal.RunCommandAsync(input);
-            Console.WriteLine($"out:{result}");
-        }
-    }
 
     public static async Task TestBrowser()
     {
