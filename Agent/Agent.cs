@@ -118,6 +118,7 @@ public class Agent
             {
                 Tools = toolDefs.Count > 0 ? toolDefs : null,
                 MaxTokens = options.MaxOutputTokens,
+                ReasoningEffort = options.ReasoningEffort,
             };
 
             TokenUsage totalUsage = TokenUsage.Zero;
@@ -129,9 +130,11 @@ public class Agent
             // 对话循环：直到模型不再请求工具调用或达到最大迭代次数
             for (int iteration = 0; iteration < options.MaxIterations; iteration++)
             {
-                // 最后一次迭代不提供工具，强迫模型直接返回文本输出，避免收尾失败
+                // 最后一次迭代不提供工具，强迫模型直接返回文本输出，避免收尾失败；
+                // 必须保留 ReasoningEffort：anthropic 开启 thinking 后历史含思考块，
+                // 请求突然关闭 thinking 会被 API 拒绝（thinking 块必须持续回传）
                 var iterationOptions = iteration == options.MaxIterations - 1
-                    ? new LlmOptions(MaxTokens: options.MaxOutputTokens)
+                    ? new LlmOptions(MaxTokens: options.MaxOutputTokens, ReasoningEffort: options.ReasoningEffort)
                     : llmOptions;
 
                 var (usage, iterationResult) = await RunIteration(
@@ -212,6 +215,7 @@ public class Agent
             content = string.IsNullOrEmpty(assistantContent) ? [] : [new MessagePartText { text = assistantContent }],
             toolCalls = response.ToolCalls ?? [],
             reasoningContent = response.ReasoningContent ?? string.Empty,
+            thinkingBlocks = response.ThinkingBlocks ?? string.Empty,
         });
 
         // 无工具调用说明回复完成

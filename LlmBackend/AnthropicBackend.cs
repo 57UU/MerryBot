@@ -33,6 +33,14 @@ public class AnthropicBackend : Backend
         _defaultMaxTokens = defaultMaxTokens > 0 ? defaultMaxTokens : DefaultMaxTokens;
     }
 
+    /// <summary>把统一的 ReasoningEffort 档位映射为 Anthropic thinking 预算。</summary>
+    private static int ThinkingBudgetTokens(string effort) => effort.ToLowerInvariant() switch
+    {
+        "medium" => 16_384,
+        "high" => 32_768,
+        _ => 4_096, // low 及未知档位
+    };
+
     public async Task<(GenerateResponse, TokenUsage)> Generate(
         CancellationToken cancellationToken,
         IList<Message> messages,
@@ -42,17 +50,42 @@ public class AnthropicBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
+        var maxTokens = options.MaxTokens ?? _defaultMaxTokens;
+        var thinkingEnabled = !string.IsNullOrWhiteSpace(options.ReasoningEffort);
+        var thinkingBudget = 0;
+        if (thinkingEnabled)
+        {
+            thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort);
+            // Anthropic 要求 budget_tokens < max_tokens：不足时抬高 max_tokens
+            if (maxTokens <= thinkingBudget)
+            {
+                maxTokens = thinkingBudget + 4096;
+            }
+        }
+
         var requestBody = new Dictionary<string, object>
         {
             ["model"] = model,
-            ["max_tokens"] = options.MaxTokens ?? _defaultMaxTokens,
+            ["max_tokens"] = maxTokens,
             ["messages"] = BuildMessages(messages),
         };
         if (!string.IsNullOrWhiteSpace(systemPrompt))
         {
             requestBody["system"] = systemPrompt;
         }
-        if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
+        if (thinkingEnabled)
+        {
+            // 开启 thinking 时 API 不允许 temperature/top_p/top_k，直接不下发
+            requestBody["thinking"] = new Dictionary<string, object>
+            {
+                ["type"] = "enabled",
+                ["budget_tokens"] = thinkingBudget,
+            };
+        }
+        else if (options.Temperature != null)
+        {
+            requestBody["temperature"] = options.Temperature;
+        }
         if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
         if (options.ExtraBody != null)
         {
@@ -103,13 +136,36 @@ public class AnthropicBackend : Backend
         }
 
         var textBuilder = new StringBuilder();
+        var reasoningBuilder = new StringBuilder();
         var toolCalls = new List<ToolCall>();
+        var thinkingBlocks = new List<ThinkingBlock>();
         foreach (var block in json.Content)
         {
             switch (block.Type)
             {
                 case "text" when !string.IsNullOrEmpty(block.Text):
                     textBuilder.Append(block.Text);
+                    break;
+                case "thinking":
+                    // 深度思考块带加密签名，必须持久化供后续轮次原样回传
+                    thinkingBlocks.Add(new ThinkingBlock
+                    {
+                        Type = "thinking",
+                        Thinking = block.Thinking ?? string.Empty,
+                        Signature = block.Signature ?? string.Empty,
+                    });
+                    if (!string.IsNullOrEmpty(block.Thinking))
+                    {
+                        reasoningBuilder.Append(block.Thinking);
+                    }
+                    break;
+                case "redacted_thinking":
+                    // 触及安全过滤的思考内容被脱敏，回传时原样携带 data
+                    thinkingBlocks.Add(new ThinkingBlock
+                    {
+                        Type = "redacted_thinking",
+                        Data = block.Data ?? string.Empty,
+                    });
                     break;
                 case "tool_use":
                     var arguments = block.Input != null
@@ -123,7 +179,8 @@ public class AnthropicBackend : Backend
         var result = new GenerateResponse(
             textBuilder.Length > 0 ? textBuilder.ToString() : null,
             toolCalls.Count > 0 ? [.. toolCalls] : null,
-            reasoningContent: null);
+            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
+            thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
         var usage = json.Usage ?? new AnthropicUsage();
         return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
     }
@@ -167,6 +224,14 @@ public class AnthropicBackend : Backend
             FlushToolResults();
 
             var blocks = new List<object>();
+
+            // Anthropic 深度思考回放：assistant 消息的 thinking 块（含签名）必须原样
+            // 回传且位于文本/tool_use 之前，否则 API 拒绝请求
+            if (message.role.Value == "assistant" && !string.IsNullOrEmpty(message.thinkingBlocks))
+            {
+                ReplayThinkingBlocks(blocks, message.thinkingBlocks);
+            }
+
             foreach (var part in message.content ?? [])
             {
                 switch (part)
@@ -211,6 +276,41 @@ public class AnthropicBackend : Backend
 
         FlushToolResults();
         return result;
+    }
+
+    /// <summary>把持久化的思考块 JSON 原样重建为 content 块；解析失败时静默跳过。</summary>
+    private static void ReplayThinkingBlocks(List<object> blocks, string thinkingBlocksJson)
+    {
+        try
+        {
+            var saved = JsonSerializer.Deserialize<List<ThinkingBlock>>(thinkingBlocksJson);
+            if (saved == null) return;
+            foreach (var tb in saved)
+            {
+                switch (tb.Type)
+                {
+                    case "thinking":
+                        blocks.Add(new Dictionary<string, object>
+                        {
+                            ["type"] = "thinking",
+                            ["thinking"] = tb.Thinking ?? string.Empty,
+                            ["signature"] = tb.Signature ?? string.Empty,
+                        });
+                        break;
+                    case "redacted_thinking":
+                        blocks.Add(new Dictionary<string, object>
+                        {
+                            ["type"] = "redacted_thinking",
+                            ["data"] = tb.Data ?? string.Empty,
+                        });
+                        break;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // 思考块数据损坏时忽略回放，避免请求被拒
+        }
     }
 
     /// <summary>Anthropic 不支持 URL 图片，data URL 拆解为 base64 块；非 data URL 直接报错跳过。</summary>
@@ -301,6 +401,35 @@ internal class AnthropicContentBlock
 
     [JsonPropertyName("input")]
     public JsonElement? Input { get; set; }
+
+    [JsonPropertyName("thinking")]
+    public string? Thinking { get; set; }
+
+    [JsonPropertyName("signature")]
+    public string? Signature { get; set; }
+
+    [JsonPropertyName("data")]
+    public string? Data { get; set; }
+}
+
+/// <summary>
+/// Anthropic 思考块的最小持久化表示：thinking 块携带加密签名（signature），
+/// 触及安全过滤的内容以 redacted_thinking 的 data 返回，多轮 tool calling
+/// 必须原样回传。序列化到 GenerateResponse.ThinkingBlocks / Message.thinkingBlocks。
+/// </summary>
+internal class ThinkingBlock
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty; // "thinking" | "redacted_thinking"
+
+    [JsonPropertyName("thinking")]
+    public string? Thinking { get; set; }
+
+    [JsonPropertyName("signature")]
+    public string? Signature { get; set; }
+
+    [JsonPropertyName("data")]
+    public string? Data { get; set; }
 }
 
 internal class AnthropicUsage

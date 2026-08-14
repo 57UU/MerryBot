@@ -11,6 +11,13 @@ public class AgentOptions
     public int MaxIterations { get; set; } = 20;
     public double ContextCompactRatio { get; set; } = 0.7;
     public int? MaxOutputTokens { get; set; }
+
+    /// <summary>
+    /// 深度思考档位（"low" / "medium" / "high"），仅 anthropic 格式生效：
+    /// 映射为 thinking budget_tokens，返回的思考块（含签名）在 tool calling
+    /// 多轮中原样回传。空值表示不开启。
+    /// </summary>
+    public string? ReasoningEffort { get; set; }
     /// <summary>
     /// Optional, best-effort lifecycle callback. Exceptions raised by the
     /// callback are ignored so observability can never interrupt a chat.
