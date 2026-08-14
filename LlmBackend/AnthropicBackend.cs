@@ -17,6 +17,8 @@ public class AnthropicBackend : Backend
     private const string ApiVersion = "2023-06-01";
     private const int DefaultMaxTokens = 4096;
 
+    private static readonly Dictionary<string, object> CacheControl = new() { ["type"] = "ephemeral" };
+
     private static readonly HttpClient Client = new();
     private static readonly SemaphoreSlim _semaphore = new(5, 5);
 
@@ -24,13 +26,15 @@ public class AnthropicBackend : Backend
     private readonly string _apiKey;
     private readonly string? _defaultModel;
     private readonly int _defaultMaxTokens;
+    private readonly bool _enablePromptCache;
 
-    public AnthropicBackend(string baseUrl, string apiKey, string? defaultModel = null, int defaultMaxTokens = DefaultMaxTokens)
+    public AnthropicBackend(string baseUrl, string apiKey, string? defaultModel = null, int defaultMaxTokens = DefaultMaxTokens, bool enablePromptCache = false)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
         _defaultModel = defaultModel;
         _defaultMaxTokens = defaultMaxTokens > 0 ? defaultMaxTokens : DefaultMaxTokens;
+        _enablePromptCache = enablePromptCache;
     }
 
     /// <summary>把统一的 ReasoningEffort 档位映射为 Anthropic thinking 预算。</summary>
@@ -55,7 +59,8 @@ public class AnthropicBackend : Backend
         var thinkingBudget = 0;
         if (thinkingEnabled)
         {
-            thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort);
+            // thinkingEnabled 由 IsNullOrWhiteSpace 保证非空
+            thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort!);
             // Anthropic 要求 budget_tokens < max_tokens：不足时抬高 max_tokens
             if (maxTokens <= thinkingBudget)
             {
@@ -63,15 +68,32 @@ public class AnthropicBackend : Backend
             }
         }
 
+        var apiMessages = BuildMessages(messages);
+        if (_enablePromptCache)
+        {
+            ApplyCacheBreakpoints(apiMessages);
+        }
         var requestBody = new Dictionary<string, object>
         {
             ["model"] = model,
             ["max_tokens"] = maxTokens,
-            ["messages"] = BuildMessages(messages),
+            ["messages"] = apiMessages,
         };
         if (!string.IsNullOrWhiteSpace(systemPrompt))
         {
-            requestBody["system"] = systemPrompt;
+            // 启用缓存时 system 必须为块数组才能在文本块上打 cache_control 断点；
+            // 关闭时保持字符串下发，请求体与未启用时完全一致
+            requestBody["system"] = _enablePromptCache
+                ? new List<object>
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = "text",
+                        ["text"] = systemPrompt,
+                        ["cache_control"] = CacheControl,
+                    },
+                }
+                : systemPrompt;
         }
         if (thinkingEnabled)
         {
@@ -310,6 +332,33 @@ public class AnthropicBackend : Backend
         catch (JsonException)
         {
             // 思考块数据损坏时忽略回放，避免请求被拒
+        }
+    }
+
+    /// <summary>
+    /// 给最后一条消息的最后一个可缓存内容块（文本/图片/tool_result）打 cache_control
+    /// 断点：覆盖 system + 全部历史。tool calling 多轮时断点随轮次前移到最后的
+    /// 工具结果，每轮只对新增的工具往返内容付一次缓存写入（5m TTL 写入 1.25x、
+    /// 读取 0.1x）。thinking 块不支持缓存，天然跳过。
+    /// </summary>
+    private static void ApplyCacheBreakpoints(List<object> messages)
+    {
+        if (messages.Count == 0) return;
+        if (messages[^1] is not Dictionary<string, object> last
+            || !last.TryGetValue("content", out var contentObj)
+            || contentObj is not List<object> content)
+        {
+            return;
+        }
+        for (int i = content.Count - 1; i >= 0; i--)
+        {
+            if (content[i] is not Dictionary<string, object> block) continue;
+            var type = block.TryGetValue("type", out var t) ? t as string : null;
+            if (type is "text" or "image" or "tool_result")
+            {
+                block["cache_control"] = CacheControl;
+                return;
+            }
         }
     }
 

@@ -134,6 +134,10 @@
                     <option value="high">高</option>
                 </select>
                 <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort</small>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
+                    <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
+                </div>
                 <button class="btn btn-secondary mt-2" type="submit">保存模型</button>
             </form>
         </div>
@@ -203,6 +207,10 @@
                                     {
                                         <span class="badge ms-2">思维 @FormatReasoningEffort(model.ReasoningEffort)</span>
                                     }
+                                    @if (model.EnablePromptCache)
+                                    {
+                                        <span class="badge ms-2">缓存</span>
+                                    }
                                     @if (Config.DefaultModelId == model.Id)
                                     {
                                         <strong> 默认</strong>
@@ -252,6 +260,7 @@
     private int EditModelContextLength { get; set; } = 32_768;
     private int EditModelMaxOutput { get; set; } = 4_096;
     private string EditModelReasoningEffort { get; set; } = string.Empty;
+    private bool EditModelEnablePromptCache { get; set; }
 
     // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
     private CancellationTokenSource? _providerSearchCts;
@@ -496,7 +505,7 @@
             Error = null;
             await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort));
+                    EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort, EditModelEnablePromptCache));
             await LoadConfigAsync();
         }
         catch (Exception ex)

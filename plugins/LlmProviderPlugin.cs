@@ -119,7 +119,7 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         {
             LlmApiFormat.OpenAiChatCompletions => new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
             LlmApiFormat.OpenAiResponses => new ResponsesBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
-            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens),
+            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens, model.EnablePromptCache),
             _ => throw new NotSupportedException($"不支持的 API 格式: {provider.ApiFormat}"),
         };
         var client = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
@@ -228,7 +228,8 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
                         model.Capabilities.ToString(),
                         model.Enabled,
                         model.CatalogUpdatedAtUtc,
-                        model.ReasoningEffort))
+                        model.ReasoningEffort,
+                        model.EnablePromptCache))
                     .ToList(),
                 allKeys.Where(key => key.ProviderId == provider.Id)
                     .OrderBy(key => key.Priority)
@@ -477,6 +478,7 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         model.MaxOutputTokens = request.MaxOutputTokens;
         model.Capabilities = request.Capabilities;
         model.ReasoningEffort = NormalizeReasoningEffort(request.ReasoningEffort);
+        model.EnablePromptCache = request.EnablePromptCache;
         model.Enabled = request.Enabled;
         model.UpdatedAtUtc = now;
         await models.UpsertAsync(model);
@@ -677,6 +679,8 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         public LlmModelCapabilities Capabilities { get; set; }
         /// <summary>深度思考档位（low/medium/high），空表示不开启；agent 生成时透传 LlmOptions.ReasoningEffort</summary>
         public string? ReasoningEffort { get; set; }
+        /// <summary>anthropic 格式启用显式 prompt 缓存（cache_control 断点）；其他格式忽略</summary>
+        public bool EnablePromptCache { get; set; }
         public bool Enabled { get; set; } = true;
         public string? CatalogProviderId { get; set; }
         public string? CatalogModelId { get; set; }
@@ -706,12 +710,12 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
 
     private sealed record CatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
     private sealed record SaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-    private sealed record SaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, LlmModelCapabilities Capabilities, bool Enabled, string? ReasoningEffort = null);
+    private sealed record SaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, LlmModelCapabilities Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false);
     private sealed record SaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
 
     private sealed record ConfigSnapshot(string? DefaultModelId, IReadOnlyList<ProviderDto> Providers);
     private sealed record ProviderDto(string Id, string Name, string BaseUrl, string ApiFormat, bool Enabled, string? CatalogProviderId, IReadOnlyList<ModelDto> Models, IReadOnlyList<KeyDto> Keys);
-    private sealed record ModelDto(string Id, string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, string Capabilities, bool Enabled, DateTimeOffset? CatalogUpdatedAtUtc, string? ReasoningEffort);
+    private sealed record ModelDto(string Id, string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, string Capabilities, bool Enabled, DateTimeOffset? CatalogUpdatedAtUtc, string? ReasoningEffort, bool EnablePromptCache);
     private sealed record KeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
     private sealed record CatalogStatusDto(string Source, DateTimeOffset? UpdatedAtUtc, string? RefreshError);
     private sealed record CatalogProviderDto(string Id, string Name, string? SuggestedBaseUrl, int ModelCount);
