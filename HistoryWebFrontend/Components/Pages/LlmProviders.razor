@@ -18,8 +18,8 @@
         <div class="message-content-custom">
             <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
             <div class="mb-3-custom">
-                <label>1. 搜索 Provider</label>
-                <input class="form-control" @bind="CatalogProviderQuery" @bind:event="oninput" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
+                <label>1. 搜索 Provider（输入即过滤）</label>
+                <input class="form-control" value="@CatalogProviderQuery" @oninput="OnProviderQueryChanged" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
                 <button class="btn btn-primary mt-2" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
                 <button class="btn btn-secondary mt-2 ms-2" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
                 @if (CatalogStatus is not null)
@@ -61,8 +61,8 @@
                 <div class="mb-3-custom">
                     <h5>2. 为 @SelectedCatalogProvider.Name 添加模型</h5>
                     <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
-                    <label class="mt-2">筛选模型</label>
-                    <input class="form-control" @bind="CatalogModelQuery" @bind:event="oninput" placeholder="例如 gpt、deepseek、flash" />
+                    <label class="mt-2">筛选模型（输入即过滤）</label>
+                    <input class="form-control" value="@CatalogModelQuery" @oninput="OnModelQueryChanged" placeholder="例如 gpt、deepseek、flash" />
                     <button class="btn btn-secondary mt-2" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button>
                 </div>
                 <div class="mb-3-custom">
@@ -233,9 +233,60 @@
     private int EditModelContextLength { get; set; } = 32_768;
     private int EditModelMaxOutput { get; set; } = 4_096;
 
+    // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
+    private CancellationTokenSource? _providerSearchCts;
+    private CancellationTokenSource? _modelSearchCts;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadConfigAsync();
+        // 初始加载完整 Provider 列表，输入框实时过滤
+        await SearchProvidersAsync();
+    }
+
+    /// <summary>Provider 输入变化：更新查询词并防抖触发搜索。</summary>
+    private async Task OnProviderQueryChanged(ChangeEventArgs e)
+    {
+        CatalogProviderQuery = e.Value?.ToString() ?? string.Empty;
+        _providerSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _providerSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // 期间又有新输入，本次查询作废
+        }
+        await SearchProvidersAsync();
+    }
+
+    /// <summary>模型输入变化：更新查询词并防抖触发搜索。</summary>
+    private async Task OnModelQueryChanged(ChangeEventArgs e)
+    {
+        CatalogModelQuery = e.Value?.ToString() ?? string.Empty;
+        _modelSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _modelSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await LoadModelsAsync();
+    }
+
+    public void Dispose()
+    {
+        _providerSearchCts?.Cancel();
+        _providerSearchCts?.Dispose();
+        _modelSearchCts?.Cancel();
+        _modelSearchCts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async Task LoadConfigAsync()
