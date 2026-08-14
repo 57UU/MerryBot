@@ -152,7 +152,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         string fullPath;
         try
         {
-            fullPath = ResolveShellPath(imagePath, cwd);
+            fullPath = await ResolveShellPath(imagePath, cwd);
         }
         catch (Exception e)
         {
