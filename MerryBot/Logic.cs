@@ -60,6 +60,8 @@ internal partial class Logic
 
     private readonly CancellationTokenSource _reconnectCts = new();
     private bool _reconnectLogged;
+    /// <summary>是否曾经成功连接过；用于区分首次连接与真正的断线重连，避免启动时输出假 WARN。</summary>
+    private bool _hasEverConnected;
 
     /// <summary>
     /// 宿主重连循环：适配器未连接时按配置间隔轮询驱动单次连接尝试。
@@ -74,7 +76,14 @@ internal partial class Logic
                 if (!_reconnectLogged)
                 {
                     _reconnectLogged = true;
-                    logger.Warn($"消息适配器未连接，每{ConfigManager.Instance.ReconnectIntervalSeconds}秒尝试重连 {ConfigManager.Instance.NapcatServer}");
+                    if (_hasEverConnected)
+                    {
+                        logger.Warn($"消息适配器未连接，每{ConfigManager.Instance.ReconnectIntervalSeconds}秒尝试重连 {ConfigManager.Instance.NapcatServer}");
+                    }
+                    else
+                    {
+                        logger.Info($"正在连接消息适配器 {ConfigManager.Instance.NapcatServer}");
+                    }
                 }
                 try
                 {
@@ -82,12 +91,13 @@ internal partial class Logic
                 }
                 catch (Exception ex)
                 {
-                    logger.Error(ex, "重连尝试失败");
+                    logger.Error(ex, "连接尝试失败");
                 }
             }
             else
             {
                 _reconnectLogged = false;
+                _hasEverConnected = true;
             }
             try
             {
