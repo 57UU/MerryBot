@@ -2,8 +2,8 @@ namespace Agent.Session;
 
 public class AgentSessionManager
 {
-    /// <summary>会话空闲超过该时长即视为可淘汰</summary>
-    private static readonly TimeSpan IdleSessionTimeout = TimeSpan.FromHours(12);
+    /// <summary>会话空闲超过该时长即视为可淘汰（默认 12 小时，可由配置覆盖）</summary>
+    private readonly TimeSpan _idleSessionTimeout;
     /// <summary>惰性空闲清理的最小间隔，避免每次获取会话都做全表扫描</summary>
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
 
@@ -11,9 +11,16 @@ public class AgentSessionManager
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<AgentSession>>> _agentSessions = new();
     private long _lastCleanupTicks;
 
-    public AgentSessionManager(Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> agentCreator)
+    public AgentSessionManager(
+        Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> agentCreator,
+        TimeSpan? idleSessionTimeout = null)
     {
         _agentCreator = agentCreator ?? throw new ArgumentNullException(nameof(agentCreator));
+        _idleSessionTimeout = idleSessionTimeout ?? TimeSpan.FromHours(12);
+        if (_idleSessionTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(idleSessionTimeout), "会话空闲淘汰时长必须大于 0。");
+        }
     }
 
     /// <summary>
@@ -53,7 +60,7 @@ public class AgentSessionManager
 
     /// <summary>
     /// 惰性空闲清理：距上次清理超过 CleanupInterval 时扫描一次，空闲超过
-    /// IdleSessionTimeout 且当前不忙的会话从字典移除（AgentSession/Agent 均无 Dispose，
+    /// _idleSessionTimeout 且当前不忙的会话从字典移除（AgentSession/Agent 均无 Dispose，
     /// "释放"即移除引用，交由 GC 回收）。只在会话不忙时清理，避免打断正在处理的消息；
     /// 只移除仍是原 Lazy 实例的条目，避免误删并发新建的会话。
     /// </summary>
@@ -75,7 +82,7 @@ public class AgentSessionManager
             }
             var session = lazy.Value.Result;
             // 正在处理消息的会话不清理；LastActiveUtc 由会话在入队/处理时刷新
-            if (session.IsBusy || now - session.LastActiveUtc <= IdleSessionTimeout)
+            if (session.IsBusy || now - session.LastActiveUtc <= _idleSessionTimeout)
             {
                 continue;
             }

@@ -23,6 +23,9 @@ public class AgentConfig : IPluginConfig
     [ConfigDescription("视觉提示词", "交给辅助视觉模型的图片描述提示词。")]
     public string VisionPrompt { get; set; } = "请详细描述这张图片的内容。";
 
+    [ConfigDescription("会话空闲淘汰时长", "群聊 Agent 会话空闲超过该时长（小时，支持小数，如 0.5）后自动清理，释放内存；配置非正数时回退默认值。")]
+    public double IdleSessionTimeoutHours { get; set; } = 12;
+
     [ConfigDescription("允许执行 shell 命令", "是否注册 bash/终端工具集。默认关闭；开启后模型可在常驻 shell 中执行任意命令，请确认信任该群的用户。")]
     public bool AllowShell { get; set; } = false;
 

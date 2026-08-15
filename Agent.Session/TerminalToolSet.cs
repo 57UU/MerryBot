@@ -59,20 +59,20 @@ public class TerminalToolSet : ToolSet, IDisposable
         _sync = new Lazy<Terminal>(() => Terminal.Create(user));
 
         var builder = new ToolSetBridge.Builder(
-            "如需执行命令，调用 bash 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。");
-        builder.AddFunction<BashArgs>("bash",
-            "执行 bash 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
+            "如需执行命令，调用 shell 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。");
+        builder.AddFunction<BashArgs>("shell",
+            "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
             "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
             "image_path 用于命令生成图片后附带查看（如 python 绘图输出的 png），主模型有视觉能力时直接查看，否则由辅助视觉模型描述。",
             RunAsync);
         builder.AddFunction<TaskListArgs>("task_list",
-            "列出所有后台 bash 任务：id、说明、运行中/已完成、已耗时。",
+            "列出所有后台 shell 任务：id、说明、运行中/已完成、已耗时。",
             _ => Task.FromResult(ListTasks()));
         builder.AddFunction<TaskOutputArgs>("task_output",
-            "查询后台 bash 任务结果：未完成返回执行中提示，已完成返回结果并移除任务。",
+            "查询后台 shell 任务结果：未完成返回执行中提示，已完成返回结果并移除任务。",
             QueryTaskAsync);
         builder.AddFunction<TaskStopArgs>("task_stop",
-            "终止指定后台 bash 任务。",
+            "终止指定后台 shell 任务。",
             StopTaskAsync);
         bridge = builder.Build();
     }

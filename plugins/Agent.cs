@@ -32,7 +32,10 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         public bool IsDispatching { get; set; }
     }
 
-    private sealed record PendingGroupMessage(long SenderId, string Content);
+    /// <summary>控制命令类型：None 为普通聊天消息，New/Compact 为会话控制命令。</summary>
+    private enum ControlKind { None, New, Compact }
+
+    private sealed record PendingGroupMessage(long SenderId, string Content, ControlKind Kind = ControlKind.None);
     private readonly AgentConfig agentConfig;
 
     public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider, AgentConfig agentConfig) : base(interop)
@@ -47,7 +50,11 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         {
             BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
         });
-        sessionManager = new AgentSessionManager(CreateAgent);
+        // 会话空闲淘汰时长由配置控制（小时，支持小数）；非法配置（非正数）回退默认 12 小时，避免会话被立即淘汰
+        var idleSessionTimeout = agentConfig.IdleSessionTimeoutHours > 0
+            ? TimeSpan.FromHours(agentConfig.IdleSessionTimeoutHours)
+            : TimeSpan.FromHours(12);
+        sessionManager = new AgentSessionManager(CreateAgent, idleSessionTimeout);
         // 调度器由 core 拥有：插件只注册自己的执行器（把任务内容投给本插件的 AgentSession 执行）
         Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync);
         persistenceStartTask = InitializePersistenceAsync();
@@ -94,23 +101,63 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
 
     public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
-        if (!isMentioned || command != null)
-        {
-            return Task.CompletedTask;
-        }
-
-        var userInput = BuildMessage(messageChain, context.SelfId).Trim();
-        if (string.IsNullOrWhiteSpace(userInput))
+        if (!isMentioned)
         {
             return Task.CompletedTask;
         }
 
         var sessionId = context.Session.ToString();
+        var groupId = long.Parse(context.Session.Id);
+        var rawText = BuildMessage(messageChain, context.SelfId).Trim();
+
+        // 控制命令：@机器人 /new、/compact（其余命令保持原行为，不进入 agent）
+        if (command != null)
+        {
+            var kind = command.Name.ToLowerInvariant() switch
+            {
+                "new" => ControlKind.New,
+                "compact" => ControlKind.Compact,
+                _ => ControlKind.None,
+            };
+            if (kind == ControlKind.None)
+            {
+                return Task.CompletedTask;
+            }
+            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, kind));
+            return Task.CompletedTask;
+        }
+
+        // 关键字触发：#新对话 → 清空上下文；若关键字后还有内容，作为新对话第一条消息
+        if (rawText.Contains("#新对话"))
+        {
+            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, ControlKind.New));
+            var rest = rawText.Replace("#新对话", string.Empty).Trim();
+            if (rest.Length > 0)
+            {
+                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
+                    $"[id:{context.SenderId},nickname:{context.SenderNickname}]{rest}"));
+            }
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            return Task.CompletedTask;
+        }
+
+        Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
+            $"[id:{context.SenderId},nickname:{context.SenderNickname}]{rawText}"));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>入队消息并确保调度器运行：控制命令与普通消息共用同一队列，保证串行互斥。</summary>
+    private void Enqueue(string sessionId, long groupId, PendingGroupMessage message)
+    {
         var pending = pendingMessages.GetOrAdd(sessionId, static _ => new PendingGroupMessages());
         var shouldStartDispatcher = false;
         lock (pending.SyncRoot)
         {
-            pending.Items.Add(new PendingGroupMessage(context.SenderId, userInput));
+            pending.Items.Add(message);
             if (!pending.IsDispatching)
             {
                 pending.IsDispatching = true;
@@ -120,9 +167,8 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
 
         if (shouldStartDispatcher)
         {
-            _ = DispatchPendingMessagesAsync(sessionId, long.Parse(context.Session.Id), pending);
+            _ = DispatchPendingMessagesAsync(sessionId, groupId, pending);
         }
-        return Task.CompletedTask;
     }
 
     private async Task DispatchPendingMessagesAsync(
@@ -169,8 +215,30 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                 }
                 rateLimiter.Increase(groupId);
 
-                var userInput = FormatBatch(batch);
-                var replyTargets = batch
+                // 控制命令与对话互斥执行（本循环是会话唯一消费者）：
+                // Reset 为本地操作，Compact 调 LLM（已受循环顶部限速保护）
+                foreach (var item in batch)
+                {
+                    switch (item.Kind)
+                    {
+                        case ControlKind.New:
+                            await session.ResetAsync();
+                            SendGroupReply(groupId, [item.SenderId], "已开启新对话");
+                            break;
+                        case ControlKind.Compact:
+                            await session.CompactAsync(disposeCts.Token);
+                            SendGroupReply(groupId, [item.SenderId], "已压缩上下文");
+                            break;
+                    }
+                }
+
+                var chatItems = batch.Where(static i => i.Kind == ControlKind.None).ToList();
+                if (chatItems.Count == 0)
+                {
+                    continue; // 本批仅控制命令，无需对话
+                }
+                var userInput = FormatBatch(chatItems);
+                var replyTargets = chatItems
                     .Select(static item => item.SenderId)
                     .Distinct()
                     .ToArray();

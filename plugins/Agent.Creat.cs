@@ -50,12 +50,14 @@ public partial class AgentPlugin : Plugin
                 ? "，未配置可用的辅助视觉模型"
                 : $"，辅助视觉模型={string.Join(", ", visionModelIds.Where(id => !string.IsNullOrWhiteSpace(id)))}"));
 
+        var dynamicPrompt = $"你当前正在{sessionKey.Platform}平台，类型为{sessionKey.ChannelType}的channel中聊天";
         // bash 工具门禁：AllowShell 默认关闭，未开启时不注册 TerminalToolSet（模型无法执行 shell）
         var tools = new List<ToolSet>
         {
             new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024),
             new TodoListToolSet(),
             new WebTools(browser),
+            new PromptToolSet(dynamicPrompt),
             skillToolSet,
             new Cron(sessionId, Interop.ClockService),
             new MemoryToolSet(memoryService, sessionId, memoryPromptInjection),

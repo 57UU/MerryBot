@@ -16,7 +16,31 @@ public abstract class ToolSet
     public abstract Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd);
     public abstract string? Prompt();
 }
+/// <summary>
+/// 提供系统提示的工具集，不包含任何工具。
+/// </summary>
+public class PromptToolSet : ToolSet
+{
+    public PromptToolSet(string prompt)
+    {
+        this.prompt = prompt;
+    }
 
+    private readonly string prompt;
+
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
+    {
+        //this should never be called
+        throw new NotImplementedException();
+    }
+
+    public override string? Prompt() => prompt;
+
+    public override IList<ToolDef> Tools()
+    {
+        return [];
+    }
+}
 /// <summary>
 /// 将 C# 函数自动注册为 LLM 工具集。通过反射从参数类型 T 的公开属性生成 JSON Schema
 /// 参数列表（类型映射、说明、枚举取值、嵌套对象、数组、必填项），调用时把模型返回的
@@ -87,8 +111,8 @@ public class ToolSetBridge : ToolSet
 
         private readonly string? prompt;
         private readonly List<RegisteredTool> tools = new();
-        
-        public Builder(string? prompt=null)
+
+        public Builder(string? prompt = null)
         {
             this.prompt = prompt;
         }
@@ -180,27 +204,27 @@ public class ToolSetBridge : ToolSet
             path.Add(type);
             try
             {
-            var properties = new Dictionary<string, object?>();
-            var required = new List<string>();
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (prop.GetIndexParameters().Length > 0 || prop.GetMethod == null) continue;
-                if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
-                var propName = prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? prop.Name;
-                var propSchema = BuildTypeSchema(prop.PropertyType, path);
-                var desc = prop.GetCustomAttribute<DescriptionAttribute>()?.Description;
-                if (!string.IsNullOrEmpty(desc)) propSchema["description"] = desc;
-                if (IsPropertyRequired(prop)) required.Add(propName);
-                properties[propName] = propSchema;
-            }
+                var properties = new Dictionary<string, object?>();
+                var required = new List<string>();
+                foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (prop.GetIndexParameters().Length > 0 || prop.GetMethod == null) continue;
+                    if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
+                    var propName = prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? prop.Name;
+                    var propSchema = BuildTypeSchema(prop.PropertyType, path);
+                    var desc = prop.GetCustomAttribute<DescriptionAttribute>()?.Description;
+                    if (!string.IsNullOrEmpty(desc)) propSchema["description"] = desc;
+                    if (IsPropertyRequired(prop)) required.Add(propName);
+                    properties[propName] = propSchema;
+                }
 
-            var schema = new Dictionary<string, object?>
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-            };
-            if (required.Count > 0) schema["required"] = required;
-            return schema;
+                var schema = new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = properties,
+                };
+                if (required.Count > 0) schema["required"] = required;
+                return schema;
             }
             finally
             {

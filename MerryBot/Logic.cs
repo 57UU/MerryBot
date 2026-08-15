@@ -205,7 +205,7 @@ internal partial class Logic
 
         var (isTargeted, textMessage) = ExtractMessage(ingress.MessageChain, data.self_id);
         var command = ParseCommand(textMessage);
-        var context = new MessageContext(new SessionKey("qq", "group", groupId.ToString()), data.sender.user_id, data.self_id);
+        var context = new MessageContext(new SessionKey("qq", "group", groupId.ToString()), data.sender.user_id, data.sender.nickname, data.self_id);
         OnMessage(isTargeted, command, ingress.MessageChain, context);
         _ = messageService.PrefetchAsync(ingress);
     }
