@@ -36,17 +36,60 @@ internal partial class Logic
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
         StatusApiMapper.Map(webUiApplication, () => new BotStatusDto(
-            botClient.WebSocketService.WebSocket.IsRunning,
-            botClient.SelfId >= 0 ? botClient.SelfId.ToString() : "-",
-            string.IsNullOrEmpty(botClient.Nickname) ? "-" : botClient.Nickname,
+            botClient.State == AdapterState.Connected,
+            botClient.SelfId?.ToString() ?? "-",
+            botClient.Nickname ?? "-",
             ConfigManager.Instance.NapcatServer), historyRecorder);
         GroupApiMapper.Map(webUiApplication, this, historyRecorder);
         LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         LoadPlugins();
         _ = RunWebUiAsync();
+        _ = ReconnectLoopAsync();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
         RegisterEventHandlers();
+    }
+
+    private readonly CancellationTokenSource _reconnectCts = new();
+    private bool _reconnectLogged;
+
+    /// <summary>
+    /// 宿主重连循环：适配器未连接时按配置间隔轮询驱动单次连接尝试。
+    /// 适配器本身不负责重连（库内自动重连已禁用），重连节奏全部由这里控制。
+    /// </summary>
+    private async Task ReconnectLoopAsync()
+    {
+        while (!_reconnectCts.IsCancellationRequested)
+        {
+            if (botClient.State != AdapterState.Connected)
+            {
+                if (!_reconnectLogged)
+                {
+                    _reconnectLogged = true;
+                    logger.Warn($"消息适配器未连接，每{ConfigManager.Instance.ReconnectIntervalSeconds}秒尝试重连 {ConfigManager.Instance.NapcatServer}");
+                }
+                try
+                {
+                    await botClient.Adapter.ConnectAsync(_reconnectCts.Token);
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "重连尝试失败");
+                }
+            }
+            else
+            {
+                _reconnectLogged = false;
+            }
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, ConfigManager.Instance.ReconnectIntervalSeconds)), _reconnectCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
     }
 
     /// <summary>后台运行 WebUI；异常（如端口占用）记录日志而不是静默丢失。</summary>

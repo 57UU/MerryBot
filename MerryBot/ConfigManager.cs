@@ -116,8 +116,8 @@ public static class ConfigManager
 [ConfigDescription("核心配置", "MerryBot 的连接、群组、运行编号和 WebUI 监听设置。")]
 public class Config
 {
-    [ConfigDescription("Napcat 服务地址", "Napcat WebSocket 服务的地址，例如 ws://localhost:8080/")]
-    public string NapcatServer { set; get; } = "ws://<host>:<port>/";
+    [ConfigDescription("Napcat 服务地址", "Napcat WebSocket 服务的地址，例如 ws://localhost:3001/")]
+    public string NapcatServer { set; get; } = "ws://localhost:3001/";
     [ConfigDescription("Napcat Token", "连接 Napcat WebSocket 服务时使用的认证 Token。")]
     public string NapcatToken { set; get; } = "napcat";
     [ConfigDescription("监听群组", "需要接收和处理消息的 QQ 群号列表。")]
@@ -133,4 +133,7 @@ public class Config
 
     [ConfigDescription("资源大小限制", "下载并保存的图片/文件大小上限（MB）。")]
     public int ResourceSizeLimitMb { set; get; } = 20;
+
+    [ConfigDescription("重连间隔", "消息适配器断开后重试连接的间隔（秒）。")]
+    public int ReconnectIntervalSeconds { set; get; } = 15;
 }

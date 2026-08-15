@@ -8,9 +8,8 @@ namespace NapcatClient.Action;
 
 public class Actions
 {
-    WebsocketClient WebSocket => webSocketService.WebSocket;
     private readonly ISimpleLogger Logger;
-    private readonly WebSocketService webSocketService;
+    private readonly WebSocketAdapter adapter;
     public long? SelfId { get; private set; }
     public string? Nickname { get; private set; }
 
@@ -45,10 +44,10 @@ public class Actions
     public Task<byte[]> HttpGetBinary(string url) => HttpGetCached(url, "http-bin", c => c.ReadAsByteArrayAsync());
     public Task<string> HttpGetText(string url) => HttpGetCached(url, "http-text", c => c.ReadAsStringAsync());
 
-    public Actions(ISimpleLogger logger, WebSocketService webSocketService)
+    public Actions(ISimpleLogger logger, WebSocketAdapter adapter)
     {
         Logger = logger;
-        this.webSocketService = webSocketService;
+        this.adapter = adapter;
     }
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
@@ -87,9 +86,8 @@ public class Actions
             var json = BotUtils.Serialize(act);
             Logger.Debug($"sending: {ConstraintLength(json)}]");
 
-            // Websocket.Client 的 Send(string) 为同步阻塞调用（底层同步写流），
-            // 保留 Task.Run 以避免阻塞消息接收线程
-            await Task.Run(() => WebSocket.Send(json));
+            // 未连接时 SendAsync 抛异常；发送为同步写流，保留 Task.Run 以避免阻塞调用线程
+            await adapter.SendAsync(json);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await using (cts.Token.Register(() => tcs.TrySetCanceled()))

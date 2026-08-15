@@ -174,6 +174,7 @@ internal partial class Logic
         webUiApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
         historyRecorder.Dispose();
         PluginStorageDatabase.Dispose();
+        _reconnectCts.Cancel();
         botClient.Close();
         NLog.LogManager.Shutdown();
         Environment.Exit(exitCode);

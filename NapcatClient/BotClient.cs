@@ -5,9 +5,9 @@ using System.Text.Json;
 namespace NapcatClient;
 
 
-public class BotClient
+public class BotClient : IAdapterState
 {
-    public WebSocketService WebSocketService { get; }
+    public WebSocketAdapter Adapter { get; }
     public ISimpleLogger Logger { internal get; set; }
     public Actions Bot { get; private set; }
     public event GroupMessageCallback? OnGroupMessageReceived;
@@ -29,27 +29,25 @@ public class BotClient
 
     public long? SelfId => Bot.SelfId;
     public string? Nickname => Bot.Nickname;
+    /// <summary>实现 <see cref="IAdapterState"/>：适配器当前连接状态。</summary>
+    public AdapterState State => Adapter.State;
     public string PathPrefix { get; private set; } = "data";
     public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
     {
         this.Logger = logger;
         PathPrefix = pathPrefix;
 
-        WebSocketService = new WebSocketService(address, token, logger);
-        WebSocketService.OnMessageReceived += WebSocket_OnMessage;
-        WebSocketService.OnMessageReceived += _ => WebSocketService.ResetMessageTime();
-        WebSocketService.OnDisconnected += _ => WebSocketService.ResetMessageTime();
-        WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
-
-        WebSocketService.Start();
-        this.Bot = new Actions(Logger, WebSocketService);
+        // 连接由宿主（Logic）按配置间隔驱动，此处不启动；地址无效时 adapter 自然保持未连接
+        Adapter = new WebSocketAdapter(address, token, logger);
+        Adapter.OnMessageReceived += WebSocket_OnMessage;
+        this.Bot = new Actions(Logger, Adapter);
     }
 
     private int _closed;
     public void Close()
     {
         Interlocked.Exchange(ref _closed, 1);
-        WebSocketService.Dispose();
+        Adapter.Dispose();
     }
 
     private void WebSocket_OnMessage(string? text)

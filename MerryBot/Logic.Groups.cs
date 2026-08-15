@@ -1,5 +1,6 @@
 using DataService;
 using MerryBot.WebUI.Api;
+using NapcatClient;
 
 namespace MerryBot;
 
@@ -17,7 +18,7 @@ internal partial class Logic : IGroupManager
     public async Task<GroupNameInfoDto?> ResolveGroupNameAsync(long groupId)
     {
         // 未连接时直接跳过，避免每群卡住 30 秒超时
-        if (!botClient.WebSocketService.WebSocket.IsRunning)
+        if (botClient.State != AdapterState.Connected)
         {
             return null;
         }
