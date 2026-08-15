@@ -42,6 +42,7 @@ internal partial class Logic
             string.IsNullOrEmpty(botClient.Nickname) ? "-" : botClient.Nickname,
             ConfigManager.Instance.NapcatServer), historyRecorder);
         GroupApiMapper.Map(webUiApplication, this, historyRecorder);
+        LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         LoadPlugins();
         _ = webUiApplication.RunAsync();

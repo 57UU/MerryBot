@@ -1,0 +1,197 @@
+@page "/logs"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@using System.Text.RegularExpressions
+
+<PageTitle>日志管理</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>日志管理</h1>
+        <p class="page-header-sub">查看当前启动的 NLog 日志，最新在顶。</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+            @(IsLoading ? "刷新中…" : "刷新")
+        </button>
+    </div>
+</div>
+
+@if (Error != null)
+{
+    <div class="message-item-custom mb-3-custom">@Error</div>
+}
+
+<div class="log-toolbar message-item-custom mb-3-custom">
+    <span class="text-muted-custom small-custom">当前日志：@(Data?.File ?? "—")</span>
+    <select class="form-control log-lines-select" @bind="LineCount" @bind:after="() => LoadAsync()">
+        <option value="200">200 行</option>
+        <option value="500">500 行</option>
+        <option value="1000">1000 行</option>
+    </select>
+    <div class="log-levels">
+        @foreach (var level in LevelFilters)
+        {
+            <button type="button" class="log-level @(Level == level ? "active" : "")" @onclick="() => SetLevel(level)">@level</button>
+        }
+    </div>
+    <input class="form-control log-search" placeholder="搜索日志…" @bind="SearchText" @bind:event="oninput" />
+    <label class="form-check log-autorefresh">
+        <input type="checkbox" class="form-check-input" @bind="AutoRefresh" @bind:after="ToggleAutoRefresh" />
+        <span>自动刷新</span>
+    </label>
+</div>
+
+@if (Data == null)
+{
+    <div class="message-item-custom">加载中…</div>
+}
+else if (Data.Lines.Count == 0)
+{
+    <div class="message-item-custom">暂无日志。</div>
+}
+else
+{
+    <div class="log-viewer">
+        @foreach (var line in FilteredLines)
+        {
+            <div class="log-line log-line-@DetectLevel(line).ToLowerInvariant()">@line</div>
+        }
+        @if (!FilteredLines.Any())
+        {
+            <div class="log-line text-muted-custom">没有匹配的日志行。</div>
+        }
+    </div>
+}
+
+@code {
+    private static readonly string[] LevelFilters = { "全部", "DEBUG", "INFO", "WARN", "ERROR", "FATAL" };
+    private static readonly Regex LevelRegex = new(@"\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b", RegexOptions.Compiled);
+
+    private LogContentPayload? Data;
+    private string? Error;
+    private bool IsLoading;
+    private int LineCount = 500;
+    private string Level = "全部";
+    private string SearchText = "";
+    private bool AutoRefresh = true;
+
+    private System.Threading.Timer? _refreshTimer;
+    private bool _initialized;
+
+    private IEnumerable<string> FilteredLines
+    {
+        get
+        {
+            if (Data == null)
+            {
+                return Enumerable.Empty<string>();
+            }
+            IEnumerable<string> query = Data.Lines;
+            if (Level != "全部")
+            {
+                query = query.Where(line => DetectLevel(line) == Level);
+            }
+            if (!string.IsNullOrWhiteSpace(SearchText))
+            {
+                query = query.Where(line => line.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            }
+            return query;
+        }
+    }
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", $"/api/logs/current?lines={LineCount}");
+        }
+        catch (Exception ex)
+        {
+            Error = $"加载失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void SetLevel(string level)
+    {
+        Level = level;
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        if (AutoRefresh)
+        {
+            _refreshTimer ??= new System.Threading.Timer(async _ => await RefreshTickAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }
+        else
+        {
+            _refreshTimer?.Dispose();
+            _refreshTimer = null;
+        }
+    }
+
+    private async Task RefreshTickAsync()
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                Error = null;
+                try
+                {
+                    Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", $"/api/logs/current?lines={LineCount}");
+                    StateHasChanged();
+                }
+                catch (Exception ex)
+                {
+                    Error = $"加载失败：{ex.Message}";
+                }
+            });
+        }
+        catch
+        {
+            // 电路已断开等场景，忽略
+        }
+    }
+
+    /// <summary>宽松识别日志行级别；无级别行（异常堆栈续行等）归为 DEBUG（灰色显示）。</summary>
+    private static string DetectLevel(string line)
+    {
+        var match = LevelRegex.Match(line);
+        if (!match.Success)
+        {
+            return "DEBUG";
+        }
+        var level = match.Value;
+        return level == "TRACE" ? "DEBUG" : level;
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+    }
+
+    private sealed class LogContentPayload
+    {
+        public string? File { get; set; }
+        public List<string> Lines { get; set; } = new();
+    }
+}

@@ -6,8 +6,8 @@ namespace BotPlugin;
 [PluginTag("auto-increase", "自动+1", "如果有刷屏消息，将会自动+1", type: PluginType.Background)]
 public class AutoIncrease : Plugin
 {
-    const int REPEAT_TIME = 3;
-    public AutoIncrease(PluginInterop interop) : base(interop)
+    private readonly AutoIncreaseConfig config;
+    public AutoIncrease(PluginInterop interop, AutoIncreaseConfig config) : base(interop)
     {
         var selfId = interop.BotClient.SelfId;
         interop.Interceptors.Add((data) =>
@@ -40,7 +40,7 @@ public class AutoIncrease : Plugin
                 if (MessageUtils.IsEqual(messageChain, _lastMessage.chain))
                 {
                     _lastMessage.repeatTime++;
-                    if (!_lastMessage.used && _lastMessage.repeatTime >= REPEAT_TIME)
+                    if (!_lastMessage.used && _lastMessage.repeatTime >= config.RepeatTime)
                     {
                         Logger.Info("+1 message detected");
                         _ = Bot.SendGroupMessage(groupId, _lastMessage.chain!);

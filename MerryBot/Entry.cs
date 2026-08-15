@@ -25,11 +25,21 @@ var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime()
 
 ConfigManager.Initialize().Wait();
 //init logger
-NLog.LogManager.Setup().LoadConfiguration(builder =>
+var nlogConfig = new NLog.Config.LoggingConfiguration();
+var coloredConsole = new NLog.Targets.ColoredConsoleTarget("console")
 {
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{logFilePath}.log");
-});
+    Layout = "${time:format=HH\\:mm\\:ss} ${level:uppercase=true:padding=-5} ${message}${onexception: ${exception:format=tostring}}",
+    UseDefaultRowHighlightingRules = true,
+};
+nlogConfig.AddTarget(coloredConsole);
+nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, coloredConsole);
+var fileTarget = new NLog.Targets.FileTarget("file")
+{
+    FileName = $"{logFilePath}.log",
+};
+nlogConfig.AddTarget(fileTarget);
+nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, fileTarget);
+NLog.LogManager.Configuration = nlogConfig;
 var currentLogger = LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
 

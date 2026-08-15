@@ -903,6 +903,95 @@ textarea.form-control {
     padding-left: 1rem;
 }
 
+/* ============ 日志管理 ============ */
+
+.log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.log-lines-select {
+    width: 7rem;
+    flex-shrink: 0;
+}
+
+.log-levels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.log-level {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.log-level:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+.log-level.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.log-search {
+    flex: 1;
+    min-width: 10rem;
+    max-width: 20rem;
+}
+
+.log-autorefresh {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.log-viewer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 0;
+    max-height: 70vh;
+    overflow: auto;
+    font-family: Consolas, Menlo, monospace;
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+
+.log-line {
+    padding: 0.05rem 1rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-line-debug {
+    color: var(--text-dim);
+}
+
+.log-line-info {
+    color: var(--text);
+}
+
+.log-line-warn {
+    color: #b45309;
+}
+
+.log-line-error,
+.log-line-fatal {
+    color: var(--danger);
+}
+
 /* ============ 语音/视频 ============ */
 
 .play-btn-bare {
