@@ -58,19 +58,34 @@ public partial class AgentPlugin : Plugin
             tools.Add(new TerminalToolSet(sessionManager, sessionId, visionRouter: visionRouter, maxImageBytes: agentConfig.MaxImageSizeMb * 1024 * 1024));
         }
 
+        var agentOptions = new AgentOptions
+        {
+            SystemPrompt = agentConfig.AiPrompt,
+            MaxOutputTokens = resolved.Model.MaxOutputTokens,
+            MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 20),
+            ContextCompactRatio = Math.Clamp(agentConfig.ContextCompactRatio, 0.1, 0.95),
+            // 思维强度跟随模型配置（ModelRecord.ReasoningEffort），换模型自动跟随
+            ReasoningEffort = resolved.Model.ReasoningEffort,
+        };
+        // 子任务工具：复用父会话同一模型客户端、options 与工具列表（含自身，允许嵌套派生子任务）；
+        // 完成/失败时以 stackable 消息注入本会话，主 Agent 拿到结果后继续处理
+        tools.Add(new SubAgentToolSet(
+            resolved.Client,
+            Math.Max(resolved.Model.ContextLength, 1024),
+            agentOptions,
+            tools,
+            async msg =>
+            {
+                var session = await sessionManager.GetSessionAsync(sessionId);
+                await session.Chat(msg, type: "subagent_result", stackable: true);
+            },
+            disposeCts.Token));
+
         var agent = await Agent.Agent.Create(
             new DatabaseContextHistory(Interop.PluginStorage.PluginDatabaseScope, sessionId),
             resolved.Client,
             Math.Max(resolved.Model.ContextLength, 1024),
-            new AgentOptions
-            {
-                SystemPrompt = agentConfig.AiPrompt,
-                MaxOutputTokens = resolved.Model.MaxOutputTokens,
-                MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 20),
-                ContextCompactRatio = Math.Clamp(agentConfig.ContextCompactRatio, 0.1, 0.95),
-                // 思维强度跟随模型配置（ModelRecord.ReasoningEffort），换模型自动跟随
-                ReasoningEffort = resolved.Model.ReasoningEffort,
-            },
+            agentOptions,
             tools);
         return (agent, sendMessage);
     }

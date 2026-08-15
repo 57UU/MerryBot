@@ -4,7 +4,8 @@ namespace Agent;
 
 public class ContextManager
 {
-    public ContextHistory contextHistory { get; private set; }
+    /// <summary>上下文历史持久化；为 null 表示不持久化（Agent 纯内存运行）</summary>
+    public ContextHistory? contextHistory { get; private set; }
     public Context context { get; private set; }
     public readonly int TokenLimit;
     /// <summary>
@@ -12,7 +13,7 @@ public class ContextManager
     /// </summary>
     public double ContextRatio => (double)context.TokenUsed / TokenLimit;
     private ContextManager(
-        ContextHistory contextHistory,
+        ContextHistory? contextHistory,
         Context context,
         int tokenLimit
         )
@@ -23,12 +24,14 @@ public class ContextManager
         context.TokenUsed = TokenLimit;
     }
     public static async Task<ContextManager> Create(
-        ContextHistory contextHistory,
+        ContextHistory? contextHistory,
         int tokenLimit
         )
     {
-        var history = await contextHistory.Restore();
-        Context context = new(history);
+        // contextHistory 为 null 时不恢复历史，从空上下文开始
+        Context context = contextHistory == null
+            ? new([])
+            : new(await contextHistory.Restore());
         return
         new ContextManager(contextHistory, context, tokenLimit);
     }
@@ -55,7 +58,11 @@ public class ContextManager
         context.Messages = [Message.User(compactedText)];
         context.TokenUsed = summaryTokens;
 
-        await contextHistory.Replace(context.Messages);
+        // contextHistory 为 null（不持久化）时仅更新内存上下文
+        if (contextHistory != null)
+        {
+            await contextHistory.Replace(context.Messages);
+        }
     }
 
 

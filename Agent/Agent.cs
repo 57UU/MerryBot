@@ -36,7 +36,7 @@ public class Agent
         SystemPrompt = sb.ToString();
     }
     public static async Task<Agent> Create(
-        ContextHistory contextHistory,
+        ContextHistory? contextHistory,
         Client llmClient,
         int tokenLimit,
         AgentOptions? options,
@@ -159,7 +159,7 @@ public class Agent
             }
 
             // 压缩后历史已由 Compact 替换、TokenUsed 已重置，无需重复写入
-            if (!compacted)
+            if (!compacted && contextManager.contextHistory != null)
             {
                 contextManager.context.TokenUsed = contextUsage;
                 await contextManager.contextHistory.Append(messages);
