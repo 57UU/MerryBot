@@ -31,7 +31,7 @@
                 @foreach (var section in Snapshot.Sections)
                 {
                     <button class="config-index-item" type="button" @onclick="() => ScrollToAsync(section.Id)">
-                        @section.Name
+                        @(section.Name)
                     </button>
                 }
             </aside>
@@ -40,10 +40,10 @@
                 @foreach (var section in Snapshot.Sections)
                 {
                     <section id="@SectionElementId(section.Id)" class="message-item-custom config-section" @key="section.Id">
-                        <div class="message-header-custom"><strong>@section.Name</strong></div>
+                        <div class="message-header-custom"><strong>@(section.Name)</strong></div>
                         @if (!string.IsNullOrWhiteSpace(section.Description))
                         {
-                            <p class="text-muted-custom config-section-description">@section.Description</p>
+                            <p class="text-muted-custom config-section-description">@(section.Description)</p>
                         }
 
                         <div class="message-content-custom">
