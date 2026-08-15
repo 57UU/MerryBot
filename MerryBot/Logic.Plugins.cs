@@ -53,7 +53,7 @@ internal partial class Logic
                 QqGroupIDs,
                 () => plugins,
                 pluginStorage,
-                botClient,
+                botClient.Bot,
                 Shutdown,
                 AuthorizedUser,
                 botClient.PathPrefix,

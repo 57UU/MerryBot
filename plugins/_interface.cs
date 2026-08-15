@@ -1,6 +1,7 @@
 using CommonLib;
 using DataProvider;
 using NapcatClient;
+using NapcatClient.Action;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
@@ -78,7 +79,7 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
-    BotClient BotClient,
+    Actions Bot,
     Action<int> Shutdown,
     long AuthorizedUser,
     string PathPrefix,

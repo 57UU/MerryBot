@@ -41,7 +41,7 @@ public abstract class Plugin : IDisposable
         this.Logger = interop.Logger;
         this.GroupId = interop.GroupId;
         this.Interop = interop;
-        Bot = interop.BotClient.Bot;
+        Bot = interop.Bot;
     }
     public virtual Task OnGroupMessageAsync(
         bool isMentioned,

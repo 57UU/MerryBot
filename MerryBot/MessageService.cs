@@ -32,12 +32,16 @@ internal sealed class MessageService : IMessageService
     private readonly ConcurrentDictionary<string, ForwardSeed> forwardSeeds = new();
     private readonly ConcurrentDictionary<long, DateTime> groupInfoRefreshes = new();
 
-    public MessageService(Actions bot, HistoryRecorder history, NLog.Logger logger)
+    public MessageService(Actions bot, HistoryRecorder history, NLog.Logger logger, long selfId)
     {
         this.bot = bot;
         this.history = history;
         this.logger = logger;
+        SelfId = selfId;
     }
+    public long SelfId { get; }
+
+
 
     /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
     public Task RecordAiMessageAsync(string sessionKey, string content, TokenUsage usage)

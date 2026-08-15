@@ -32,7 +32,7 @@ internal partial class Logic
         var historyStoragePath = Path.Combine(botClient.PathPrefix, "storage");
         historyRecorder = new HistoryRecorder(historyDbPath, historyStoragePath, GetCoreMachineCode());
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
-        messageService = new MessageService(botClient.Bot, historyRecorder, logger);
+        messageService = new MessageService(botClient.Bot, historyRecorder, logger, botClient.SelfId);
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, GetCoreWebAddress());
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);

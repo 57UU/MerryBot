@@ -9,7 +9,7 @@ public class AutoIncrease : Plugin
     private readonly AutoIncreaseConfig config;
     public AutoIncrease(PluginInterop interop, AutoIncreaseConfig config) : base(interop)
     {
-        var selfId = interop.BotClient.SelfId;
+        var selfId = interop.MessageService.SelfId;
         interop.Interceptors.Add((data) =>
         {
             return data.sender.user_id == selfId;
