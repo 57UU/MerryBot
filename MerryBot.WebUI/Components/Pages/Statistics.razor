@@ -1,6 +1,7 @@
 @page "/statistics"
 @rendermode InteractiveServer
 @using DataService
+@using BotPlugin
 @using Microsoft.Extensions.Logging
 @inject HistoryRecorder HistoryRecorder
 @inject ILogger<Statistics> Logger
@@ -99,7 +100,7 @@
             AiMessageCount = 0;
             foreach (var gid in GroupIds)
             {
-                AiMessageCount += await HistoryRecorder.GetAiMessageCountByGroupIdAsync(gid);
+                AiMessageCount += await HistoryRecorder.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid));
             }
 
             ImageCount = await HistoryRecorder.GetImageCountAsync();

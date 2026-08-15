@@ -1,5 +1,6 @@
 @page "/aimessages"
 @using DataService
+@using BotPlugin
 @rendermode InteractiveServer
 @inject HistoryRecorder HistoryRecorder
 
@@ -35,6 +36,10 @@
                             </div>
                             <div class="message-content-custom">
                                 <div>@message.Content</div>
+                                @if (message.TotalTokens > 0)
+                                {
+                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @message.TotalTokens</div>
+                                }
                             </div>
                         </div>
                     }
@@ -65,5 +70,5 @@
     }
 
     private Task<List<AiMessageEntry>> LoadAiMessagesPage(int page, int pageSize)
-        => HistoryRecorder.GetAiMessagesByGroupIdAsync(SelectedAiGroupId, page, pageSize);
+        => HistoryRecorder.GetAiMessagesBySessionKeyAsync(SessionKey.ToString(SelectedAiGroupId), page, pageSize);
 }

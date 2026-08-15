@@ -22,7 +22,7 @@ public class AgentSession
         public required string Message { get; init; }
         public required Action<string> MessageChannel { get; init; }
         public required CancellationToken Token { get; init; }
-        public TaskCompletionSource<string>? Completion { get; init; }
+        public TaskCompletionSource<(string Result, TokenUsage Usage)>? Completion { get; init; }
     }
 
     // 队列：随消息保存各自的 CancellationToken 和可选完成通知。
@@ -89,14 +89,14 @@ public class AgentSession
 
     /// <summary>
     /// 与 Chat 的区别是：如果当前会话忙，会等待排队消息真正执行完成，
-    /// 并返回 Agent 的最终文本。这供 Cron 使用，使超时和执行日志对应实际执行。
+    /// 并返回 Agent 的最终文本与本次对话的 token 用量。这供 Cron 使用，使超时和执行日志对应实际执行。
     /// </summary>
-    public Task<string> ChatAndWaitAsync(
+    public Task<(string Result, TokenUsage Usage)> ChatAndWaitAsync(
         string message,
         Action<string>? messageChannel = null,
         CancellationToken cancellationToken = default)
     {
-        var completion = new TaskCompletionSource<string>(
+        var completion = new TaskCompletionSource<(string Result, TokenUsage Usage)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var pending = new PendingMessage
         {
@@ -117,20 +117,20 @@ public class AgentSession
         return completion.Task;
     }
 
-    private async Task<string> DrainQueueAsync(PendingMessage first)
+    private async Task<(string Result, TokenUsage Usage)> DrainQueueAsync(PendingMessage first)
     {
         try
         {
-            var firstResult = await Process(first.Message, first.MessageChannel, first.Token);
-            first.Completion?.TrySetResult(firstResult);
+            var (firstResult, firstUsage) = await Process(first.Message, first.MessageChannel, first.Token);
+            first.Completion?.TrySetResult((firstResult, firstUsage));
 
             // 排空积压：用各自消息的 token，保证 FIFO。
             while (TryDequeue(out var pending))
             {
                 try
                 {
-                    var result = await Process(pending.Message, pending.MessageChannel, pending.Token);
-                    pending.Completion?.TrySetResult(result);
+                    var (result, usage) = await Process(pending.Message, pending.MessageChannel, pending.Token);
+                    pending.Completion?.TrySetResult((result, usage));
                 }
                 catch (OperationCanceledException) when (pending.Token.IsCancellationRequested)
                 {
@@ -142,7 +142,7 @@ public class AgentSession
                 }
             }
 
-            return firstResult;
+            return (firstResult, firstUsage);
         }
         catch (Exception ex)
         {
@@ -156,11 +156,11 @@ public class AgentSession
         }
     }
 
-    private async Task<string> Process(string message, Action<string> messageChannel, CancellationToken cancellationToken)
+    private async Task<(string Response, TokenUsage Usage)> Process(string message, Action<string> messageChannel, CancellationToken cancellationToken)
     {
         var (response, usage) = await _Agent.Chat(message, cancellationToken);
         SessionUsage += usage;
         messageChannel(response);
-        return response;
+        return (response, usage);
     }
 }

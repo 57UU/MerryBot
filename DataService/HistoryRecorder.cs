@@ -49,7 +49,7 @@ public class HistoryRecorder : IDisposable
         _ = eventsCollection.EnsureIndexAsync(x => x.Time);
         _ = forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId);
         _ = groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime);
-        _ = aiMessagesCollection.EnsureIndexAsync(x => x.GroupId);
+        _ = aiMessagesCollection.EnsureIndexAsync(x => x.SessionKey);
         _ = resourceReferencesCollection.EnsureIndexAsync(x => x.Kind);
     }
 
@@ -78,8 +78,9 @@ public class HistoryRecorder : IDisposable
     /// - 0: 初始版本（未迁移）
     /// - 1: 修正 ForwardData.Content 旧格式（JsonElement? → List&lt;GroupMessage&gt;?）
     /// - 2: 补齐消息业务键并增加本地资源引用集合
+    /// - 3: ai_messages 主键从 GroupId 改为 SessionKey（统一会话标识）
     /// </summary>
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
 
     /// <summary>
     /// 单个迁移步骤：从 <paramref name="FromVersion"/> 迁移到 FromVersion+1。
@@ -97,6 +98,8 @@ public class HistoryRecorder : IDisposable
             static self => self.MigrateForwardDataContentV1Async()),
         new(1, "MessageKey and resource references",
             static self => self.MigrateMessageKeysV2Async()),
+        new(2, "ai_messages: GroupId → SessionKey",
+            static self => self.MigrateAiMessageSessionKeysV3Async()),
     };
 
     /// <summary>
@@ -635,27 +638,51 @@ public class HistoryRecorder : IDisposable
         }
     }
 
-    public async Task<bool> RecordAiMessageAsync(long groupId, string messageType, string content)
+    /// <summary>
+    /// 迁移 v2 → v3：ai_messages 的 GroupId 改为统一会话标识 SessionKey。
+    /// 旧文档按「qq/group/{群号}」补齐 SessionKey 并移除 GroupId。
+    /// </summary>
+    private async Task MigrateAiMessageSessionKeysV3Async()
     {
-        var entry = new AiMessageEntry(GenerateId(), groupId, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var collection = database.GetCollection("ai_messages");
+        var documents = await collection.FindAllAsync();
+        foreach (var document in documents)
+        {
+            if (document.TryGetValue("SessionKey", out var sessionKey) && sessionKey.IsString && !string.IsNullOrEmpty(sessionKey.AsString))
+            {
+                continue;
+            }
+            if (!document.TryGetValue("GroupId", out var groupId) || !groupId.IsInt64)
+            {
+                continue;
+            }
+            document["SessionKey"] = $"qq/group/{groupId.AsInt64}";
+            document.Remove("GroupId");
+            await collection.UpdateAsync(document);
+        }
+    }
+
+    public async Task<bool> RecordAiMessageAsync(string sessionKey, string messageType, string content, int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
+    {
+        var entry = new AiMessageEntry(GenerateId(), sessionKey, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), inputTokens, outputTokens, totalTokens);
         await aiMessagesCollection.InsertAsync(entry);
         return true;
     }
 
-    public async Task<List<AiMessageEntry>> GetAiMessagesByGroupIdAsync(long groupId, int page = 1, int pageSize = 50)
+    public async Task<List<AiMessageEntry>> GetAiMessagesBySessionKeyAsync(string sessionKey, int page = 1, int pageSize = 50)
     {
         var skip = (page - 1) * pageSize;
         return await aiMessagesCollection.Query()
-            .Where(x => x.GroupId == groupId)
+            .Where(x => x.SessionKey == sessionKey)
             .OrderByDescending(x => x.Id)
             .Skip(skip)
             .Limit(pageSize)
             .ToListAsync();
     }
 
-    public async Task<int> GetAiMessageCountByGroupIdAsync(long groupId)
+    public async Task<int> GetAiMessageCountBySessionKeyAsync(string sessionKey)
     {
-        return await aiMessagesCollection.CountAsync(x => x.GroupId == groupId);
+        return await aiMessagesCollection.CountAsync(x => x.SessionKey == sessionKey);
     }
 
     public async Task<int> GetMessageCountByGroupIdAsync(long groupId)

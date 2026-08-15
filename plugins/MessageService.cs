@@ -1,3 +1,4 @@
+using LlmBackend;
 using NapcatClient.MessageType;
 using System.Text;
 
@@ -39,6 +40,9 @@ public interface IMessageService
     Task<ProcessedMessage?> GetReplyAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default);
     Task<ProcessedForwardMessage?> GetForwardAsync(string forwardIdOrReference, long sourceGroupId, CancellationToken cancellationToken = default);
     Task<LocalMessageResource?> GetResourceAsync(string localUri, CancellationToken cancellationToken = default);
+
+    /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
+    Task RecordAiMessageAsync(string sessionKey, string content, TokenUsage usage);
 }
 
 /// <summary>处理链中使用的稳定本地 URI。</summary>

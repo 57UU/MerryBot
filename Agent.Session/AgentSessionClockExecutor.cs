@@ -1,3 +1,5 @@
+using LlmBackend;
+
 namespace Agent.Session;
 
 /// <summary>
@@ -7,10 +9,14 @@ namespace Agent.Session;
 public sealed class AgentSessionClockExecutor : IClockExecutor
 {
     private readonly AgentSessionManager _sessionManager;
+    private readonly Func<string, string, TokenUsage, Task>? _recordAiMessage;
 
-    public AgentSessionClockExecutor(AgentSessionManager sessionManager)
+    public AgentSessionClockExecutor(
+        AgentSessionManager sessionManager,
+        Func<string, string, TokenUsage, Task>? recordAiMessage = null)
     {
         _sessionManager = sessionManager;
+        _recordAiMessage = recordAiMessage;
     }
 
     public async Task<ClockExecutionResult> ExecuteAsync(
@@ -18,7 +24,18 @@ public sealed class AgentSessionClockExecutor : IClockExecutor
         CancellationToken cancellationToken)
     {
         var session = await _sessionManager.GetSessionAsync(task.SessionId);
-        var response = await session.ChatAndWaitAsync(task.Content, cancellationToken: cancellationToken);
+        var (response, usage) = await session.ChatAndWaitAsync(task.Content, cancellationToken: cancellationToken);
+        if (_recordAiMessage != null)
+        {
+            try
+            {
+                await _recordAiMessage(task.SessionId, response, usage);
+            }
+            catch (Exception)
+            {
+                // 记录失败不影响定时任务执行结果
+            }
+        }
         return ClockExecutionResult.Success(response);
     }
 }

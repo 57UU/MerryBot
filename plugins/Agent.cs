@@ -1,5 +1,6 @@
 using Agent.Session;
 using Agent.Tools;
+using LlmBackend;
 using BrowserService;
 using CommonLib;
 using NapcatClient;
@@ -48,7 +49,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         clockStore = new PluginClockStore(Interop.PluginStorage.PluginDatabaseScope);
         clockService = new ClockService(
             clockStore,
-            new AgentSessionClockExecutor(sessionManager));
+            new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync));
         clockServiceStartTask = InitializePersistenceAndClockAsync();
     }
     private static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
@@ -153,9 +154,20 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                     .Select(static item => item.SenderId)
                     .Distinct()
                     .ToArray();
-                await session.ChatAndWaitAsync(
+                var (reply, usage) = await session.ChatAndWaitAsync(
                     userInput,
                     reply => SendGroupReply(groupId, replyTargets, reply));
+                if (!string.IsNullOrWhiteSpace(reply))
+                {
+                    try
+                    {
+                        await Interop.MessageService.RecordAiMessageAsync(sessionId, reply, usage);
+                    }
+                    catch (Exception exception)
+                    {
+                        Logger.Warn($"记录 AI 消息失败: {groupId}\n{exception.Message}");
+                    }
+                }
             }
         }
         catch (Exception exception)
@@ -191,6 +203,16 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             .Append(TextData.FromText(reply))
             .ToList();
         _ = Bot.SendGroupMessage(groupId, chain);
+    }
+
+    /// <summary>定时任务回复后记录 AI 消息（sessionId 即会话标识，仅文本 + token 用量）。</summary>
+    private Task RecordCronAiMessageAsync(string sessionId, string content, TokenUsage usage)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return Task.CompletedTask;
+        }
+        return Interop.MessageService.RecordAiMessageAsync(sessionId, content, usage);
     }
 
     public override void Dispose()

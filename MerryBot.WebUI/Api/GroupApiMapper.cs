@@ -1,3 +1,4 @@
+using BotPlugin;
 using DataService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -75,7 +76,7 @@ public static class GroupApiMapper
             }
 
             var messageCounts = await Task.WhenAll(allIds.Select(historyRecorder.GetMessageCountByGroupIdAsync));
-            var aiMessageCounts = await Task.WhenAll(allIds.Select(historyRecorder.GetAiMessageCountByGroupIdAsync));
+            var aiMessageCounts = await Task.WhenAll(allIds.Select(gid => historyRecorder.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid))));
 
             var entries = new List<GroupEntryDto>(allIds.Count);
             for (var i = 0; i < allIds.Count; i++)

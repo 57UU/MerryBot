@@ -233,24 +233,32 @@ public class AiMessageEntry
 {
     [BsonId]
     public long Id { get; set; }
-    public long GroupId { get; set; }
+    public string SessionKey { get; set; }
     public string MessageType { get; set; }
     public string Content { get; set; }
     public long Time { get; set; }
+    public int InputTokens { get; set; }
+    public int OutputTokens { get; set; }
+    public int TotalTokens { get; set; }
 
     public AiMessageEntry()
     {
+        SessionKey = string.Empty;
         MessageType = string.Empty;
         Content = string.Empty;
     }
 
-    public AiMessageEntry(long id, long groupId, string messageType, string content, long time)
+    public AiMessageEntry(long id, string sessionKey, string messageType, string content, long time,
+        int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
     {
         Id = id;
-        GroupId = groupId;
+        SessionKey = sessionKey;
         MessageType = messageType;
         Content = content;
         Time = time;
+        InputTokens = inputTokens;
+        OutputTokens = outputTokens;
+        TotalTokens = totalTokens;
     }
 }
 

@@ -1,5 +1,6 @@
 using BotPlugin;
 using DataService;
+using LlmBackend;
 using NapcatClient;
 using NapcatClient.Action;
 using NapcatClient.EventType;
@@ -37,6 +38,11 @@ internal sealed class MessageService : IMessageService
         this.history = history;
         this.logger = logger;
     }
+
+    /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
+    public Task RecordAiMessageAsync(string sessionKey, string content, TokenUsage usage)
+        => history.RecordAiMessageAsync(sessionKey, "ai", content,
+            usage.promptUsage, usage.completionUsage, usage.totalUsage);
 
     public MessageIngress Ingest(ReceivedGroupMessage raw)
     {
