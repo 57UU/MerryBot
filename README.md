@@ -163,15 +163,15 @@ Merry Bot
     {
         Logger.Info("about plugin start");
     }
-    public override Task OnGroupMessageAsync(
+    public override Task OnMessageAsync(
         bool isMentioned,
         Command? command,
         IReadOnlyList<TypedMessage> messageChain,
-        ReceivedGroupMessage raw)
+        MessageContext context)
     {
         if (isMentioned && command?.Name == "about")
         {
-            _ = Channel.SendGroupMessage(raw.GroupId, aboutMessage);
+            _ = Channel.SendMessage(context.Session, aboutMessage);
         }
         return Task.CompletedTask;
     }
@@ -183,21 +183,21 @@ Merry Bot
 ## 事件
 | 函数 | 描述 |
 | --- | --- |
-| `OnGroupMessageAsync` 函数 | 当收到新消息时，此函数会被调用 |
+| `OnMessageAsync` 函数 | 当收到新消息时，此函数会被调用 |
 | `OnLoaded` 函数 | 当插件全部被加载完后会执行的函数，可以放一些互操作性的初始化代码。 |
 
 ### 消息处理链
-插件通过异步回调同时获得处理后的消息链和 Napcat 原始消息：
+插件通过异步回调获得处理后的消息链和轻量的消息上下文（平台无关）：
 
 ```csharp
-public override Task OnGroupMessageAsync(
+public override Task OnMessageAsync(
     bool isMentioned,
     Command? command,
     IReadOnlyList<TypedMessage> messageChain,
-    ReceivedGroupMessage raw)
+    MessageContext context)
 {
     // messageChain 中的 Reply、Forward、图片、文件等均为 merrybot:// 本地引用。
-    // raw 保持 OneBot/Napcat 原始值，仅在需要协议字段时使用。
+    // context 提供会话定位（Session）与发送者/机器人身份（SenderId/SelfId）。
     return Task.CompletedTask;
 }
 ```
@@ -212,7 +212,7 @@ public override Task OnGroupMessageAsync(
 |API|Description|Note
 |:---:|:---|:---
 |Actions Actions{get;}|获取`Actions`，用于发送消息
-|MessageChannel Channel {get;}|发送群消息（来自 Interop），内含日志，失败不抛出|
+|MessageChannel Channel {get;}|发送消息（来自 Interop），内含日志，失败不抛出|
 |bool IsEnable {set;protected get;}|是否启用|无论是否启用，插件都会被加载，当为假时OnMessageReceived函数不会被调用
 |string? StartsWith {set;get;}|该项是属性，若设置，那么只有以`StartsWith`开头的消息会触发`OnMessageReceived`函数
 |ISimpleLogger logger {get;}|获取`logger`，用于记录日志
@@ -235,7 +235,7 @@ public override Task OnGroupMessageAsync(
 ### 拦截器-Interceptors
 方法签名：
 ```csharp
-public delegate bool MessageInterceptor(ReceivedGroupMessage data)
+public delegate bool MessageInterceptor(MessageContext context)
 ```
 返回true拦截，false不拦截。
 

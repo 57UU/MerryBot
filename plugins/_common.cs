@@ -115,20 +115,32 @@ static class PluginUtils
 }
 
 /// <summary>
-/// 群消息发送通道：发送失败仅记录日志，不向上抛出异常。
+/// 消息发送通道：按会话发送，发送失败仅记录日志，不向上抛出异常。
 /// </summary>
 public interface MessageChannel
 {
-    Task SendGroupMessage(long groupId, string message);
-    Task SendGroupMessage(long groupId, IEnumerable<TypedMessage> messageChain);
+    Task SendMessage(SessionKey session, string message);
+    Task SendMessage(SessionKey session, IEnumerable<TypedMessage> messageChain);
 }
+
+/// <summary>
+/// 轻量消息上下文（平台无关）：会话定位 + 发送者/机器人身份，替代 NapCat 私有的 ReceivedGroupMessage。
+/// </summary>
+public record MessageContext(SessionKey Session, long SenderId, long SelfId);
 
 
 public class SessionKey
 {
+    public SessionKey(string platform, string channelType, string id)
+    {
+        Platform = platform;
+        ChannelType = channelType;
+        Id = id;
+    }
     public string Id { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public string ChannelType { get; set; } = string.Empty;
+    public override string ToString() => $"{Platform}/{ChannelType}/{Id}";
     public static string ToString(string id, string platform = "qq", string channelType = "group")
     {
         return $"{platform}/{channelType}/{id}";
@@ -144,12 +156,7 @@ public class SessionKey
         {
             throw new ArgumentException("Invalid session key format.", nameof(key));
         }
-        return new SessionKey
-        {
-            Id = parts[2],
-            Platform = parts[0],
-            ChannelType = parts[1],
-        };
+        return new SessionKey(parts[0], parts[1], parts[2]);
     }
 
 }

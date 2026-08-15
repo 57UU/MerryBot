@@ -15,7 +15,7 @@ public class Help : Plugin
     {
         pluginTags = Interop.PluginInfoGetter();
     }
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         if (!isMentioned || command?.Name != "help")
         {
@@ -23,10 +23,9 @@ public class Help : Plugin
         }
         if (pluginTags == null)
         {
-            _ = Channel.SendGroupMessage(data.GroupId, "尚未完成加载");
+            _ = Channel.SendMessage(context.Session, "尚未完成加载");
             return Task.CompletedTask;
         }
-        var groupId = data.GroupId;
         var sb = new StringBuilder();
         int count = 1;
 
@@ -43,7 +42,7 @@ public class Help : Plugin
         }
         //display admin plugins for admin user
         sb.AppendLine("- 管理员插件：");
-        if (data.sender.user_id == Interop.AuthorizedUser)
+        if (context.SenderId == Interop.AuthorizedUser)
         {
             foreach (var i in pluginTags)
             {
@@ -58,7 +57,7 @@ public class Help : Plugin
             }
         }
         var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
-        _ = Channel.SendGroupMessage(groupId, help);
+        _ = Channel.SendMessage(context.Session, help);
         return Task.CompletedTask;
     }
 }

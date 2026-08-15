@@ -50,13 +50,13 @@ public partial class ViewVersion : Plugin
         //if contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
         {
-            await Channel.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
+            await Channel.SendMessage(GroupSession(data.UpdateByGroupId), $"update successful\n{gitInfo}");
             data.UpdateByGroupId = -1;
             changed = true;
         }
         if (data.ReloadByGroupId > 0)
         {
-            await Channel.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
+            await Channel.SendMessage(GroupSession(data.ReloadByGroupId), $"reload successful\n{gitInfo}");
             data.ReloadByGroupId = -1;
             changed = true;
         }
@@ -216,7 +216,7 @@ public partial class ViewVersion : Plugin
     {
         if (!updateLock.Wait(0))
         {
-            await Channel.SendGroupMessage(groupId, "正在更新中，请稍候");
+            await Channel.SendMessage(GroupSession(groupId), "正在更新中，请稍候");
             return;
         }
         try
@@ -227,7 +227,7 @@ public partial class ViewVersion : Plugin
             // No changes — skip update (unless forced)
             if (!hasChanges && !force)
             {
-                await Channel.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
+                await Channel.SendMessage(GroupSession(groupId), "当前代码已经是最新版本，无需更新");
                 return;
             }
 
@@ -240,7 +240,7 @@ public partial class ViewVersion : Plugin
             string? projectRoot = FindProjectRoot(baseDir);
             if (projectRoot == null)
             {
-                await Channel.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
+                await Channel.SendMessage(GroupSession(groupId), "无法定位项目根目录，更新失败");
                 await ResetUpdateFlagAsync();
                 return;
             }
@@ -258,7 +258,7 @@ public partial class ViewVersion : Plugin
             string targetSlot = activeSlot == "A" ? "B" : "A";
             string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
 
-            await Channel.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
+            await Channel.SendMessage(GroupSession(groupId), $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
 
             // Run build.sh in background
             string buildScript = Path.Combine(projectRoot, "build.sh");
@@ -294,7 +294,7 @@ public partial class ViewVersion : Plugin
             {
                 string errMsg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
                 Logger.Error($"Build failed: {errMsg}");
-                await Channel.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                await Channel.SendMessage(GroupSession(groupId), $"编译失败，当前版本继续运行\n{errMsg}");
                 await ResetUpdateFlagAsync();
                 return;
             }
@@ -304,7 +304,7 @@ public partial class ViewVersion : Plugin
             await File.WriteAllTextAsync(tempFile, targetSlot);
             File.Move(tempFile, activeSlotFile, overwrite: true);
             Logger.Info($"Build succeeded, switching to slot {targetSlot}");
-            await Channel.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            await Channel.SendMessage(GroupSession(groupId), $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
             // 稳妥起见：成功路径也先复位标志再关闭进程
             await ResetUpdateFlagAsync();
             Interop.Shutdown(CommonLib.ExitCode.PREBUILT);
@@ -312,7 +312,7 @@ public partial class ViewVersion : Plugin
         catch (Exception ex)
         {
             Logger.Error($"Update process error: {ex.Message}");
-            await Channel.SendGroupMessage(groupId, $"更新过程出错: {ex.Message}\n当前版本继续运行");
+            await Channel.SendMessage(GroupSession(groupId), $"更新过程出错: {ex.Message}\n当前版本继续运行");
             await ResetUpdateFlagAsync();
         }
         finally
@@ -358,7 +358,7 @@ public partial class ViewVersion : Plugin
         catch (Exception ex)
         {
             Logger.Error($"update failed: {ex.Message}");
-            await Channel.SendGroupMessage(groupId, $"更新失败: {ex.Message}");
+            await Channel.SendMessage(GroupSession(groupId), $"更新失败: {ex.Message}");
         }
     }
     /// <summary>
@@ -374,7 +374,7 @@ public partial class ViewVersion : Plugin
         {
             Logger.Error($"reload failed: {ex.Message}");
             await ResetReloadFlagAsync();
-            await Channel.SendGroupMessage(groupId, $"重启失败: {ex.Message}");
+            await Channel.SendMessage(GroupSession(groupId), $"重启失败: {ex.Message}");
         }
     }
     private async Task ResetReloadFlagAsync()
@@ -392,39 +392,41 @@ public partial class ViewVersion : Plugin
             Logger.Error($"reset reload flag failed: {ex.Message}");
         }
     }
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<NapcatClient.MessageType.TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<NapcatClient.MessageType.TypedMessage> messageChain, MessageContext context)
     {
         if (!isMentioned || command == null) return Task.CompletedTask;
-        long groupId = data.GroupId;
+        long groupId = long.Parse(context.Session.Id);
         if (command.Name == "version")
         {
-            _ = Channel.SendGroupMessage(groupId, gitInfo);
+            _ = Channel.SendMessage(GroupSession(groupId), gitInfo);
         }
         else if (command.Name == "update")
         {
-            if (authorized == data.sender.user_id)
+            if (authorized == context.SenderId)
             {
                 bool force = command.Args.Contains("-f");
                 _ = HandleUpdateAsync(groupId, force);
             }
             else
             {
-                _ = Channel.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Channel.SendMessage(GroupSession(groupId), "401 Unauthorized\nPermission Denied");
             }
         }
         else if (command.Name == "reload")
         {
-            if (authorized == data.sender.user_id)
+            if (authorized == context.SenderId)
             {
                 _ = HandleReloadAsync(groupId);
             }
             else
             {
-                _ = Channel.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Channel.SendMessage(GroupSession(groupId), "401 Unauthorized\nPermission Denied");
             }
         }
         return Task.CompletedTask;
     }
+    /// <summary>把 QQ 群号转换为会话键（当前平台固定为 qq 群聊）。</summary>
+    private static SessionKey GroupSession(long groupId) => new("qq", "group", groupId.ToString());
     /// <summary>
     /// Find project root by searching for .git directory or MerryBot.sln, starting from the given directory and walking up.
     /// </summary>

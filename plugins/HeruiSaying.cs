@@ -15,13 +15,13 @@ public class HeruiSaying : Plugin
     {
         _ = AutoUpdateAsync();
     }
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         if (!isMentioned || command?.Name != "hr")
         {
             return Task.CompletedTask;
         }
-        _ = Channel.SendGroupMessage(data.GroupId, PickOne());
+        _ = Channel.SendMessage(context.Session, PickOne());
         return Task.CompletedTask;
     }
     private string PickOne()

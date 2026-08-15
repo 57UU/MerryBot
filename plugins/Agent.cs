@@ -97,25 +97,25 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     }
 
 
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         if (!isMentioned || command != null)
         {
             return Task.CompletedTask;
         }
 
-        var userInput = BuildMessage(messageChain, data.self_id).Trim();
+        var userInput = BuildMessage(messageChain, context.SelfId).Trim();
         if (string.IsNullOrWhiteSpace(userInput))
         {
             return Task.CompletedTask;
         }
 
-        var sessionId = SessionKey.ToString(data.GroupId);
+        var sessionId = context.Session.ToString();
         var pending = pendingMessages.GetOrAdd(sessionId, static _ => new PendingGroupMessages());
         var shouldStartDispatcher = false;
         lock (pending.SyncRoot)
         {
-            pending.Items.Add(new PendingGroupMessage(data.sender.user_id, userInput));
+            pending.Items.Add(new PendingGroupMessage(context.SenderId, userInput));
             if (!pending.IsDispatching)
             {
                 pending.IsDispatching = true;
@@ -125,7 +125,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
 
         if (shouldStartDispatcher)
         {
-            _ = DispatchPendingMessagesAsync(sessionId, data.GroupId, pending);
+            _ = DispatchPendingMessagesAsync(sessionId, long.Parse(context.Session.Id), pending);
         }
         return Task.CompletedTask;
     }
@@ -239,7 +239,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             .Append(TextData.FromText(reply))
             .ToList();
         // Channel 内部已捕获异常并记录日志（含插件 id），不会抛出
-        _ = Channel.SendGroupMessage(groupId, chain);
+        _ = Channel.SendMessage(new SessionKey("qq", "group", groupId.ToString()), chain);
     }
 
     /// <summary>定时任务回复后记录 AI 消息（sessionId 即会话标识，仅文本 + token 用量）。</summary>

@@ -8,7 +8,7 @@ namespace MerryBot;
 
 internal partial class Logic
 {
-    private void OnGroupMessage(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    private void OnMessage(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         foreach (var i in plugins)
         {
@@ -18,23 +18,23 @@ internal partial class Logic
                 continue;
             }
 
-            if (IsInterceptorActive(i, data))
+            if (IsInterceptorActive(i, context))
             {
                 continue;
             }
             var pluginChain = messageChain.Select(message => message.Clone()).ToList();
-            _ = InvokePluginAsync(i, isMentioned, command, pluginChain, data);
+            _ = InvokePluginAsync(i, isMentioned, command, pluginChain, context);
         }
     }
 
     /// <summary>逐个执行插件的拦截器；单个拦截器抛异常时记录日志并继续，不中断整条拦截链与消息分发。</summary>
-    private bool IsInterceptorActive(PluginInfo plugin, ReceivedGroupMessage data)
+    private bool IsInterceptorActive(PluginInfo plugin, MessageContext context)
     {
         foreach (var interceptor in plugin.Interop.Interceptors)
         {
             try
             {
-                if (interceptor(data))
+                if (interceptor(context))
                 {
                     return true;
                 }
@@ -47,11 +47,11 @@ internal partial class Logic
         return false;
     }
 
-    private async Task InvokePluginAsync(PluginInfo plugin, bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage raw)
+    private async Task InvokePluginAsync(PluginInfo plugin, bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         try
         {
-            await plugin.Instance.OnGroupMessageAsync(isMentioned, command, messageChain, raw);
+            await plugin.Instance.OnMessageAsync(isMentioned, command, messageChain, context);
         }
         catch (Exception exception)
         {

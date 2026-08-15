@@ -15,9 +15,8 @@ public partial class AgentPlugin : Plugin
         {
             throw new ArgumentException("Invalid session key format.");
         }
-        var groupId = long.Parse(sessionKey.Id);
         // Channel 内部已捕获异常并记录日志（含插件 id），不会抛出
-        Action<string> sendMessage = (msg) => _ = Channel.SendGroupMessage(groupId, msg);
+        Action<string> sendMessage = (msg) => _ = Channel.SendMessage(sessionKey, msg);
         await clockServiceStartTask;
 
         var resolved = await llmProvider.CreateClientAsync(agentConfig.LlmModel);
@@ -47,7 +46,7 @@ public partial class AgentPlugin : Plugin
         // bash 工具门禁：AllowShell 默认关闭，未开启时不注册 TerminalToolSet（模型无法执行 shell）
         var tools = new List<ToolSet>
         {
-            new MessageTool(Interop.MessageService, Channel, browser, groupId, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024),
+            new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024),
             new TodoListToolSet(),
             new WebTools(browser),
             skillToolSet,

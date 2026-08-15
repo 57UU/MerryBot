@@ -24,18 +24,20 @@ public class MessageTool : ToolSet
     private readonly IMessageService messageService;
     private readonly MessageChannel channel;
     private readonly Browser browser;
+    private readonly SessionKey session;
     private readonly long groupId;
     private readonly VisionRouter visionRouter;
     /// <summary>图片下载大小上限（字节），防止超大图片撑爆上下文</summary>
     private readonly int maxImageBytes;
     private readonly ToolSetBridge bridge;
 
-    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, long groupId, VisionRouter visionRouter, int maxImageBytes)
+    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes)
     {
         this.messageService = messageService;
         this.channel = channel;
         this.browser = browser;
-        this.groupId = groupId;
+        this.session = session;
+        this.groupId = long.Parse(session.Id);
         this.visionRouter = visionRouter;
         this.maxImageBytes = maxImageBytes;
 
@@ -241,7 +243,7 @@ public class MessageTool : ToolSet
         }
 
         var image = await browser.TakeMarkdownScreenshot(message);
-        await channel.SendGroupMessage(groupId, [ImageData.FromBinary(image)]);
+        await channel.SendMessage(session, [ImageData.FromBinary(image)]);
         return "Markdown 已渲染为图片并发送到当前群。";
     }
 

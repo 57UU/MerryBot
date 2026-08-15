@@ -45,11 +45,11 @@ public abstract class Plugin : IDisposable
         this.Interop = interop;
         Channel = interop.Channel;
     }
-    public virtual Task OnGroupMessageAsync(
+    public virtual Task OnMessageAsync(
         bool isMentioned,
         Command? command,
         IReadOnlyList<TypedMessage> messageChain,
-        ReceivedGroupMessage raw) => Task.CompletedTask;
+        MessageContext context) => Task.CompletedTask;
 
     public virtual Task OnLoaded()
     {

@@ -12,7 +12,7 @@ namespace BotPlugin;
 /// 管理可执行 LLM Provider、模型和 API Key。
 /// 外部模型目录由 WebUI 查询；插件只保存已解析的本地配置。
 /// </summary>
-[PluginTag("llm-provider", "LLM Provider", "管理 LLM Provider、模型和 Key")]
+[PluginTag("llm-provider", "LLM Provider", "管理 LLM Provider、模型和 Key", type: PluginType.Background)]
 public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProviderManagementService
 {
     private const string DefaultModelMetaId = "default-model";

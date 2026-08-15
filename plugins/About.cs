@@ -21,11 +21,11 @@ Merry Bot
     {
         Logger.Info("about plugin start");
     }
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         if (command?.Name == "about")
         {
-            _ = Channel.SendGroupMessage(data.GroupId, aboutMessage);
+            _ = Channel.SendMessage(context.Session, aboutMessage);
         }
         return Task.CompletedTask;
     }

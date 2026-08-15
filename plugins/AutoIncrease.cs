@@ -17,17 +17,17 @@ public class AutoIncrease : Plugin
         {
             config.RepeatTime = 2;
         }
-        interop.Interceptors.Add((data) => data.sender.user_id == data.self_id);
+        interop.Interceptors.Add((ctx) => ctx.SenderId == ctx.SelfId);
     }
     //store each group
     private readonly Dictionary<long, ChainWithSender> lastMessage = [];
     private readonly object lastMessageLock = new();
 
-    public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         lock (lastMessageLock)
         {
-            var groupId = data.GroupId;
+            var groupId = long.Parse(context.Session.Id);
             var _lastMessage = lastMessage.GetValueOrDefault(groupId);
             //群已不在监听列表时，移除该群的过期状态，避免残留计数
             if (_lastMessage != null && !Interop.GroupId.Contains(groupId))
@@ -41,7 +41,7 @@ public class AutoIncrease : Plugin
                 _lastMessage = new()
                 {
                     chain = chainList,
-                    sender = data.sender.user_id
+                    sender = context.SenderId
                 };
                 lastMessage[groupId] = _lastMessage;
                 //上限保护：超过上限时移除最早跟踪的群
@@ -58,13 +58,13 @@ public class AutoIncrease : Plugin
                     if (!_lastMessage.used && _lastMessage.repeatTime >= config.RepeatTime)
                     {
                         Logger.Info("+1 message detected");
-                        _ = Channel.SendGroupMessage(groupId, _lastMessage.chain!);
+                        _ = Channel.SendMessage(context.Session, _lastMessage.chain!);
                         _lastMessage.used = true;
                     }
                 }
                 else
                 {
-                    _lastMessage.Renew(chainList, data.sender.user_id);
+                    _lastMessage.Renew(chainList, context.SenderId);
                 }
 
             }

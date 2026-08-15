@@ -67,9 +67,9 @@ public delegate IEnumerable<PluginInfo> PluginInfoGetter();
 /// <summary>
 /// 拦截指定消息
 /// </summary>
-/// <param name="data"></param>
+/// <param name="context"></param>
 /// <returns>返回true拦截</returns>
-public delegate bool MessageInterceptor(ReceivedGroupMessage data);
+public delegate bool MessageInterceptor(MessageContext context);
 
 /// <summary>
 /// 用于实现互操作性

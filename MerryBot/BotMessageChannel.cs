@@ -6,7 +6,7 @@ using NapcatClient.MessageType;
 namespace MerryBot;
 
 /// <summary>
-/// <see cref="MessageChannel"/> 的宿主实现：发送失败仅记录日志（含插件 id），不向上抛出异常。
+/// <see cref="MessageChannel"/> 的宿主实现：发送失败仅记录日志（含插件 id 与会话），不向上抛出异常。
 /// </summary>
 public sealed class BotMessageChannel : MessageChannel
 {
@@ -19,14 +19,14 @@ public sealed class BotMessageChannel : MessageChannel
         _logger = logger;
         _pluginId = pluginId;
     }
-    public async Task SendGroupMessage(long groupId, string message)
+    public async Task SendMessage(SessionKey session, string message)
     {
-        try { await _bot.SendGroupMessage(groupId, message); }
-        catch (Exception ex) { _logger.Error($"插件 {_pluginId} 发送群消息失败, group={groupId}: {ex.Message}"); }
+        try { await _bot.SendGroupMessage(long.Parse(session.Id), message); }
+        catch (Exception ex) { _logger.Error($"插件 {_pluginId} 发送消息失败, session={session}: {ex.Message}"); }
     }
-    public async Task SendGroupMessage(long groupId, IEnumerable<TypedMessage> messageChain)
+    public async Task SendMessage(SessionKey session, IEnumerable<TypedMessage> messageChain)
     {
-        try { await _bot.SendGroupMessage(groupId, messageChain); }
-        catch (Exception ex) { _logger.Error($"插件 {_pluginId} 发送群消息失败, group={groupId}: {ex.Message}"); }
+        try { await _bot.SendGroupMessage(long.Parse(session.Id), messageChain); }
+        catch (Exception ex) { _logger.Error($"插件 {_pluginId} 发送消息失败, session={session}: {ex.Message}"); }
     }
 }
