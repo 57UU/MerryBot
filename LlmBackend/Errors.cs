@@ -77,11 +77,30 @@ public sealed class ServerErrorException : LlmException
     }
 }
 
-/// <summary>网络错误（连接失败、超时等，无 HTTP 状态码），可重试</summary>
+/// <summary>网络错误（连接失败等，无 HTTP 状态码），可重试</summary>
 public sealed class NetworkException : LlmException
 {
     public NetworkException(string message, Exception? innerException = null)
         : base(message, statusCode: null, retryable: true, innerException)
+    {
+    }
+}
+
+/// <summary>请求超时（无 HTTP 状态码）。不可重试：LLM 请求非幂等，
+/// 服务端可能已开始计费，重试存在双倍计费风险；由调用方决定是否降级。</summary>
+public sealed class RequestTimeoutException : LlmException
+{
+    public RequestTimeoutException(string message, Exception? innerException = null)
+        : base(message, statusCode: null, retryable: false, innerException)
+    {
+    }
+}
+
+/// <summary>服务端返回了无法解析/结构异常的响应（HTTP 200 但 JSON 不符合预期），不可重试。</summary>
+public sealed class InvalidResponseException : LlmException
+{
+    public InvalidResponseException(string message, Exception? innerException = null)
+        : base(message, statusCode: null, retryable: false, innerException)
     {
     }
 }

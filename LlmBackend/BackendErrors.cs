@@ -18,6 +18,28 @@ public static class BackendErrors
     public static bool IsContextLengthError(string responseBody)
         => ContextLengthKeywords.Any(keyword => responseBody.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// 从响应体中提取可读的错误信息：优先 error.message 字段，非 JSON 时退回原文；
+    /// 统一截断到 <paramref name="maxLength"/> 字符，避免大响应体撑爆异常消息。
+    /// </summary>
+    public static string Shorten(string responseBody, int maxLength = 200)
+    {
+        var message = responseBody ?? string.Empty;
+        try
+        {
+            var error = JsonSerializer.Deserialize<ApiErrorEnvelope>(message);
+            if (!string.IsNullOrEmpty(error?.Error?.Message))
+            {
+                message = error.Error.Message;
+            }
+        }
+        catch (JsonException)
+        {
+            // 响应体不是 JSON，直接使用原文
+        }
+        return message.Length <= maxLength ? message : message[..maxLength] + "…";
+    }
+
     public static LlmException Map(string responseBody, HttpStatusCode statusCode, TimeSpan? retryAfter)
     {
         string message = $"API 错误 ({(int)statusCode} {statusCode})";

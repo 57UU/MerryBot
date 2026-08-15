@@ -22,19 +22,22 @@ public class MessageTool : ToolSet
     };
 
     private readonly IMessageService messageService;
-    private readonly Actions bot;
+    private readonly MessageChannel channel;
     private readonly Browser browser;
     private readonly long groupId;
     private readonly VisionRouter visionRouter;
+    /// <summary>图片下载大小上限（字节），防止超大图片撑爆上下文</summary>
+    private readonly int maxImageBytes;
     private readonly ToolSetBridge bridge;
 
-    public MessageTool(IMessageService messageService, Actions bot, Browser browser, long groupId, VisionRouter visionRouter)
+    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, long groupId, VisionRouter visionRouter, int maxImageBytes)
     {
         this.messageService = messageService;
-        this.bot = bot;
+        this.channel = channel;
         this.browser = browser;
         this.groupId = groupId;
         this.visionRouter = visionRouter;
+        this.maxImageBytes = maxImageBytes;
 
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
@@ -99,7 +102,7 @@ public class MessageTool : ToolSet
     /// 否则调用辅助视觉模型生成文字描述。引用来自消息文本中显示的 image 标识
     /// （pipeline 已把图片 Url/File 改写为 merrybot://resource/image/{hash} 本地引用）。
     /// </summary>
-    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args, Action<Message> onIterationAdd)
+    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args, CancellationToken cancellationToken, Action<Message> onIterationAdd)
     {
         var reference = args.image?.Trim() ?? string.Empty;
         if (reference.Length == 0)
@@ -107,7 +110,7 @@ public class MessageTool : ToolSet
             return "image 参数不能为空：请传入消息文本中显示的图片引用（如 merrybot://resource/image/xxx 或 http(s):// 图片地址）。";
         }
 
-        var (data, contentType) = await LoadImageByReferenceAsync(reference);
+        var (data, contentType) = await LoadImageByReferenceAsync(reference, cancellationToken);
         if (data == null || data.Length == 0)
         {
             return $"无法读取图片: {reference}（引用无效或资源不存在）";
@@ -128,12 +131,12 @@ public class MessageTool : ToolSet
         {
             return "主模型不具备视觉能力，且未配置辅助视觉模型（vision-llm），无法查看图片。";
         }
-        var description = await visionRouter.DescribeImageAsync(data, contentType, reference, CancellationToken.None);
+        var description = await visionRouter.DescribeImageAsync(data, contentType, reference, cancellationToken);
         return $"图片描述（{reference}）：{description}";
     }
 
-    /// <summary>按引用解析图片数据：本地资源 → 本地库；http(s) → 下载；base64:// → 解码。</summary>
-    private async Task<(byte[]? Data, string? ContentType)> LoadImageByReferenceAsync(string reference)
+    /// <summary>按引用解析图片数据：本地资源 → 本地库；http(s) → 下载（预检+限流）；base64:// → 解码。</summary>
+    private async Task<(byte[]? Data, string? ContentType)> LoadImageByReferenceAsync(string reference, CancellationToken cancellationToken)
     {
         if (LocalMessageReference.IsResource(reference))
         {
@@ -146,8 +149,11 @@ public class MessageTool : ToolSet
         {
             try
             {
-                var bytes = await ImageHttpClient.GetByteArrayAsync(reference);
-                return (bytes, MimeTypes.GuessImageContentType(reference));
+                return await DownloadImageAsync(reference, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // 取消继续传播（会话取消/工具超时），不当作下载失败吞掉
             }
             catch (Exception e)
             {
@@ -172,6 +178,49 @@ public class MessageTool : ToolSet
         return (null, null);
     }
 
+    /// <summary>
+    /// 下载图片：Content-Length 预检 + 流式读取累计上限，超限立即中断。
+    /// </summary>
+    private async Task<(byte[]? Data, string? ContentType)> DownloadImageAsync(string url, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = await ImageHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: HTTP {(int)response.StatusCode}");
+            return (null, null);
+        }
+
+        // Content-Length 预检：声明超限直接拒绝，不下载
+        if (response.Content.Headers.ContentLength is { } declaredLength && declaredLength > maxImageBytes)
+        {
+            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: Content-Length {declaredLength} 超过上限 {maxImageBytes}");
+            return (null, null);
+        }
+
+        // 流式读取累计上限：实际大小超限立即中断，防止压缩炸弹/无 Content-Length 的超大响应
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int total = 0;
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+            total += read;
+            if (total > maxImageBytes)
+            {
+                ConsoleLogger.Instance.Warn($"下载图片失败: {url}: 实际大小超过上限 {maxImageBytes}，已中断");
+                return (null, null);
+            }
+            buffer.Write(chunk, 0, read);
+        }
+        return (buffer.ToArray(), response.Content.Headers.ContentType?.MediaType);
+    }
+
     /// <summary>与群历史上下文相同的消息渲染格式：[时间] 昵称: 内容</summary>
     private static string FormatMessage(ProcessedMessage m)
     {
@@ -192,7 +241,7 @@ public class MessageTool : ToolSet
         }
 
         var image = await browser.TakeMarkdownScreenshot(message);
-        await bot.SendGroupMessage(groupId, [ImageData.FromBinary(image)]);
+        await channel.SendGroupMessage(groupId, [ImageData.FromBinary(image)]);
         return "Markdown 已渲染为图片并发送到当前群。";
     }
 

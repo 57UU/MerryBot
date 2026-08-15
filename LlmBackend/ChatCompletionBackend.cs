@@ -11,8 +11,8 @@ namespace LlmBackend;
 /// </summary>
 public class ChatCompletionBackend : Backend
 {
-    private static readonly HttpClient Client = new();
-    private static readonly SemaphoreSlim _semaphore = new(5, 5);
+    // 超时全部由 LlmOptions 的两段 CTS 控制（首字节 + 总时长），HttpClient 本身不设超时
+    private static readonly HttpClient Client = new() { Timeout = Timeout.InfiniteTimeSpan };
     // ToolDef and FunctionDef intentionally expose OpenAI-shaped public fields
     // (type/function/name/parameters). Include fields when serializing a request
     // so providers receive the required top-level `type: "function"` member.
@@ -56,45 +56,43 @@ public class ChatCompletionBackend : Backend
 
         string jsonData = JsonSerializer.Serialize(requestBody, RequestJsonOptions);
 
-        await _semaphore.WaitAsync(cancellationToken);
         string responseBody;
+        // 两段超时：发送到响应头（首字节）由 ttfbCts 控制，响应体读取受 totalCts 总时长约束；
+        // 超时映射为不可重试的 RequestTimeoutException，避免 LLM 非幂等请求超时重试造成双倍计费
+        using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.TotalGeneration);
+        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
+        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
             request.Headers.Authorization = new("Bearer", _apiKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            try
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
             {
-                using var response = await Client.SendAsync(request, cancellationToken);
-                responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw BuildLlmException(response.StatusCode, responseBody, response.Headers.RetryAfter?.Delta);
-                }
-            }
-            catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new NetworkException("ChatCompletion 请求超时", e);
-            }
-            catch (HttpRequestException e)
-            {
-                throw new NetworkException($"ChatCompletion 网络错误: {e.Message}", e);
+                throw BuildLlmException(response.StatusCode, responseBody, response.Headers.RetryAfter?.Delta);
             }
         }
-        finally
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
-            _semaphore.Release();
+            throw new RequestTimeoutException("ChatCompletion 请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"ChatCompletion 网络错误: {e.Message}", e);
         }
 
         var json = JsonSerializer.Deserialize<ChatCompletionResponse>(responseBody)
-            ?? throw new HttpRequestException($"ChatCompletion API 返回了无法解析的响应: {responseBody}");
+            ?? throw new InvalidResponseException($"ChatCompletion API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
 
         if (json.Choices == null || json.Choices.Count == 0)
         {
-            throw new HttpRequestException($"ChatCompletion API 返回空 choices: {responseBody}");
+            throw new InvalidResponseException($"ChatCompletion API 返回空 choices: {BackendErrors.Shorten(responseBody)}");
         }
         var message = json.Choices[0].Message
-            ?? throw new HttpRequestException($"ChatCompletion API 返回空 message: {responseBody}");
+            ?? throw new InvalidResponseException($"ChatCompletion API 返回空 message: {BackendErrors.Shorten(responseBody)}");
 
         var toolCalls = message.ToolCalls?
             .Where(t => t.Function != null)

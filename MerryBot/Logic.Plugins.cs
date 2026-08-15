@@ -10,11 +10,11 @@ internal partial class Logic
     private readonly List<PluginInfo> plugins = new();
     private IEnumerable<Action>? _pluginsDisposeActions;
 
-    private static List<long> QqGroupIDs
+    private static IEnumerable<long> QqGroupIDs
     {
         get
         {
-            return ConfigManager.Instance.QqGroups;
+            return ConfigManager.GetGroupIdsSnapshot();
         }
     }
 
@@ -53,12 +53,12 @@ internal partial class Logic
                 QqGroupIDs,
                 () => plugins,
                 pluginStorage,
-                botClient.Bot,
                 Shutdown,
                 AuthorizedUser,
                 botClient.PathPrefix,
                 EventRegister,
-                messageService
+                messageService,
+                new BotMessageChannel(botClient.Bot, new NLogAdapter(), attribute.Id)
                 );
                 pluginInteropMap.Add(type, interop);
                 pluginInitializer.AddDependency(type, attribute, [interop]);
@@ -75,7 +75,8 @@ internal partial class Logic
         }
         catch (Exception e)
         {
-            logger.Fatal(e);
+            // InitializeAll 内部已按插件隔离依赖解析异常，此处仅作兜底
+            logger.Error(e, "插件初始化异常");
         }
         _pluginsDisposeActions = pluginInitializer.GetDisposeActions();
         IEnumerable<(Plugin? pluginInstance, PluginTag attribute)> allPluginInstance
@@ -96,13 +97,21 @@ internal partial class Logic
         }
         foreach (var i in plugins)
         {
-            i.Instance.OnLoaded().ContinueWith(task =>
+            try
             {
-                if (task.Exception != null)
+                i.Instance.OnLoaded().ContinueWith(task =>
                 {
-                    logger.Error($"the plugin {i.PluginTag.Id} OnLoaded failed: {task.Exception}");
-                }
-            });
+                    if (task.Exception != null)
+                    {
+                        logger.Error($"the plugin {i.PluginTag.Id} OnLoaded failed: {task.Exception}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // 非 async 的 OnLoaded 同步抛异常时不允许逃出，避免中断后续插件的加载
+                logger.Error(ex, $"the plugin {i.PluginTag.Id} OnLoaded failed synchronously");
+            }
         }
         RegisterWebUi();
     }
@@ -148,8 +157,15 @@ internal partial class Logic
         }
     }
 
+    private static int _shutdownTriggered;
+
     public void Shutdown(int exitCode = 0)
     {
+        // 幂等保护：WebUI 重启与 Ctrl+C 并发触发时只执行一次完整关闭
+        if (Interlocked.CompareExchange(ref _shutdownTriggered, 1, 0) != 0)
+        {
+            return;
+        }
         foreach (var dispose in _pluginsDisposeActions!)
         {
             dispose();

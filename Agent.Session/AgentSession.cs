@@ -1,10 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
+using CommonLib;
 using LlmBackend;
 
 namespace Agent.Session;
 
 public class AgentSession
 {
+    /// <summary>消息队列上限：超出时丢弃最旧消息，保证最新消息不被阻塞</summary>
+    private const int MaxQueued = 200;
+
     private readonly Agent _Agent;
     private readonly Action<string> _defaultMessageChannel;
     public TokenUsage SessionUsage = TokenUsage.Zero;
@@ -15,7 +19,19 @@ public class AgentSession
         _defaultMessageChannel = defaultMessageChannel;
     }
     private readonly SemaphoreSlim _chatMutex = new(1, 1);
-    public bool Busy => _chatMutex.CurrentCount == 0;
+
+    /// <summary>是否正在处理消息（供 AgentSessionManager 空闲清理判断，会话不忙时才允许释放）</summary>
+    internal bool IsBusy => _chatMutex.CurrentCount == 0;
+
+    private long _lastActiveTicks = DateTime.UtcNow.Ticks;
+
+    /// <summary>最近一次活动时间（UTC），由入队/处理刷新；供 AgentSessionManager 空闲淘汰判断</summary>
+    public DateTime LastActiveUtc
+    {
+        get => new(Interlocked.Read(ref _lastActiveTicks), DateTimeKind.Utc);
+    }
+
+    private void MarkActive() => Interlocked.Exchange(ref _lastActiveTicks, DateTime.UtcNow.Ticks);
     private sealed class PendingMessage
     {
         public required string Type { get; init; }
@@ -45,9 +61,17 @@ public class AgentSession
             }
             else
             {
+                if (MessageQueue.Count >= MaxQueued)
+                {
+                    // 队列已满：丢弃最旧的一条（其等待者按取消处理），保证最新消息不被阻塞
+                    var oldest = MessageQueue.First!.Value;
+                    MessageQueue.RemoveFirst();
+                    oldest.Completion?.TrySetCanceled();
+                }
                 MessageQueue.AddLast(pending);
             }
         }
+        MarkActive();
     }
 
     private bool TryDequeue([MaybeNullWhen(false)] out PendingMessage pending)
@@ -160,7 +184,16 @@ public class AgentSession
     {
         var (response, usage) = await _Agent.Chat(message, cancellationToken);
         SessionUsage += usage;
-        messageChannel(response);
+        MarkActive();
+        try
+        {
+            messageChannel(response);
+        }
+        catch (Exception exception)
+        {
+            // 发送失败（如群消息发送异常）只记日志，不中断消息处理流程
+            ConsoleLogger.Instance.Warn($"消息发送失败: {exception.Message}");
+        }
         return (response, usage);
     }
 }

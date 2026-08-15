@@ -45,16 +45,28 @@ public class WebTools : ToolSet
         public string url { get; set; } = string.Empty;
     }
 
-    private async Task<string> SearchAsync(WebSearchArgs args)
+    private async Task<string> SearchAsync(WebSearchArgs args, CancellationToken cancellationToken, Action<Message> onIterationAdd)
     {
         var query = args.query?.Trim() ?? string.Empty;
         if (query.Length == 0) throw new ArgumentException("query 参数不能为空");
+        // Browser.Search 不接受 CancellationToken（Browser API 无此参数），调用链无法继续传递；
+        // token 保留在签名中，待 Browser API 支持后直接透传。目标主机固定为 Bing（内部构造 URL），
+        // 不涉及用户可控 URL，无需 SSRF 校验。
+        _ = cancellationToken;
         return Cap(await browser.Search(query, false));
     }
 
-    private async Task<string> FetchAsync(WebFetchArgs args)
+    private async Task<string> FetchAsync(WebFetchArgs args, CancellationToken cancellationToken, Action<Message> onIterationAdd)
     {
         var url = args.url?.Trim() ?? string.Empty;
+        if (url.Length == 0) throw new ArgumentException("url 参数不能为空");
+        // 仅允许 http/https scheme，其余一律拒绝
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException($"URL 无效: {url}");
+        }
+        // Browser.View 不接受 CancellationToken（Browser API 无此参数），调用链无法继续传递
         var text = await browser.View(url);
         if (text.Length == 0) throw new InvalidOperationException($"页面未提取到文本内容: {url}");
         return Cap(text);

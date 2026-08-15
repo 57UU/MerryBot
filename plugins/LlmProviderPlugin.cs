@@ -38,7 +38,6 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
             .Create(new DirectoryInfo(keyRingPath), builder => builder.SetApplicationName("MerryBot.LlmProvider"))
             .CreateProtector("api-key.v1");
 
-        _ = EnsureIndexesAsync();
     }
 
     public override async Task OnLoaded()

@@ -15,6 +15,9 @@ public class Terminal : IDisposable
     /// <summary>已创建的进程实例数（含超时重启），用于懒加载验证与监控</summary>
     public static int CreatedCount { get; private set; }
 
+    /// <summary>单次命令输出累积上限（字节），超过后停止累积并标记截断，防止 yes 类命令撑爆内存</summary>
+    private const int MaxOutputBytes = 2 * 1024 * 1024;
+
     private readonly string _shell;
     private readonly string _arguments;
     private readonly string _endMarker = $"_END_{Guid.NewGuid()}";
@@ -25,6 +28,7 @@ public class Terminal : IDisposable
     private StreamReader _reader = null!;
     private StreamReader _errorReader = null!;
     private bool _isGotoHome;
+    private bool _disposed;
 
     /// <summary>
     /// 创建终端：user 非空时以 sudo -u user 运行 bash；user 为空直接运行 bash
@@ -64,7 +68,7 @@ public class Terminal : IDisposable
             }
             if (!string.IsNullOrWhiteSpace(cwd))
             {
-                await _writer.WriteLineAsync($"cd {cwd}");
+                await _writer.WriteLineAsync($"cd {ShellQuote(cwd)}");
                 await _writer.FlushAsync();
             }
 
@@ -105,6 +109,11 @@ public class Terminal : IDisposable
             }
             return output;
         }
+        catch (OperationCanceledException)
+        {
+            // 调用方取消：保持取消语义，不包装成 Error 文本返回
+            throw;
+        }
         catch (Exception e)
         {
             return $"Error:{e.Message}";
@@ -115,10 +124,15 @@ public class Terminal : IDisposable
         }
     }
 
-    /// <summary>逐行读取输出，直到行尾 marker 或取消（超时）</summary>
+    /// <summary>用单引号包裹并转义，使含空格/特殊字符的路径安全传给 shell</summary>
+    private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
+
+    /// <summary>逐行读取输出，直到行尾 marker 或取消（超时）；累积超过字节上限后停止累积并标记截断</summary>
     private static async Task<(string content, bool cancelled)> ReadUntilMarkerAsync(StreamReader reader, string endMarker, CancellationToken token)
     {
         var sb = new StringBuilder();
+        long byteCount = 0;
+        bool truncated = false;
         try
         {
             while (true)
@@ -126,6 +140,14 @@ public class Terminal : IDisposable
                 string? line = await reader.ReadLineAsync(token);
                 if (line == null) break;
                 if (line.Trim() == endMarker) break;
+                if (truncated) continue; // 超限后继续排空流（直到 marker），但不再累积
+                byteCount += Encoding.UTF8.GetByteCount(line) + 2; // 含换行
+                if (byteCount > MaxOutputBytes)
+                {
+                    truncated = true;
+                    sb.AppendLine($"\n…（输出超过 {MaxOutputBytes / (1024 * 1024)}MB，已截断）");
+                    continue;
+                }
                 sb.AppendLine(line);
             }
         }
@@ -142,7 +164,8 @@ public class Terminal : IDisposable
         {
             if (!_process.HasExited)
             {
-                _process.Kill();
+                // 终止整个进程树，确保 bash/sudo 派生的子进程一并终止（Windows 同样生效）
+                _process.Kill(entireProcessTree: true);
                 await _process.WaitForExitAsync();
                 return true;
             }
@@ -174,6 +197,7 @@ public class Terminal : IDisposable
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
         _isGotoHome = false;
+        _disposed = false;
         CreatedCount++;
     }
 
@@ -192,13 +216,23 @@ public class Terminal : IDisposable
 
     public void Dispose()
     {
-        if (_process != null)
+        if (_disposed)
         {
-            if (!_process.HasExited)
+            return; // 幂等：二次 Dispose 不再重复终止
+        }
+        _disposed = true;
+        try
+        {
+            if (_process != null && !_process.HasExited)
             {
-                _process.Kill();
+                // 终止整个进程树，确保子进程一并终止
+                _process.Kill(entireProcessTree: true);
             }
-            _process.Dispose();
+            _process?.Dispose();
+        }
+        catch
+        {
+            // 进程可能已退出或已被释放，忽略
         }
     }
 }

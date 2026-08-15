@@ -25,8 +25,14 @@ public class ResourceCountdown : IDisposable
     // 释放资源的回调函数
     private readonly Action _releaseCallback;
 
+    private readonly object _sync = new();
+    private bool _released;
+
     // 资源是否已释放的标志
-    public bool IsReleased { get; private set; }
+    public bool IsReleased
+    {
+        get { lock (_sync) { return _released; } }
+    }
 
     /// <summary>
     /// 构造函数
@@ -37,7 +43,6 @@ public class ResourceCountdown : IDisposable
     {
         TimeoutMilliseconds = timeoutMilliseconds;
         _releaseCallback = releaseCallback ?? throw new ArgumentNullException(nameof(releaseCallback));
-        IsReleased = false;
         // 初始化计时器
         _timer = new(TimeoutMilliseconds);
         _timer.Elapsed += OnTimerElapsed;
@@ -48,9 +53,12 @@ public class ResourceCountdown : IDisposable
     /// </summary>
     public void Start()
     {
-        // 启动计时器
-        _timer.Start();
-        IsReleased = false;
+        lock (_sync)
+        {
+            _released = false;
+            // 启动计时器
+            _timer.Start();
+        }
     }
 
     /// <summary>
@@ -58,13 +66,16 @@ public class ResourceCountdown : IDisposable
     /// </summary>
     public void UseResource()
     {
-        if (IsReleased)
+        lock (_sync)
         {
-            return;
+            if (_released)
+            {
+                return;
+            }
+            // 重置计时器
+            _timer.Stop();
+            _timer.Start();
         }
-
-        // 重置计时器
-        ResetTimer();
     }
 
     /// <summary>
@@ -72,31 +83,35 @@ public class ResourceCountdown : IDisposable
     /// </summary>
     public void ResetTimer()
     {
-        if (IsReleased)
+        lock (_sync)
         {
-            return;
+            if (_released)
+            {
+                return;
+            }
+            // 停止并重新启动计时器，重置倒计时
+            _timer.Stop();
+            _timer.Start();
         }
-
-        // 停止并重新启动计时器，重置倒计时
-        _timer.Stop();
-        _timer.Start();
     }
 
     /// <summary>
-    /// 手动释放资源
+    /// 手动释放资源（回调在锁外执行，避免回调与计时器交互时死锁）
     /// </summary>
     public void ReleaseResource()
     {
-        if (IsReleased)
+        lock (_sync)
         {
-            return;
+            if (_released)
+            {
+                return;
+            }
+            // 先标记已释放并停表，再调用回调；并发调用时只有第一次会执行回调
+            _released = true;
+            _timer.Stop();
         }
 
-        // 调用释放资源的回调函数
         _releaseCallback();
-
-        // 标记为已释放
-        IsReleased = true;
     }
 
     /// <summary>

@@ -25,7 +25,7 @@ Merry Bot
     {
         if (command?.Name == "about")
         {
-            _ = Bot.SendGroupMessage(data.GroupId, aboutMessage);
+            _ = Channel.SendGroupMessage(data.GroupId, aboutMessage);
         }
         return Task.CompletedTask;
     }

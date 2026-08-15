@@ -7,6 +7,8 @@ namespace BotPlugin;
 
 /// <summary>
 /// LiteDB-backed scheduler storage owned by the agent plugin namespace.
+/// 注意：claimLock 仅为进程内互斥；多实例部署（多个机器人进程共享同一数据库）时，
+/// 需要外部互斥（如分布式锁）保证同一任务不会同时被多个实例领取执行。
 /// </summary>
 internal sealed class PluginClockStore : IClockStore
 {

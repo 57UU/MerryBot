@@ -7,11 +7,13 @@ namespace BotPlugin;
 public class HeruiSaying : Plugin
 {
     private const string url = "https://the-brotherhood-of-scu.github.io/herui_saying_text/";
+    private static readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private List<string> sayings = new List<string>();
     private readonly ThreadLocal<Random> _randomWrapper = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
+    private readonly CancellationTokenSource _updateCts = new();
     public HeruiSaying(PluginInterop interop) : base(interop)
     {
-        AutoUpdate();
+        _ = AutoUpdateAsync();
     }
     public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage data)
     {
@@ -19,7 +21,7 @@ public class HeruiSaying : Plugin
         {
             return Task.CompletedTask;
         }
-        _ = Bot.SendGroupMessage(data.GroupId, PickOne());
+        _ = Channel.SendGroupMessage(data.GroupId, PickOne());
         return Task.CompletedTask;
     }
     private string PickOne()
@@ -31,14 +33,35 @@ public class HeruiSaying : Plugin
         int index = _randomWrapper.Value!.Next(sayings.Count);
         return $"{sayings[index]}\n--Herui--[{index}/{sayings.Count}]";
     }
-    private async void AutoUpdate()
+    private async Task AutoUpdateAsync()
     {
-        while (true)
+        while (!_updateCts.IsCancellationRequested)
         {
-            await Update();
-            Logger.Info("data loaded");
-            await Task.Delay(1000 * 60 * 60);//update every 1 hour
+            try
+            {
+                await Update();
+                Logger.Info("data loaded");
+            }
+            catch (Exception ex)
+            {
+                //循环内异常只记日志，保证定时更新不中断
+                Logger.Warn($"herui saying update failed: {ex.Message}");
+            }
+            try
+            {
+                await Task.Delay(1000 * 60 * 60, _updateCts.Token);//update every 1 hour
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
         }
+    }
+    public override void Dispose()
+    {
+        _updateCts.Cancel();
+        _updateCts.Dispose();
+        base.Dispose();
     }
     private async Task Update()
     {
@@ -55,8 +78,7 @@ public class HeruiSaying : Plugin
     {
         try
         {
-            var text = await Bot.HttpGetText(url);
-            return text;
+            return await httpClient.GetStringAsync(url);
         }
         catch (Exception e)
         {

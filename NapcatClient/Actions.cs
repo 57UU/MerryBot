@@ -11,7 +11,9 @@ public class Actions
     WebsocketClient WebSocket => webSocketService.WebSocket;
     private readonly ISimpleLogger Logger;
     private readonly WebSocketService webSocketService;
-    private readonly Func<long> getSelfId;
+    public long? SelfId { get; private set; }
+    public string? Nickname { get; private set; }
+
     private static readonly HttpClient _httpClient = new HttpClient();
     private readonly RequestCaching requestCaching = new(TimeSpan.FromMinutes(1));
     private readonly ConcurrentDictionary<string, object> _inflightRequests = new();
@@ -43,11 +45,10 @@ public class Actions
     public Task<byte[]> HttpGetBinary(string url) => HttpGetCached(url, "http-bin", c => c.ReadAsByteArrayAsync());
     public Task<string> HttpGetText(string url) => HttpGetCached(url, "http-text", c => c.ReadAsStringAsync());
 
-    public Actions(ISimpleLogger logger, WebSocketService webSocketService, Func<long> getSelfId)
+    public Actions(ISimpleLogger logger, WebSocketService webSocketService)
     {
         Logger = logger;
         this.webSocketService = webSocketService;
-        this.getSelfId = getSelfId;
     }
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ResponseRootObject>> _pendingResponses = new();
@@ -56,7 +57,7 @@ public class Actions
     {
         return _SendAction(act.ToAct(), cacheKey, expiration);
     }
-    private static string ConstraintLength(string s, int lengthConstraint=1000, string prompt = "...")
+    private static string ConstraintLength(string s, int lengthConstraint = 1000, string prompt = "...")
     {
         if (s.Length > lengthConstraint)
         {
@@ -86,6 +87,8 @@ public class Actions
             var json = BotUtils.Serialize(act);
             Logger.Debug($"sending: {ConstraintLength(json)}]");
 
+            // Websocket.Client 的 Send(string) 为同步阻塞调用（底层同步写流），
+            // 保留 Task.Run 以避免阻塞消息接收线程
             await Task.Run(() => WebSocket.Send(json));
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -93,7 +96,8 @@ public class Actions
             {
                 var result = await tcs.Task;
 
-                if (cacheKey != null)
+                // 仅缓存成功响应，失败响应不写入缓存，避免短暂故障被缓存放大
+                if (cacheKey != null && result.Status == "ok")
                 {
                     requestCaching.SetCache(cacheKey, result, expiration);
                 }
@@ -205,6 +209,20 @@ public class Actions
         else
         {
             return ReplyGroupMessageWithMention(groupId, qq, text);
+        }
+    }
+    private async Task<long> getSelfId()
+    {
+        if (SelfId.HasValue)
+        {
+            return SelfId.Value;
+        }
+        else
+        {
+            var result = await GetAccountInfo();
+            SelfId = result.userId;
+            Nickname = result.nickname;
+            return SelfId.Value;
         }
     }
     /// <summary>

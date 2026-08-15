@@ -18,13 +18,33 @@ internal partial class Logic
                 continue;
             }
 
-            if (i.Interop.Interceptors.Any(interceptor => interceptor(data)))
+            if (IsInterceptorActive(i, data))
             {
                 continue;
             }
             var pluginChain = messageChain.Select(message => message.Clone()).ToList();
             _ = InvokePluginAsync(i, isMentioned, command, pluginChain, data);
         }
+    }
+
+    /// <summary>逐个执行插件的拦截器；单个拦截器抛异常时记录日志并继续，不中断整条拦截链与消息分发。</summary>
+    private bool IsInterceptorActive(PluginInfo plugin, ReceivedGroupMessage data)
+    {
+        foreach (var interceptor in plugin.Interop.Interceptors)
+        {
+            try
+            {
+                if (interceptor(data))
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Warn(ex, "插件拦截器执行失败: {0}", plugin.PluginTag.Id);
+            }
+        }
+        return false;
     }
 
     private async Task InvokePluginAsync(PluginInfo plugin, bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, ReceivedGroupMessage raw)

@@ -13,6 +13,11 @@ namespace Agent.Tools;
 /// </summary>
 public class TodoListToolSet : ToolSet
 {
+    /// <summary>清单条目数上限，防模型一次性写入海量条目</summary>
+    private const int MaxTodoItems = 500;
+    /// <summary>单条标题长度上限（字符）</summary>
+    private const int MaxTitleLength = 500;
+
     private readonly ToolSetBridge bridge;
     private readonly object gate = new();
     private List<TodoItem> items = [];
@@ -56,11 +61,19 @@ public class TodoListToolSet : ToolSet
         {
             if (args.todos != null)
             {
+                if (args.todos.Count > MaxTodoItems)
+                {
+                    throw new ArgumentException($"待办清单最多 {MaxTodoItems} 项。");
+                }
                 foreach (var item in args.todos)
                 {
                     if (string.IsNullOrWhiteSpace(item.title))
                     {
                         throw new ArgumentException("todos 中每项的 title 不能为空");
+                    }
+                    if (item.title.Length > MaxTitleLength)
+                    {
+                        throw new ArgumentException($"todos 中每项的 title 不能超过 {MaxTitleLength} 字符");
                     }
                 }
                 items = args.todos; // 整体替换；空数组即清空

@@ -5,25 +5,13 @@ namespace MerryBot;
 
 internal partial class Logic : IGroupManager
 {
-    /// <summary>直接返回 core 配置中的启用群列表；消息过滤（QqGroupIDs）读取同一 List 实例，改动即时生效。</summary>
-    public IReadOnlyList<long> GetEnabledGroupIds() => ConfigManager.Instance.QqGroups;
+    /// <summary>返回启用群列表的线程安全快照；消息过滤读取同一数据源，改动即时生效。</summary>
+    public IReadOnlyList<long> GetEnabledGroupIds() => ConfigManager.GetGroupIdsSnapshot();
 
-    public Task AddGroupAsync(long groupId)
-    {
-        var groups = ConfigManager.Instance.QqGroups;
-        if (groups.Contains(groupId))
-        {
-            return Task.CompletedTask;
-        }
-        groups.Add(groupId);
-        return ConfigManager.Save();
-    }
+    /// <summary>群组变更走 ConfigManager 的锁与序列化路径（与 WebUI 配置保存共用），避免并发竞争。</summary>
+    public Task AddGroupAsync(long groupId) => ConfigManager.AddGroupAsync(groupId);
 
-    public Task RemoveGroupAsync(long groupId)
-    {
-        var groups = ConfigManager.Instance.QqGroups;
-        return groups.Remove(groupId) ? ConfigManager.Save() : Task.CompletedTask;
-    }
+    public Task RemoveGroupAsync(long groupId) => ConfigManager.RemoveGroupAsync(groupId);
 
     /// <summary>群名缓存缺失时（通常是未启用过的群）实时从 napcat 查询，成功则写回缓存。</summary>
     public async Task<GroupNameInfoDto?> ResolveGroupNameAsync(long groupId)

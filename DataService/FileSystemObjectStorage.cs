@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
+
 namespace DataService;
 
 public class FileSystemObjectStorage : IObjectStorage
 {
     private readonly string _basePath;
+    private readonly ConcurrentDictionary<string, string> _bucketPathCache = new();
     private bool _disposed;
 
     public FileSystemObjectStorage(string basePath)
@@ -14,18 +17,52 @@ public class FileSystemObjectStorage : IObjectStorage
         }
     }
 
+    /// <summary>
+    /// 校验 bucket 名称：拒绝空值、绝对路径与路径穿越（..）。
+    /// </summary>
+    private static void ValidateBucket(string bucket)
+    {
+        if (string.IsNullOrWhiteSpace(bucket))
+        {
+            throw new ArgumentException("bucket 不能为空", nameof(bucket));
+        }
+        if (Path.IsPathRooted(bucket) || bucket.Contains("..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"非法的 bucket 名称: {bucket}", nameof(bucket));
+        }
+    }
+
+    /// <summary>
+    /// 校验 bucket 与 key：拒绝空值、绝对路径与路径穿越（..）。
+    /// </summary>
+    private static void ValidateKey(string bucket, string key)
+    {
+        ValidateBucket(bucket);
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ArgumentException("key 不能为空", nameof(key));
+        }
+        if (Path.IsPathRooted(key) || key.Contains("..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"非法的 key: {key}", nameof(key));
+        }
+    }
+
     private string GetBucketPath(string bucket)
     {
-        var bucketPath = Path.Combine(_basePath, bucket);
-        if (!Directory.Exists(bucketPath))
+        ValidateBucket(bucket);
+        // 缓存 bucket 目录路径，避免高频读路径重复 Directory.Exists/CreateDirectory
+        return _bucketPathCache.GetOrAdd(bucket, b =>
         {
+            var bucketPath = Path.Combine(_basePath, b);
             Directory.CreateDirectory(bucketPath);
-        }
-        return bucketPath;
+            return bucketPath;
+        });
     }
 
     public string GetPath(string bucket, string key)
     {
+        ValidateKey(bucket, key);
         return Path.Combine(GetBucketPath(bucket), key);
     }
 
@@ -37,7 +74,25 @@ public class FileSystemObjectStorage : IObjectStorage
         {
             Directory.CreateDirectory(directory);
         }
-        await File.WriteAllBytesAsync(filePath, data);
+        // 先写同目录临时文件再原子替换，避免读取方看到半写状态；失败时清理临时文件
+        var tempPath = filePath + ".tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, data);
+            File.Move(tempPath, filePath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+                // 忽略临时文件清理失败
+            }
+            throw;
+        }
         return filePath;
     }
 

@@ -1,10 +1,6 @@
 using System.Text.Json;
 
 namespace LlmBackend;
-public enum BackendType
-{
-    ChatCompletion,
-}
 
 /// <summary>模型的输入和推理能力，与具体 Provider 或客户端重试策略无关。</summary>
 [Flags]
@@ -19,6 +15,15 @@ public enum LlmModelCapabilities
     StructuredOutput = 1 << 5,
 }
 
+/// <summary>请求超时的默认值，未在 LlmOptions 中指定时生效。</summary>
+public static class LlmDefaults
+{
+    /// <summary>发送请求到收到响应头（首字节）的超时</summary>
+    public static readonly TimeSpan TimeToFirstByte = TimeSpan.FromSeconds(60);
+    /// <summary>整个生成过程（含响应体读取）的总超时上限</summary>
+    public static readonly TimeSpan TotalGeneration = TimeSpan.FromMinutes(5);
+}
+
 public interface Backend
 {
     public Task<(GenerateResponse, TokenUsage)> Generate(CancellationToken cancellationToken, IList<Message> messages, string systemPrompt, LlmOptions options);
@@ -30,7 +35,9 @@ public record LlmOptions(
     int? MaxTokens = null,
     IEnumerable<ToolDef>? Tools = null,
     IDictionary<string, object>? ExtraBody = null,
-    string? ReasoningEffort = null
+    string? ReasoningEffort = null,
+    TimeSpan? TimeToFirstByte = null,
+    TimeSpan? TotalTimeout = null
     );
 public class GenerateResponse
 {

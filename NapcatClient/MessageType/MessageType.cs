@@ -206,7 +206,11 @@ public class FaceData : TypedMessage
     }
     public string ToChinese()
     {
-        return QqFace.GetFace(int.Parse(Id));
+        if (int.TryParse(Id, out var faceId))
+        {
+            return QqFace.GetFace(faceId);
+        }
+        return string.Empty;
     }
 }
 

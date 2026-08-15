@@ -12,12 +12,9 @@ namespace BotPlugin;
 public abstract class Plugin : IDisposable
 {
     /// <summary>
-    /// 动作类，用于发送消息等
-    /// </summary>
-    protected Actions Bot { get; set; }
-    /// <summary>
     /// 当为假时，OnMessageReceived函数永远不会被调用
     /// </summary>
+    /// <remarks>当前没有任何插件或宿主代码将 IsEnable 置为 false（无停用/停用命令机制），恒为 true。</remarks>
     public bool IsEnable { get; internal set; } = true;
     /// <summary>
     /// 当前工作范围，在哪些QQ群工作
@@ -32,16 +29,21 @@ public abstract class Plugin : IDisposable
     /// </summary>
     protected readonly PluginInterop Interop;
     /// <summary>
+    /// 群消息发送通道
+    /// </summary>
+    protected readonly MessageChannel Channel;
+    /// <summary>
     /// 初始化插件设置，设置互操作性
     /// </summary>
     /// <param name="interop">互操作性</param>
+    /// <param name="channel">群消息发送通道</param>
     public Plugin(PluginInterop interop)
     {
 
         this.Logger = interop.Logger;
         this.GroupId = interop.GroupId;
         this.Interop = interop;
-        Bot = interop.Bot;
+        Channel = interop.Channel;
     }
     public virtual Task OnGroupMessageAsync(
         bool isMentioned,

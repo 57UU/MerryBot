@@ -34,11 +34,19 @@ public sealed class PluginDatabaseScope
     public Task<bool> DropCollectionAsync(string name)
         => _database.DropCollectionAsync(GetPhysicalCollectionName(name));
 
+    /// <summary>编码后的集合名长度上限（字符数），防止异常名称导致物理集合名过长。</summary>
+    private const int MaxCollectionNameLength = 100;
+
     private string GetPhysicalCollectionName(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var encodedPluginId = Encode(PluginId);
-        return $"plugin_{encodedPluginId.Length}_{encodedPluginId}_{Encode(name)}";
+        var encodedName = Encode(name);
+        if (encodedName.Length > MaxCollectionNameLength)
+        {
+            throw new ArgumentException($"集合名过长：编码后 {encodedName.Length} 个字符，超过上限 {MaxCollectionNameLength}", nameof(name));
+        }
+        return $"plugin_{encodedPluginId.Length}_{encodedPluginId}_{encodedName}";
     }
 
     private static string Encode(string value)

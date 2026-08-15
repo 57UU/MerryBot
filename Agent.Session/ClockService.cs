@@ -1,3 +1,4 @@
+using CommonLib;
 using Cronos;
 
 namespace Agent.Session;
@@ -48,10 +49,23 @@ public sealed class ClockService : IAsyncDisposable
             var loaded = await _store.LoadAllAsync(cancellationToken);
             foreach (var loadedTask in loaded)
             {
-                ValidateStoredTask(loadedTask);
-                var task = loadedTask.Clone();
-                _tasks[task.Id] = task;
-                await ReconcileLoadedTaskAsync(task, now, cancellationToken);
+                try
+                {
+                    ValidateStoredTask(loadedTask);
+                    var task = loadedTask.Clone();
+                    _tasks[task.Id] = task;
+                    await ReconcileLoadedTaskAsync(task, now, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw; // 启动被取消：不吞掉
+                }
+                catch (Exception ex)
+                {
+                    // 单个坏任务不影响其余任务加载：记日志并跳过
+                    ConsoleLogger.Instance.Warn($"加载定时任务失败，已跳过: {loadedTask.Id} - {ex.Message}");
+                    _tasks.Remove(loadedTask.Id);
+                }
             }
 
             _started = true;
@@ -210,6 +224,7 @@ public sealed class ClockService : IAsyncDisposable
             if (request.CronExpression != null)
             {
                 task.CronExpression = ClockSchedule.Normalize(request.CronExpression);
+                task.ParsedCron = null; // 表达式已变更，失效解析缓存
                 scheduleChanged = true;
             }
             if (request.TimeZoneId != null)
@@ -306,34 +321,46 @@ public sealed class ClockService : IAsyncDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            DateTimeOffset? nextRun;
-            await _stateLock.WaitAsync(cancellationToken);
             try
             {
-                nextRun = _tasks.Values
-                    .Where(x => x.Enabled && x.NextRunAtUtc.HasValue)
-                    .Select(x => x.NextRunAtUtc)
-                    .Min();
-            }
-            finally
-            {
-                _stateLock.Release();
-            }
+                DateTimeOffset? nextRun;
+                await _stateLock.WaitAsync(cancellationToken);
+                try
+                {
+                    nextRun = _tasks.Values
+                        .Where(x => x.Enabled && x.NextRunAtUtc.HasValue)
+                        .Select(x => x.NextRunAtUtc)
+                        .Min();
+                }
+                finally
+                {
+                    _stateLock.Release();
+                }
 
-            if (nextRun == null)
-            {
-                await WaitForSignalOrDelayAsync(TimeSpan.FromMinutes(1), cancellationToken);
-                continue;
-            }
+                if (nextRun == null)
+                {
+                    await WaitForSignalOrDelayAsync(TimeSpan.FromMinutes(1), cancellationToken);
+                    continue;
+                }
 
-            var delay = nextRun.Value - _timeProvider.GetUtcNow();
-            if (delay > TimeSpan.Zero)
-            {
-                await WaitForSignalOrDelayAsync(delay, cancellationToken);
-                continue;
-            }
+                var delay = nextRun.Value - _timeProvider.GetUtcNow();
+                if (delay > TimeSpan.Zero)
+                {
+                    await WaitForSignalOrDelayAsync(delay, cancellationToken);
+                    continue;
+                }
 
-            await DispatchDueTasksAsync(cancellationToken);
+                await DispatchDueTasksAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break; // 正常停止
+            }
+            catch (Exception ex)
+            {
+                // 调度循环兜底：单次异常（存储/解析等）不杀死调度器，记录后继续下一轮
+                ConsoleLogger.Instance.Error($"调度循环异常: {ex}");
+            }
         }
     }
 
@@ -362,11 +389,43 @@ public sealed class ClockService : IAsyncDisposable
                 return;
             }
 
-            await ClaimAndStartAsync(task, now, cancellationToken);
+            try
+            {
+                await ClaimAndStartAsync(task, now, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 单个任务失败（GetNextOccurrence/存储操作）记日志并跳过，循环继续
+                ConsoleLogger.Instance.Warn($"定时任务调度失败，已跳过 {task.Id}: {ex.Message}");
+            }
         }
     }
 
     private async Task ClaimAndStartAsync(
+        ClockTask task,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ClaimAndStartCoreAsync(task, now, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // 停机/取消：不当作任务失败
+        }
+        catch (Exception ex)
+        {
+            // 单个任务异常（GetNextOccurrence/存储操作）记日志并跳过，调度循环继续
+            ConsoleLogger.Instance.Warn($"定时任务领取失败，已跳过 {task.Id}: {ex.Message}");
+        }
+    }
+
+    private async Task ClaimAndStartCoreAsync(
         ClockTask task,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -538,7 +597,9 @@ public sealed class ClockService : IAsyncDisposable
 
     private DateTimeOffset GetNextOccurrence(ClockTask task, DateTimeOffset fromUtc)
     {
-        var expression = CronExpression.Parse(task.CronExpression, CronFormat.Standard);
+        // 缓存 CronExpression 解析结果，避免每次调度重复解析
+        var expression = task.ParsedCron
+            ??= CronExpression.Parse(task.CronExpression, CronFormat.Standard);
         var timezone = ResolveTimeZone(task.TimeZoneId);
         return expression.GetNextOccurrence(fromUtc, timezone)
             ?? throw new InvalidOperationException("Cron 表达式没有可计算的下一次执行时间");
@@ -572,17 +633,26 @@ public sealed class ClockService : IAsyncDisposable
 
         using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var signalTask = _wakeSignal.WaitAsync(waitCancellation.Token);
-        var delayTask = Task.Delay(delay, _timeProvider, cancellationToken);
-        var winner = await Task.WhenAny(signalTask, delayTask);
-        if (winner == signalTask)
+        // Task.Delay 单次上限约 49.7 天（int.MaxValue 毫秒）：拆成不超过 24 小时的片段，
+        // 每段都与信号竞争，信号到来立即退出。
+        while (delay > TimeSpan.Zero)
         {
-            await signalTask;
+            var chunk = delay > TimeSpan.FromHours(24) ? TimeSpan.FromHours(24) : delay;
+            var delayTask = Task.Delay(chunk, _timeProvider, cancellationToken);
+            var winner = await Task.WhenAny(signalTask, delayTask);
+            if (winner == signalTask)
+            {
+                await signalTask;
+                return;
+            }
+            if (delayTask.IsCanceled)
+            {
+                break; // 外部取消：结束等待，由调度循环退出
+            }
+            delay -= chunk;
         }
-        else
-        {
-            waitCancellation.Cancel();
-            await IgnoreCancellationAsync(signalTask);
-        }
+        waitCancellation.Cancel();
+        await IgnoreCancellationAsync(signalTask);
     }
 
     private void SignalScheduler()
@@ -654,6 +724,62 @@ public sealed class ClockService : IAsyncDisposable
         return timeoutSeconds;
     }
 
+    private static readonly IReadOnlyDictionary<string, string> IanaToWindowsTimeZones =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["UTC"] = "UTC",
+            ["Etc/UTC"] = "UTC",
+            ["Etc/GMT"] = "GMT Standard Time",
+            ["Asia/Shanghai"] = "China Standard Time",
+            ["Asia/Chongqing"] = "China Standard Time",
+            ["Asia/Harbin"] = "China Standard Time",
+            ["Asia/Hong_Kong"] = "China Standard Time",
+            ["Asia/Macau"] = "China Standard Time",
+            ["Asia/Taipei"] = "Taipei Standard Time",
+            ["Asia/Seoul"] = "Korea Standard Time",
+            ["Asia/Tokyo"] = "Tokyo Standard Time",
+            ["Asia/Singapore"] = "Singapore Standard Time",
+            ["Asia/Kolkata"] = "India Standard Time",
+            ["Asia/Bangkok"] = "SE Asia Standard Time",
+            ["Asia/Jakarta"] = "SE Asia Standard Time",
+            ["Asia/Dubai"] = "Arabian Standard Time",
+            ["Asia/Tehran"] = "Iran Standard Time",
+            ["Asia/Jerusalem"] = "Israel Standard Time",
+            ["Europe/London"] = "GMT Standard Time",
+            ["Europe/Paris"] = "W. Europe Standard Time",
+            ["Europe/Berlin"] = "W. Europe Standard Time",
+            ["Europe/Rome"] = "W. Europe Standard Time",
+            ["Europe/Amsterdam"] = "W. Europe Standard Time",
+            ["Europe/Zurich"] = "W. Europe Standard Time",
+            ["Europe/Vienna"] = "W. Europe Standard Time",
+            ["Europe/Madrid"] = "Romance Standard Time",
+            ["Europe/Brussels"] = "Romance Standard Time",
+            ["Europe/Stockholm"] = "W. Europe Standard Time",
+            ["Europe/Warsaw"] = "Central European Standard Time",
+            ["Europe/Prague"] = "Central European Standard Time",
+            ["Europe/Athens"] = "GTB Standard Time",
+            ["Europe/Helsinki"] = "FLE Standard Time",
+            ["Europe/Moscow"] = "Russian Standard Time",
+            ["America/New_York"] = "Eastern Standard Time",
+            ["America/Chicago"] = "Central Standard Time",
+            ["America/Denver"] = "Mountain Standard Time",
+            ["America/Los_Angeles"] = "Pacific Standard Time",
+            ["America/Phoenix"] = "US Mountain Standard Time",
+            ["America/Anchorage"] = "Alaskan Standard Time",
+            ["America/Toronto"] = "Eastern Standard Time",
+            ["America/Vancouver"] = "Pacific Standard Time",
+            ["America/Sao_Paulo"] = "E. South America Standard Time",
+            ["America/Mexico_City"] = "Central Standard Time (Mexico)",
+            ["America/Bogota"] = "SA Pacific Standard Time",
+            ["America/Lima"] = "SA Pacific Standard Time",
+            ["America/Argentina/Buenos_Aires"] = "Argentina Standard Time",
+            ["Australia/Sydney"] = "AUS Eastern Standard Time",
+            ["Australia/Melbourne"] = "AUS Eastern Standard Time",
+            ["Australia/Perth"] = "W. Australia Standard Time",
+            ["Pacific/Auckland"] = "New Zealand Standard Time",
+            ["Pacific/Honolulu"] = "Hawaiian Standard Time",
+        };
+
     private static TimeZoneInfo ResolveTimeZone(string? timezoneId)
     {
         var id = NormalizeTimeZoneId(timezoneId);
@@ -661,10 +787,37 @@ public sealed class ClockService : IAsyncDisposable
         {
             return TimeZoneInfo.FindSystemTimeZoneById(id);
         }
-        catch (TimeZoneNotFoundException) when (id.Equals("Asia/Shanghai", StringComparison.OrdinalIgnoreCase))
+        catch (TimeZoneNotFoundException)
         {
-            return TimeZoneInfo.FindSystemTimeZoneById("China Standard Time");
+            return ResolveTimeZoneByWindowsName(id);
         }
+        catch (InvalidTimeZoneException)
+        {
+            return ResolveTimeZoneByWindowsName(id);
+        }
+    }
+
+    /// <summary>
+    /// Windows 缺少 IANA 时区数据时，按常见等价名映射表查找 Windows 时区；
+    /// 仍失败则回退 UTC 并记日志。
+    /// </summary>
+    private static TimeZoneInfo ResolveTimeZoneByWindowsName(string ianaId)
+    {
+        if (IanaToWindowsTimeZones.TryGetValue(ianaId, out var windowsId))
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+        ConsoleLogger.Instance.Warn($"未找到时区 {ianaId}，回退到 UTC");
+        return TimeZoneInfo.Utc;
     }
 
     private static string NormalizeTimeZoneId(string? timezoneId)
@@ -675,6 +828,7 @@ public sealed class ClockService : IAsyncDisposable
     private static void ValidateStoredTask(ClockTask task)
     {
         _ = ClockSchedule.Normalize(task.CronExpression);
+        task.ParsedCron = CronExpression.Parse(task.CronExpression, CronFormat.Standard); // 加载时解析一次并缓存
         _ = ResolveTimeZone(task.TimeZoneId);
         _ = RequireContent(task.Content);
         _ = ValidateTrigger(task.Trigger);

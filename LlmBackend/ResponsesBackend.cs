@@ -14,8 +14,8 @@ namespace LlmBackend;
 /// </summary>
 public class ResponsesBackend : Backend
 {
-    private static readonly HttpClient Client = new();
-    private static readonly SemaphoreSlim _semaphore = new(5, 5);
+    // 超时全部由 LlmOptions 的两段 CTS 控制（首字节 + 总时长），HttpClient 本身不设超时
+    private static readonly HttpClient Client = new() { Timeout = Timeout.InfiniteTimeSpan };
     private static readonly JsonSerializerOptions RequestJsonOptions = new()
     {
         IncludeFields = true,
@@ -67,44 +67,43 @@ public class ResponsesBackend : Backend
 
         string jsonData = JsonSerializer.Serialize(requestBody, RequestJsonOptions);
 
-        await _semaphore.WaitAsync(cancellationToken);
         string responseBody;
+        // 两段超时：发送到响应头（首字节）由 ttfbCts 控制，响应体读取受 totalCts 总时长约束；
+        // 超时映射为不可重试的 RequestTimeoutException，避免 LLM 非幂等请求超时重试造成双倍计费
+        using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.TotalGeneration);
+        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
+        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
             request.Headers.Authorization = new("Bearer", _apiKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            try
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
             {
-                using var response = await Client.SendAsync(request, cancellationToken);
-                responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw BackendErrors.Map(responseBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
-                }
-            }
-            catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new NetworkException("Responses API 请求超时", e);
-            }
-            catch (HttpRequestException e)
-            {
-                throw new NetworkException($"Responses API 网络错误: {e.Message}", e);
+                throw BackendErrors.Map(responseBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
             }
         }
-        finally
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
-            _semaphore.Release();
+            throw new RequestTimeoutException("Responses API 请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"Responses API 网络错误: {e.Message}", e);
         }
 
         var json = JsonSerializer.Deserialize<ResponsesResponse>(responseBody)
-            ?? throw new HttpRequestException($"Responses API 返回了无法解析的响应: {responseBody}");
+            ?? throw new InvalidResponseException($"Responses API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
         if (json.Output == null)
         {
-            throw new HttpRequestException($"Responses API 返回空 output: {responseBody}");
+            throw new InvalidResponseException($"Responses API 返回空 output: {BackendErrors.Shorten(responseBody)}");
         }
 
         var textBuilder = new StringBuilder();
+        var reasoningBuilder = new StringBuilder();
         var toolCalls = new List<ToolCall>();
         foreach (var item in json.Output)
         {
@@ -122,13 +121,27 @@ public class ResponsesBackend : Backend
                 case "function_call":
                     toolCalls.Add(new ToolCall(item.CallId ?? "", item.Name ?? "", item.Arguments ?? ""));
                     break;
+                case "reasoning":
+                    // 深度思考摘要：对齐 ChatCompletionBackend 的 reasoning_content 行为
+                    foreach (var summary in item.Summary ?? [])
+                    {
+                        if (summary is { Type: "summary_text" } && !string.IsNullOrEmpty(summary.Text))
+                        {
+                            reasoningBuilder.Append(summary.Text);
+                        }
+                    }
+                    break;
+                default:
+                    // 未知输出类型不静默：记录便于排查，条目本身跳过
+                    Console.Error.WriteLine($"[LlmBackend] Responses API 未知输出类型: {item.Type}");
+                    break;
             }
         }
 
         var result = new GenerateResponse(
             textBuilder.Length > 0 ? textBuilder.ToString() : null,
             toolCalls.Count > 0 ? [.. toolCalls] : null,
-            reasoningContent: null);
+            reasoningContent: reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
         var usage = json.Usage ?? new ResponsesUsage();
         return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
     }
@@ -243,6 +256,10 @@ internal class ResponsesOutputItem
 
     [JsonPropertyName("content")]
     public List<ResponsesContentPart>? Content { get; set; }
+
+    /// <summary>reasoning 条目的摘要数组（元素为 summary_text）</summary>
+    [JsonPropertyName("summary")]
+    public List<ResponsesContentPart>? Summary { get; set; }
 }
 
 internal class ResponsesContentPart

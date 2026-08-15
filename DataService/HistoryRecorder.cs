@@ -38,19 +38,56 @@ public class HistoryRecorder : IDisposable
 
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
 
-        _ = messagesCollection.EnsureIndexAsync(x => x.GroupId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.SenderId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.MessageId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.Time);
-        _ = imageBedCollection.EnsureIndexAsync(x => x.Hash);
-        _ = fileBedCollection.EnsureIndexAsync(x => x.Hash);
-        _ = eventsCollection.EnsureIndexAsync(x => x.GroupId);
-        _ = eventsCollection.EnsureIndexAsync(x => x.EventType);
-        _ = eventsCollection.EnsureIndexAsync(x => x.Time);
-        _ = forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId);
-        _ = groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime);
-        _ = aiMessagesCollection.EnsureIndexAsync(x => x.SessionKey);
-        _ = resourceReferencesCollection.EnsureIndexAsync(x => x.Kind);
+        // 同步等待索引创建完成：避免 fire-and-forget 产生未观察异常，也保证首个查询即命中索引
+        EnsureIndexesAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// 创建全部索引（含图片/文件 hash 唯一索引）；失败只记日志不抛出，避免历史数据问题导致启动失败。
+    /// </summary>
+    private async Task EnsureIndexesAsync()
+    {
+        var tasks = new Task[]
+        {
+            messagesCollection.EnsureIndexAsync(x => x.GroupId),
+            messagesCollection.EnsureIndexAsync(x => x.SenderId),
+            messagesCollection.EnsureIndexAsync(x => x.MessageId),
+            messagesCollection.EnsureIndexAsync(x => x.Time),
+            eventsCollection.EnsureIndexAsync(x => x.GroupId),
+            eventsCollection.EnsureIndexAsync(x => x.EventType),
+            eventsCollection.EnsureIndexAsync(x => x.Time),
+            forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId),
+            groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime),
+            aiMessagesCollection.EnsureIndexAsync(x => x.SessionKey),
+            resourceReferencesCollection.EnsureIndexAsync(x => x.Kind),
+        };
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] 部分索引创建失败（查询性能可能下降）: {ex.GetBaseException().Message}");
+        }
+
+        // hash 唯一索引：已有历史重复数据时创建会失败，只记日志；
+        // 唯一索引缺失期间由 RecordImageAsync/RecordFileAsync 的幂等兜底处理并发写入。
+        try
+        {
+            await imageBedCollection.EnsureIndexAsync(x => x.Hash, true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] images.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+        }
+        try
+        {
+            await fileBedCollection.EnsureIndexAsync(x => x.Hash, true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+        }
     }
 
     private long GenerateId()
@@ -272,6 +309,7 @@ public class HistoryRecorder : IDisposable
 
     public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int page, int pageSize)
     {
+        page = Math.Max(1, page);
         var skip = (page - 1) * pageSize;
         return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId)
@@ -329,7 +367,27 @@ public class HistoryRecorder : IDisposable
         var id = GenerateId();
         await _objectStorage.StoreAsync(ImageBucket, hash, data);
         var imageEntry = new ImageEntry(id, originalUrl, hash);
-        await imageBedCollection.InsertAsync(imageEntry);
+        try
+        {
+            await imageBedCollection.InsertAsync(imageEntry);
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            // 唯一索引竞争：并发写入已插入同 hash 条目；删除刚落盘文件并返回已有条目，避免孤儿文件
+            existingImage = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
+            if (existingImage != null)
+            {
+                await _objectStorage.DeleteAsync(ImageBucket, hash);
+                return existingImage;
+            }
+            throw;
+        }
+        catch
+        {
+            // 数据库插入失败：删除已落盘文件，保持文件与数据库一致
+            try { await _objectStorage.DeleteAsync(ImageBucket, hash); } catch { }
+            throw;
+        }
         return imageEntry;
     }
 
@@ -357,7 +415,27 @@ public class HistoryRecorder : IDisposable
         var id = GenerateId();
         await _objectStorage.StoreAsync(FileBucket, hash, data);
         var fileEntry = new FileEntry(id, originalUrl, hash);
-        await fileBedCollection.InsertAsync(fileEntry);
+        try
+        {
+            await fileBedCollection.InsertAsync(fileEntry);
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            // 唯一索引竞争：并发写入已插入同 hash 条目；删除刚落盘文件并返回已有条目，避免孤儿文件
+            existingFile = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
+            if (existingFile != null)
+            {
+                await _objectStorage.DeleteAsync(FileBucket, hash);
+                return existingFile;
+            }
+            throw;
+        }
+        catch
+        {
+            // 数据库插入失败：删除已落盘文件，保持文件与数据库一致
+            try { await _objectStorage.DeleteAsync(FileBucket, hash); } catch { }
+            throw;
+        }
         return fileEntry;
     }
 
@@ -382,6 +460,9 @@ public class HistoryRecorder : IDisposable
     }
 
     private readonly RequestCaching requestCaching = new(TimeSpan.FromHours(24));
+    // 命中与未命中分开过期：查无结果 1 小时后重试，避免长时间缓存“不存在”
+    private static readonly TimeSpan CacheHitExpiration = TimeSpan.FromHours(24);
+    private static readonly TimeSpan CacheMissExpiration = TimeSpan.FromHours(1);
 
     public async Task<ImageEntry?> GetImageByHashAsync(string hash)
     {
@@ -391,7 +472,7 @@ public class HistoryRecorder : IDisposable
             return cachedImage;
         }
         var image = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
-        requestCaching.SetCache(cacheKey, image);
+        requestCaching.SetCache(cacheKey, image, image == null ? CacheMissExpiration : CacheHitExpiration);
         return image;
     }
 
@@ -403,7 +484,7 @@ public class HistoryRecorder : IDisposable
             return cachedFile;
         }
         var file = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
-        requestCaching.SetCache(cacheKey, file);
+        requestCaching.SetCache(cacheKey, file, file == null ? CacheMissExpiration : CacheHitExpiration);
         return file;
     }
 
@@ -671,6 +752,7 @@ public class HistoryRecorder : IDisposable
 
     public async Task<List<AiMessageEntry>> GetAiMessagesBySessionKeyAsync(string sessionKey, int page = 1, int pageSize = 50)
     {
+        page = Math.Max(1, page);
         var skip = (page - 1) * pageSize;
         return await aiMessagesCollection.Query()
             .Where(x => x.SessionKey == sessionKey)

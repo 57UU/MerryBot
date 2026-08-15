@@ -79,12 +79,12 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
-    Actions Bot,
     Action<int> Shutdown,
     long AuthorizedUser,
     string PathPrefix,
     EventRegister EventRegister,
-    IMessageService MessageService
+    IMessageService MessageService,
+    MessageChannel Channel
     )
 {
     /// <summary>

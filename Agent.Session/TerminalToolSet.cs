@@ -18,7 +18,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     public const int DefaultSyncTimeoutSeconds = 60;
     /// <summary>后台命令默认超时（秒）</summary>
     public const int DefaultBackgroundTimeoutSeconds = 600;
-    /// <summary>后台任务最大存活时间，超龄任务在查询时顺带清理，防泄漏</summary>
+    /// <summary>已完成后台任务结果的保留时长；只清理"已完成且超龄"的结果，运行中的任务按自身超时管理</summary>
     private static readonly TimeSpan MaxTaskAge = TimeSpan.FromMinutes(5);
     /// <summary>后台任务完成通知的结果摘要长度限制（字符）</summary>
     private const int NotifyResultLimit = 2000;
@@ -28,21 +28,29 @@ public class TerminalToolSet : ToolSet, IDisposable
     private readonly string _sessionId;
     private readonly string? user;
     private readonly VisionRouter _visionRouter;
+    /// <summary>图片读取大小上限（字节），防止超大图片撑爆内存</summary>
+    private readonly int _maxImageBytes;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
 
-    private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime);
+    private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime)
+    {
+        /// <summary>任务被显式终止（task_stop 等）后置位，抑制"已完成"通知</summary>
+        public volatile bool Stopped;
+    }
 
     public TerminalToolSet(
         AgentSessionManager sessionManager,
         string sessionId,
         string? user = null,
-        VisionRouter? visionRouter = null)
+        VisionRouter? visionRouter = null,
+        int maxImageBytes = 10 * 1024 * 1024)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _sessionId = sessionId;
         this.user = user;
         _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClient: null);
+        _maxImageBytes = maxImageBytes;
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             throw new PlatformNotSupportedException("user（sudo 模式）仅支持 Linux");
@@ -116,7 +124,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     /// <summary>工具参数：task_list（无参数）</summary>
     private sealed class TaskListArgs { }
 
-    private async Task<string> RunAsync(BashArgs args, Action<Message> onIterationAdd)
+    private async Task<string> RunAsync(BashArgs args, CancellationToken cancellationToken, Action<Message> onIterationAdd)
     {
         var command = args.command?.Trim() ?? string.Empty;
         if (command.Length == 0)
@@ -134,7 +142,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw new ArgumentException("timeout 必须大于 0");
         }
         var output = await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
-        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd, onIterationAdd);
+        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd, cancellationToken, onIterationAdd);
     }
 
     /// <summary>
@@ -142,7 +150,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     /// 把图片注入对话，否则调用辅助视觉模型生成描述并追加到输出。
     /// 相对路径按常驻 shell 的当前工作目录解析（cd 状态跨调用保留，进程 CWD 并不等于 shell CWD）。
     /// </summary>
-    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath, string? cwd, Action<Message> onIterationAdd)
+    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath, string? cwd, CancellationToken cancellationToken, Action<Message> onIterationAdd)
     {
         if (string.IsNullOrWhiteSpace(imagePath))
         {
@@ -163,7 +171,12 @@ public class TerminalToolSet : ToolSet, IDisposable
             return output + $"\n[图片文件不存在: {imagePath}（按 shell 工作目录解析为 {fullPath}）]";
         }
 
-        var data = await File.ReadAllBytesAsync(fullPath);
+        var fileInfo = new FileInfo(fullPath);
+        if (fileInfo.Length > _maxImageBytes)
+        {
+            return output + $"\n[图片 {imagePath} 超过 {_maxImageBytes / (1024 * 1024)}MB，已拒绝读取]";
+        }
+        var data = await File.ReadAllBytesAsync(fullPath, cancellationToken);
         var mimeType = MimeTypes.GuessImageContentType(fullPath) ?? "image/png";
         var caption = $"bash 命令输出中的图片: {imagePath}";
 
@@ -177,7 +190,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             return output + $"\n[无法查看图片 {imagePath}: 主模型无视觉能力且未配置 vision-llm]";
         }
 
-        var description = await _visionRouter.DescribeImageAsync(data, mimeType, imagePath, CancellationToken.None);
+        var description = await _visionRouter.DescribeImageAsync(data, mimeType, imagePath, cancellationToken);
         return output + $"\n[图片 {imagePath} 描述]: {description}";
     }
 
@@ -241,6 +254,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     /// 后台任务完成（成功或失败）后，主动通知所属会话的 Agent，让它拿到结果继续处理。
     /// 结果摘要限制长度避免撑爆上下文，完整输出仍可通过 task_output 获取；
     /// 通知使用 stackable 类型，Agent 忙碌时同类型通知会合并，避免积压。
+    /// 被 task_stop 等显式终止的任务不推送通知，避免误导。
     /// </summary>
     private async Task NotifyOnCompletionAsync(BackgroundTask info)
     {
@@ -248,10 +262,18 @@ public class TerminalToolSet : ToolSet, IDisposable
         try
         {
             var result = await info.Task;
+            if (info.Stopped)
+            {
+                return; // 任务已被 task_stop 等显式终止，不推送"已完成"误导通知
+            }
             message = $"后台任务 {Label(info)} 已完成：\n{CapResult(result)}";
         }
         catch (Exception ex)
         {
+            if (info.Stopped)
+            {
+                return;
+            }
             message = $"后台任务 {Label(info)} 执行失败：{ex.Message}";
         }
 
@@ -325,19 +347,21 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             return Task.FromResult($"未找到任务 {id}，可能已过期或从未存在。");
         }
-        info.Terminal.Dispose(); // Kill 终端进程，命令随之终止
+        info.Stopped = true; // 抑制完成通知，避免推送误导性的"已完成"消息
+        info.Terminal.Dispose(); // Kill 终端进程（含子进程树），命令随之终止
         return Task.FromResult($"任务 {id} 已终止。");
     }
 
-    /// <summary>清理超龄后台任务，防止任务表无限增长</summary>
+    /// <summary>清理"已完成且超龄"的后台任务结果，防止任务表无限增长；运行中的任务按自身超时管理，不被强杀</summary>
     private void CleanupExpiredTasks()
     {
         foreach (var kvp in _tasks)
         {
-            if (DateTime.Now - kvp.Value.StartTime > MaxTaskAge)
+            if (kvp.Value.Task.IsCompleted && DateTime.Now - kvp.Value.StartTime > MaxTaskAge)
             {
                 if (_tasks.TryRemove(kvp.Key, out var info))
                 {
+                    info.Stopped = true;
                     info.Terminal.Dispose();
                 }
             }
@@ -354,6 +378,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             if (_tasks.TryRemove(kvp.Key, out var info))
             {
+                info.Stopped = true;
                 info.Terminal.Dispose();
             }
         }

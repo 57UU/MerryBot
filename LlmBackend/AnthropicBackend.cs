@@ -19,8 +19,8 @@ public class AnthropicBackend : Backend
 
     private static readonly Dictionary<string, object> CacheControl = new() { ["type"] = "ephemeral" };
 
-    private static readonly HttpClient Client = new();
-    private static readonly SemaphoreSlim _semaphore = new(5, 5);
+    // 超时全部由 LlmOptions 的两段 CTS 控制（首字节 + 总时长），HttpClient 本身不设超时
+    private static readonly HttpClient Client = new() { Timeout = Timeout.InfiniteTimeSpan };
 
     private readonly string _baseUrl;
     private readonly string _apiKey;
@@ -61,10 +61,15 @@ public class AnthropicBackend : Backend
         {
             // thinkingEnabled 由 IsNullOrWhiteSpace 保证非空
             thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort!);
-            // Anthropic 要求 budget_tokens < max_tokens：不足时抬高 max_tokens
+            // Anthropic 要求 budget_tokens < max_tokens，且 thinking 计入 max_tokens 消耗：
+            // 预算占满时模型将没有输出余量，max_tokens 必须抬到预算之上。
+            // 保留用户配置意图——仅在用户配置值不足时抬升，取"用户配置值"与
+            // "预算 + 1 最小余量"的较大者，而不是无条件放大到 预算+4096
+            // （避免 high 档把用户配置的 4096 覆盖成 36864）；用户显式配置更大的
+            // MaxOutputTokens 时保持不变。
             if (maxTokens <= thinkingBudget)
             {
-                maxTokens = thinkingBudget + 4096;
+                maxTokens = Math.Max(maxTokens, thinkingBudget + 1);
             }
         }
 
@@ -119,42 +124,40 @@ public class AnthropicBackend : Backend
 
         string jsonData = JsonSerializer.Serialize(requestBody);
 
-        await _semaphore.WaitAsync(cancellationToken);
         string responseBody;
+        // 两段超时：发送到响应头（首字节）由 ttfbCts 控制，响应体读取受 totalCts 总时长约束；
+        // 超时映射为不可重试的 RequestTimeoutException，避免 LLM 非幂等请求超时重试造成双倍计费
+        using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.TotalGeneration);
+        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
+        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            try
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
             {
-                using var response = await Client.SendAsync(request, cancellationToken);
-                responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw BackendErrors.Map(responseBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
-                }
-            }
-            catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new NetworkException("Anthropic API 请求超时", e);
-            }
-            catch (HttpRequestException e)
-            {
-                throw new NetworkException($"Anthropic API 网络错误: {e.Message}", e);
+                throw BackendErrors.Map(responseBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
             }
         }
-        finally
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
-            _semaphore.Release();
+            throw new RequestTimeoutException("Anthropic API 请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"Anthropic API 网络错误: {e.Message}", e);
         }
 
         var json = JsonSerializer.Deserialize<AnthropicResponse>(responseBody)
-            ?? throw new HttpRequestException($"Anthropic API 返回了无法解析的响应: {responseBody}");
+            ?? throw new InvalidResponseException($"Anthropic API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
         if (json.Content == null)
         {
-            throw new HttpRequestException($"Anthropic API 返回空 content: {responseBody}");
+            throw new InvalidResponseException($"Anthropic API 返回空 content: {BackendErrors.Shorten(responseBody)}");
         }
 
         var textBuilder = new StringBuilder();
@@ -329,9 +332,12 @@ public class AnthropicBackend : Backend
                 }
             }
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
-            // 思考块数据损坏时忽略回放，避免请求被拒
+            // 思考块数据损坏时静默跳过会掩盖根因（thinking 块缺失/错位会被 API 拒绝，
+            // 且多轮中无法修复），抛出明确异常让调用方可见
+            throw new InvalidResponseException(
+                $"Anthropic 思考块回放数据损坏，无法重建 thinking 块: {BackendErrors.Shorten(thinkingBlocksJson)}", e);
         }
     }
 

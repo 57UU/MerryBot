@@ -16,8 +16,13 @@ public class WebSocketService : IDisposable
 
     private readonly Uri _uri;
     private readonly Timer _messageMonitorTimer;
+    /// <summary>串行化看门狗检查与 Start/Stop/Dispose，避免并发重叠操作 client。</summary>
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _timeLock = new();
     private DateTime _lastMessageTime = DateTime.Now;
-    private const int MessageTimeoutSeconds = 15;
+    /// <summary>看门狗仅做监控；连接自愈由库内建重连（ErrorReconnectTimeout/LostReconnectTimeout）负责。</summary>
+    private const int MessageTimeoutSeconds = 25;
+    private static readonly TimeSpan MonitorPeriod = TimeSpan.FromSeconds(15);
 
     public WebSocketService(string address, string token, ISimpleLogger logger)
     {
@@ -28,7 +33,7 @@ public class WebSocketService : IDisposable
         SetupWebSocketClient(WebSocket);
 
         _messageMonitorTimer = new Timer((o) => _ = CheckMessageActivity(), null,
-            TimeSpan.FromSeconds(MessageTimeoutSeconds), TimeSpan.FromSeconds(MessageTimeoutSeconds));
+            MonitorPeriod, MonitorPeriod);
     }
 
     private void SetupWebSocketClient(WebsocketClient webSocket)
@@ -52,53 +57,93 @@ public class WebSocketService : IDisposable
 
     public void Start()
     {
-        WebSocket.Start().Wait();
-        _lastMessageTime = DateTime.Now;
+        _gate.Wait();
+        try
+        {
+            WebSocket.Start().Wait();
+            SetLastMessageTime(DateTime.Now);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task Stop(WebSocketCloseStatus status, string description)
     {
-        await WebSocket.Stop(status, description);
+        await _gate.WaitAsync();
+        try
+        {
+            await WebSocket.Stop(status, description);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task OnDisconnectedInternal(DisconnectionInfo d)
     {
         Logger.Warn($"websocket disconnect: {d.Type}, {d.CloseStatus}, {d.CloseStatusDescription}");
-        _lastMessageTime = DateTime.Now;
+        SetLastMessageTime(DateTime.Now);
         OnDisconnected?.Invoke(d);
     }
 
     public void ResetMessageTime()
     {
-        _lastMessageTime = DateTime.Now;
+        SetLastMessageTime(DateTime.Now);
+    }
+
+    private void SetLastMessageTime(DateTime time)
+    {
+        lock (_timeLock)
+        {
+            _lastMessageTime = time;
+        }
+    }
+
+    private DateTime GetLastMessageTime()
+    {
+        lock (_timeLock)
+        {
+            return _lastMessageTime;
+        }
     }
 
     private async Task CheckMessageActivity()
     {
-        var timeSinceLastMessage = DateTime.Now - _lastMessageTime;
-        if (timeSinceLastMessage.TotalSeconds > MessageTimeoutSeconds)
+        // 非阻塞获取信号量：上一次检查未完成时跳过本次，避免并发重叠
+        if (!await _gate.WaitAsync(0))
         {
-            Logger.Warn($"超过{MessageTimeoutSeconds}秒未收到任何消息，尝试重新连接");
-            try
+            return;
+        }
+        try
+        {
+            var timeSinceLastMessage = DateTime.Now - GetLastMessageTime();
+            if (timeSinceLastMessage.TotalSeconds > MessageTimeoutSeconds)
             {
-                await WebSocket.Stop(WebSocketCloseStatus.NormalClosure, "no message received");
-                WebSocket.Dispose();
-
-                WebSocket = new WebsocketClient(_uri);
-                SetupWebSocketClient(WebSocket);
-
-                await WebSocket.Start();
+                // 仅记录日志。client 的自愈由库内建重连机制负责（ErrorReconnectTimeout/LostReconnectTimeout），
+                // 手动 Stop/Dispose 重建 client 会与库内重连循环冲突，可能造成双重释放。
+                Logger.Warn($"超过{MessageTimeoutSeconds}秒未收到任何消息，等待库内建重连机制自愈");
             }
-            catch (Exception ex)
-            {
-                Logger.Error($"手动重连失败: {ex.Message}");
-            }
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
     public void Dispose()
     {
-        _messageMonitorTimer?.Dispose();
-        WebSocket.Dispose();
+        _gate.Wait();
+        try
+        {
+            _messageMonitorTimer?.Dispose();
+            WebSocket.Dispose();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 }

@@ -12,7 +12,7 @@ napcat-token = "your_token_here"          # napcat token
 qq-groups = [114514, 1919810]             # 要监听的qq群号列表
 authorized-user = 114514                  # 授权用户（Bot管理员）qq号
 machine-code = 0                          # 历史记录机器编号；省略时首次启动自动生成
-web-address = "http://0.0.0.0:5000"       # WebUI 监听地址
+web-address = "http://localhost:5000"      # WebUI 监听地址；仅绑定本机，远程管理请使用 SSH 端口转发
 ```
 
 > 💡 Agent 等插件的独立配置由插件配置存储管理，可在 WebUI 中维护；不会写入 `setting.toml`。
@@ -171,7 +171,7 @@ Merry Bot
     {
         if (isMentioned && command?.Name == "about")
         {
-            _ = Bot.SendGroupMessage(raw.GroupId, aboutMessage);
+            _ = Channel.SendGroupMessage(raw.GroupId, aboutMessage);
         }
         return Task.CompletedTask;
     }
@@ -212,6 +212,7 @@ public override Task OnGroupMessageAsync(
 |API|Description|Note
 |:---:|:---|:---
 |Actions Actions{get;}|获取`Actions`，用于发送消息
+|MessageChannel Channel {get;}|发送群消息（来自 Interop），内含日志，失败不抛出|
 |bool IsEnable {set;protected get;}|是否启用|无论是否启用，插件都会被加载，当为假时OnMessageReceived函数不会被调用
 |string? StartsWith {set;get;}|该项是属性，若设置，那么只有以`StartsWith`开头的消息会触发`OnMessageReceived`函数
 |ISimpleLogger logger {get;}|获取`logger`，用于记录日志

@@ -70,6 +70,9 @@ internal sealed class DatabaseContextHistory : ContextHistory
             Arguments = toolCall.Arguments,
         }).ToList(),
         ReasoningContent = message.reasoningContent,
+        // Anthropic 深度思考块（含签名）必须持久化：恢复历史后需原样回传，
+        // 否则后续轮次请求会被 API 拒绝
+        ThinkingBlocks = message.thinkingBlocks,
     };
 
     private static StoredMessagePart ToRecord(MessagePart part) => part switch
@@ -89,6 +92,7 @@ internal sealed class DatabaseContextHistory : ContextHistory
             toolCall.Name,
             toolCall.Arguments)).ToList(),
         reasoningContent = message.ReasoningContent,
+        thinkingBlocks = message.ThinkingBlocks,
     };
 
     private static MessagePart ToMessagePart(StoredMessagePart part) => part.Kind switch
@@ -121,6 +125,8 @@ internal sealed class DatabaseContextHistory : ContextHistory
         public string ToolCallId { get; set; } = string.Empty;
         public List<StoredToolCall> ToolCalls { get; set; } = [];
         public string ReasoningContent { get; set; } = string.Empty;
+        /// <summary>Anthropic 思考块 JSON（含签名）；旧记录反序列化时为默认空串，兼容历史数据</summary>
+        public string ThinkingBlocks { get; set; } = string.Empty;
     }
 
     private sealed class StoredMessagePart

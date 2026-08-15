@@ -7,13 +7,17 @@ namespace BotPlugin;
 public class AutoIncrease : Plugin
 {
     private readonly AutoIncreaseConfig config;
+    /// <summary>跟踪群数的上限，防止字典无限增长</summary>
+    private const int MaxTrackedGroups = 500;
     public AutoIncrease(PluginInterop interop, AutoIncreaseConfig config) : base(interop)
     {
-        var selfId = interop.MessageService.SelfId;
-        interop.Interceptors.Add((data) =>
+        this.config = config;
+        //配置校验：重复次数至少为 2，避免出现 1 次即触发
+        if (config.RepeatTime < 2)
         {
-            return data.sender.user_id == selfId;
-        });
+            config.RepeatTime = 2;
+        }
+        interop.Interceptors.Add((data) => data.sender.user_id == data.self_id);
     }
     //store each group
     private readonly Dictionary<long, ChainWithSender> lastMessage = [];
@@ -25,6 +29,12 @@ public class AutoIncrease : Plugin
         {
             var groupId = data.GroupId;
             var _lastMessage = lastMessage.GetValueOrDefault(groupId);
+            //群已不在监听列表时，移除该群的过期状态，避免残留计数
+            if (_lastMessage != null && !Interop.GroupId.Contains(groupId))
+            {
+                lastMessage.Remove(groupId);
+                _lastMessage = null;
+            }
             var chainList = messageChain.Select(message => message.Clone()).ToList();
             if (_lastMessage == null)
             {
@@ -34,6 +44,11 @@ public class AutoIncrease : Plugin
                     sender = data.sender.user_id
                 };
                 lastMessage[groupId] = _lastMessage;
+                //上限保护：超过上限时移除最早跟踪的群
+                if (lastMessage.Count > MaxTrackedGroups)
+                {
+                    lastMessage.Remove(lastMessage.Keys.First());
+                }
             }
             else
             {
@@ -43,7 +58,7 @@ public class AutoIncrease : Plugin
                     if (!_lastMessage.used && _lastMessage.repeatTime >= config.RepeatTime)
                     {
                         Logger.Info("+1 message detected");
-                        _ = Bot.SendGroupMessage(groupId, _lastMessage.chain!);
+                        _ = Channel.SendGroupMessage(groupId, _lastMessage.chain!);
                         _lastMessage.used = true;
                     }
                 }

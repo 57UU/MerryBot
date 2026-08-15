@@ -27,8 +27,8 @@ public class BotClient
     public event EssenceEventCallback? OnEssenceEventReceived;
     public event GroupCardEventCallback? OnGroupCardEventReceived;
 
-    public long SelfId { get; private set; } = -1;
-    public string Nickname { get; private set; } = "unknown";
+    public long? SelfId => Bot.SelfId;
+    public string? Nickname => Bot.Nickname;
     public string PathPrefix { get; private set; } = "data";
     public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
     {
@@ -42,57 +42,70 @@ public class BotClient
         WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
 
         WebSocketService.Start();
-        this.Bot = new Actions(Logger, WebSocketService, () => SelfId);
-        Initialize().Wait();
+        this.Bot = new Actions(Logger, WebSocketService);
     }
 
-    public async Task Initialize()
-    {
-        await Task.Delay(100);
-        var result = await Bot.GetAccountInfo();
-        SelfId = result.userId;
-        Nickname = result.nickname;
-    }
-
+    private int _closed;
     public void Close()
     {
+        Interlocked.Exchange(ref _closed, 1);
         WebSocketService.Dispose();
     }
 
     private void WebSocket_OnMessage(string? text)
     {
-        if (text == null)
+        try
         {
-            Logger.Debug("empty message received");
-            return;
-        }
-        Logger.Trace($"websocket on message: {text}");
-        var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
-        if (message.TryGetValue("echo", out JsonElement echo))
-        {
-            Bot.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
-        }
-        if (message.TryGetValue("message_type", out JsonElement value))
-        {
-            var messageType = ((JsonElement)value).GetString();
-
-            if (messageType == "group")
+            if (text == null)
             {
-                ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
-                var groupId = receivedGroupMessage.GroupId;
-                var rawChain = receivedGroupMessage.message!;
-                receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
-                OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
+                Logger.Debug("empty message received");
+                return;
+            }
+            Logger.Trace($"websocket on message: {text}");
+            var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
+            if (message.TryGetValue("echo", out JsonElement echo))
+            {
+                var echoId = echo.GetString();
+                if (echoId == null)
+                {
+                    Logger.Debug("echo is not a string, skip response handling");
+                }
+                else
+                {
+                    Bot.AddResponse(echoId, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
+                }
+            }
+            if (message.TryGetValue("message_type", out JsonElement value))
+            {
+                var messageType = ((JsonElement)value).GetString();
+
+                if (messageType == "group")
+                {
+                    ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
+                    var groupId = receivedGroupMessage.GroupId;
+                    var rawChain = receivedGroupMessage.message;
+                    if (rawChain == null)
+                    {
+                        Logger.Warn($"group message {groupId} has null message chain, skip");
+                        return;
+                    }
+                    receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
+                    OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
+                }
+            }
+            else if (message.TryGetValue("post_type", out JsonElement postTypeValue))
+            {
+                var postType = postTypeValue.GetString();
+
+                if (postType == "notice")
+                {
+                    HandleNoticeEvent(text);
+                }
             }
         }
-        else if (message.TryGetValue("post_type", out JsonElement postTypeValue))
+        catch (Exception ex)
         {
-            var postType = postTypeValue.GetString();
-
-            if (postType == "notice")
-            {
-                HandleNoticeEvent(text);
-            }
+            Logger.Error($"Error handling websocket message: {ex}");
         }
     }
 

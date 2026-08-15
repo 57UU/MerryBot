@@ -13,9 +13,28 @@ public partial class ViewVersion : Plugin
     //data will be loaded in `OnLoaded` function
     private Data data = null;
 #pragma warning restore CS8625
+    /// <summary>/update 互斥锁：同一时间只允许一个更新流程，重入直接提示</summary>
+    private static readonly SemaphoreSlim updateLock = new(1, 1);
+    /// <summary>git 命令超时时间</summary>
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(60);
+    /// <summary>编译超时时间</summary>
+    private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(20);
+
     public ViewVersion(PluginInterop interop) : base(interop)
     {
-        gitInfo = GetGitInfo().Result.Trim();
+        try
+        {
+            gitInfo = GetGitInfo().GetAwaiter().GetResult().Trim();
+        }
+        catch (PluginNotUsableException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            //git 缺失或异常时统一按 PluginNotUsableException 处理，由 PluginInitializer 跳过本插件
+            throw new PluginNotUsableException($"获取Git信息失败: {ex.Message}");
+        }
         authorized = interop.AuthorizedUser;
         if (authorized < 0)
         {
@@ -31,13 +50,13 @@ public partial class ViewVersion : Plugin
         //if contains update flag, then reply update info
         if (data.UpdateByGroupId > 0)
         {
-            await Bot.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
+            await Channel.SendGroupMessage(data.UpdateByGroupId, $"update successful\n{gitInfo}");
             data.UpdateByGroupId = -1;
             changed = true;
         }
         if (data.ReloadByGroupId > 0)
         {
-            await Bot.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
+            await Channel.SendGroupMessage(data.ReloadByGroupId, $"reload successful\n{gitInfo}");
             data.ReloadByGroupId = -1;
             changed = true;
         }
@@ -52,6 +71,7 @@ public partial class ViewVersion : Plugin
     /// </summary>
     /// <param name="arguments">Git 命令参数</param>
     /// <returns>命令输出</returns>
+    /// <exception cref="InvalidOperationException">命令退出码非 0 或执行超时</exception>
     private static async Task<string> ExecuteGitCommand(string arguments)
     {
         var process = new Process
@@ -61,13 +81,32 @@ public partial class ViewVersion : Plugin
                 FileName = "git",
                 Arguments = arguments,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             }
         };
+        using var timeoutCts = new CancellationTokenSource(GitTimeout);
         process.Start();
-        string output = (await process.StandardOutput.ReadToEndAsync()).Trim();
-        await process.WaitForExitAsync();
+        var outputTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+        var errorTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* process already exited */ }
+            try { await Task.WhenAll(outputTask, errorTask); } catch { /* output tasks cancelled */ }
+            throw new InvalidOperationException($"git {arguments} 执行超时（{GitTimeout.TotalSeconds}秒）");
+        }
+        string output = (await outputTask).Trim();
+        string error = (await errorTask).Trim();
+        if (process.ExitCode != 0)
+        {
+            string errDetail = string.IsNullOrWhiteSpace(error) ? output : error;
+            throw new InvalidOperationException($"git {arguments} 执行失败（ExitCode={process.ExitCode}）: {errDetail}");
+        }
         return output;
     }
 
@@ -78,9 +117,6 @@ public partial class ViewVersion : Plugin
             // 使用单个命令获取大部分信息
             string gitLogFormat = "--pretty=format:%H|%ci|%s";
             string logOutput = await ExecuteGitCommand($"log -1 {gitLogFormat}");
-
-            if (logOutput.StartsWith("Error:"))
-                return $"获取Git信息失败: {logOutput}";
 
             string[] logParts = logOutput.Split('|');
             if (logParts.Length < 3)
@@ -100,7 +136,9 @@ public partial class ViewVersion : Plugin
             gitInfo.AppendLine($"Change: {commitMessage}");
             gitInfo.AppendLine($"Date: {commitDate}");
             gitInfo.AppendLine($"Count: {commitCount}");
-            gitInfo.AppendLine($"Commit: {commitHash.AsSpan(0, 12)}");
+            // 提交哈希可能不足 12 位，取 12 与长度的较小值
+            string shortHash = commitHash.Length >= 12 ? commitHash[..12] : commitHash;
+            gitInfo.AppendLine($"Commit: {shortHash}");
             if (!string.IsNullOrWhiteSpace(userName))
             {
                 gitInfo.AppendLine($"By: {userName}");
@@ -176,69 +214,88 @@ public partial class ViewVersion : Plugin
     }
     private async Task Update(long groupId, bool force = false)
     {
-        var (diff, commitMessages, hasChanges) = await GitFetchMerge();
-        diff = _redundantRegex().Replace(diff, "").Replace("()", "").Trim();
-
-        // No changes — skip update (unless forced)
-        if (!hasChanges && !force)
+        if (!updateLock.Wait(0))
         {
-            await Bot.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
+            await Channel.SendGroupMessage(groupId, "正在更新中，请稍候");
             return;
         }
-
-        //store the update info
-        data.UpdateByGroupId = groupId;
-        await Interop.PluginStorage.Save(data);
-
-        // Determine project root by searching for .git directory or MerryBot.sln
-        string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-        string? projectRoot = FindProjectRoot(baseDir);
-        if (projectRoot == null)
-        {
-            await Bot.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
-            return;
-        }
-        string buildDir = Path.Combine(projectRoot, "build");
-        string activeSlotFile = Path.Combine(buildDir, "active_slot");
-
-        // Read current active slot
-        string activeSlot = "A";
-        if (File.Exists(activeSlotFile))
-        {
-            activeSlot = (await File.ReadAllTextAsync(activeSlotFile)).Trim();
-        }
-
-        // Target = opposite slot
-        string targetSlot = activeSlot == "A" ? "B" : "A";
-        string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
-
-        await Bot.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
-
-        // Run build.sh in background
-        string buildScript = Path.Combine(projectRoot, "build.sh");
-        var psi = new ProcessStartInfo
-        {
-            FileName = "bash",
-            Arguments = $"\"{buildScript}\" \"{targetDir}\"",
-            WorkingDirectory = projectRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
         try
         {
+            var (diff, commitMessages, hasChanges) = await GitFetchMerge();
+            diff = _redundantRegex().Replace(diff, "").Replace("()", "").Trim();
+
+            // No changes — skip update (unless forced)
+            if (!hasChanges && !force)
+            {
+                await Channel.SendGroupMessage(groupId, "当前代码已经是最新版本，无需更新");
+                return;
+            }
+
+            //store the update info
+            data.UpdateByGroupId = groupId;
+            await Interop.PluginStorage.Save(data);
+
+            // Determine project root by searching for .git directory or MerryBot.sln
+            string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            string? projectRoot = FindProjectRoot(baseDir);
+            if (projectRoot == null)
+            {
+                await Channel.SendGroupMessage(groupId, "无法定位项目根目录，更新失败");
+                await ResetUpdateFlagAsync();
+                return;
+            }
+            string buildDir = Path.Combine(projectRoot, "build");
+            string activeSlotFile = Path.Combine(buildDir, "active_slot");
+
+            // Read current active slot
+            string activeSlot = "A";
+            if (File.Exists(activeSlotFile))
+            {
+                activeSlot = (await File.ReadAllTextAsync(activeSlotFile)).Trim();
+            }
+
+            // Target = opposite slot
+            string targetSlot = activeSlot == "A" ? "B" : "A";
+            string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
+
+            await Channel.SendGroupMessage(groupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
+
+            // Run build.sh in background
+            string buildScript = Path.Combine(projectRoot, "build.sh");
+            var psi = new ProcessStartInfo
+            {
+                FileName = "bash",
+                Arguments = $"\"{buildScript}\" \"{targetDir}\"",
+                WorkingDirectory = projectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
             using var buildProcess = Process.Start(psi)!;
-            string stdout = await buildProcess.StandardOutput.ReadToEndAsync();
-            string stderr = await buildProcess.StandardError.ReadToEndAsync();
-            await buildProcess.WaitForExitAsync();
+            using var buildTimeoutCts = new CancellationTokenSource(BuildTimeout);
+            var stdoutTask = buildProcess.StandardOutput.ReadToEndAsync(buildTimeoutCts.Token);
+            var stderrTask = buildProcess.StandardError.ReadToEndAsync(buildTimeoutCts.Token);
+            try
+            {
+                await buildProcess.WaitForExitAsync(buildTimeoutCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { buildProcess.Kill(entireProcessTree: true); } catch { /* process already exited */ }
+                try { await Task.WhenAll(stdoutTask, stderrTask); } catch { /* output tasks cancelled */ }
+                throw new InvalidOperationException($"编译超时（{BuildTimeout.TotalMinutes}分钟）");
+            }
+            string stdout = await stdoutTask;
+            string stderr = await stderrTask;
 
             if (buildProcess.ExitCode != 0)
             {
                 string errMsg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
                 Logger.Error($"Build failed: {errMsg}");
-                await Bot.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                await Channel.SendGroupMessage(groupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                await ResetUpdateFlagAsync();
                 return;
             }
 
@@ -247,13 +304,39 @@ public partial class ViewVersion : Plugin
             await File.WriteAllTextAsync(tempFile, targetSlot);
             File.Move(tempFile, activeSlotFile, overwrite: true);
             Logger.Info($"Build succeeded, switching to slot {targetSlot}");
-            await Bot.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            await Channel.SendGroupMessage(groupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            // 稳妥起见：成功路径也先复位标志再关闭进程
+            await ResetUpdateFlagAsync();
             Interop.Shutdown(CommonLib.ExitCode.PREBUILT);
         }
         catch (Exception ex)
         {
-            Logger.Error($"Build process error: {ex.Message}");
-            await Bot.SendGroupMessage(groupId, $"编译过程出错: {ex.Message}\n当前版本继续运行");
+            Logger.Error($"Update process error: {ex.Message}");
+            await Channel.SendGroupMessage(groupId, $"更新过程出错: {ex.Message}\n当前版本继续运行");
+            await ResetUpdateFlagAsync();
+        }
+        finally
+        {
+            updateLock.Release();
+        }
+    }
+    /// <summary>
+    /// 清除 update 标志并保存，避免更新失败后重启误报 "update successful"。
+    /// 自身异常只记日志，不向上抛出。
+    /// </summary>
+    private async Task ResetUpdateFlagAsync()
+    {
+        try
+        {
+            if (data.UpdateByGroupId > 0)
+            {
+                data.UpdateByGroupId = -1;
+                await Interop.PluginStorage.Save(data);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"reset update flag failed: {ex.Message}");
         }
     }
     private async Task Reload(long groupId)
@@ -263,35 +346,81 @@ public partial class ViewVersion : Plugin
         await Interop.PluginStorage.Save(data);
         Interop.Shutdown(CommonLib.ExitCode.RELOAD);
     }
+    /// <summary>
+    /// 包装 Update：捕获全部异常并向群内反馈，避免 fire-and-forget 调用时用户无反馈
+    /// </summary>
+    private async Task HandleUpdateAsync(long groupId, bool force)
+    {
+        try
+        {
+            await Update(groupId, force: force);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"update failed: {ex.Message}");
+            await Channel.SendGroupMessage(groupId, $"更新失败: {ex.Message}");
+        }
+    }
+    /// <summary>
+    /// 包装 Reload：捕获全部异常并向群内反馈；失败时复位标志避免误报
+    /// </summary>
+    private async Task HandleReloadAsync(long groupId)
+    {
+        try
+        {
+            await Reload(groupId);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"reload failed: {ex.Message}");
+            await ResetReloadFlagAsync();
+            await Channel.SendGroupMessage(groupId, $"重启失败: {ex.Message}");
+        }
+    }
+    private async Task ResetReloadFlagAsync()
+    {
+        try
+        {
+            if (data.ReloadByGroupId > 0)
+            {
+                data.ReloadByGroupId = -1;
+                await Interop.PluginStorage.Save(data);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"reset reload flag failed: {ex.Message}");
+        }
+    }
     public override Task OnGroupMessageAsync(bool isMentioned, Command? command, IReadOnlyList<NapcatClient.MessageType.TypedMessage> messageChain, ReceivedGroupMessage data)
     {
         if (!isMentioned || command == null) return Task.CompletedTask;
         long groupId = data.GroupId;
         if (command.Name == "version")
         {
-            _ = Bot.SendGroupMessage(groupId, gitInfo);
+            _ = Channel.SendGroupMessage(groupId, gitInfo);
         }
         else if (command.Name == "update")
         {
             if (authorized == data.sender.user_id)
             {
                 bool force = command.Args.Contains("-f");
-                _ = Update(groupId, force: force);
+                _ = HandleUpdateAsync(groupId, force);
             }
             else
             {
-                _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Channel.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
         else if (command.Name == "reload")
         {
             if (authorized == data.sender.user_id)
             {
-                _ = Reload(groupId);
+                _ = HandleReloadAsync(groupId);
             }
             else
             {
-                _ = Bot.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
+                _ = Channel.SendGroupMessage(groupId, "401 Unauthorized\nPermission Denied");
             }
         }
         return Task.CompletedTask;
@@ -317,6 +446,8 @@ public partial class ViewVersion : Plugin
         public long ReloadByGroupId = -1;
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]")]
+    // 只移除统计条（如 "| 5 +++--"）中的连续 +/- 符号簇，
+    // 避免把路径名中的连字符或 "insertions(+)" 等单符号误删
+    [System.Text.RegularExpressions.GeneratedRegex(@"[+\-]{2,}")]
     private static partial System.Text.RegularExpressions.Regex _redundantRegex();
 }

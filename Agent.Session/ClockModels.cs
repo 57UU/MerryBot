@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Cronos;
 
 namespace Agent.Session;
 
@@ -21,6 +22,10 @@ public sealed class ClockTask
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
 
+    /// <summary>缓存的 Cron 解析结果，避免每次调度重复解析；由 ClockService 维护，表达式变更时失效。</summary>
+    [JsonIgnore]
+    public CronExpression? ParsedCron { get; set; }
+
     public ClockTask Clone()
     {
         return new ClockTask
@@ -38,6 +43,7 @@ public sealed class ClockTask
             LastRunAtUtc = LastRunAtUtc,
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = UpdatedAtUtc,
+            ParsedCron = ParsedCron,
         };
     }
 }

@@ -111,13 +111,25 @@ internal static class TestData
     }
 
     /// <summary>
-    /// HttpMessageHandler stub that always returns the given response.
+    /// HttpMessageHandler stub that returns the given response for the expected
+    /// GET request (the models.dev catalog URL) and fails the test on any other
+    /// request, so unexpected traffic surfaces as a failure.
     /// </summary>
     public sealed class StubHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
     {
+        private const string ExpectedUrl = "https://models.dev/api.json";
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (request.Method != HttpMethod.Get
+                || !string.Equals(
+                    request.RequestUri?.GetLeftPart(UriPartial.Path),
+                    ExpectedUrl,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Fail($"Unexpected request: {request.Method} {request.RequestUri} (expected GET {ExpectedUrl})");
+            }
             return Task.FromResult(response);
         }
     }

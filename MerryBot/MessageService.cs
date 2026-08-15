@@ -19,11 +19,11 @@ namespace MerryBot;
 /// </summary>
 internal sealed class MessageService : IMessageService
 {
-    private const long FileSizeLimit = 20 * 1024 * 1024;
-
+    private static readonly HttpClient httpClient = new();
     private readonly Actions bot;
     private readonly HistoryRecorder history;
     private readonly NLog.Logger logger;
+    private readonly long _resourceSizeLimit;
     private readonly ConcurrentDictionary<MessageKey, ProcessedMessage> messages = new();
     private readonly ConcurrentDictionary<MessageKey, Lazy<Task<ProcessedMessage?>>> messageLoads = new();
     private readonly ConcurrentDictionary<string, Lazy<Task<ProcessedForwardMessage?>>> forwardLoads = new();
@@ -32,15 +32,13 @@ internal sealed class MessageService : IMessageService
     private readonly ConcurrentDictionary<string, ForwardSeed> forwardSeeds = new();
     private readonly ConcurrentDictionary<long, DateTime> groupInfoRefreshes = new();
 
-    public MessageService(Actions bot, HistoryRecorder history, NLog.Logger logger, long selfId)
+    public MessageService(Actions bot, HistoryRecorder history, NLog.Logger logger, long resourceSizeLimit)
     {
         this.bot = bot;
         this.history = history;
         this.logger = logger;
-        SelfId = selfId;
+        _resourceSizeLimit = resourceSizeLimit;
     }
-    public long SelfId { get; }
-
 
 
     /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
@@ -117,7 +115,13 @@ internal sealed class MessageService : IMessageService
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
-            return result == null ? null : CloneSnapshot(result);
+            if (result == null)
+            {
+                // 瞬时失败（远端不可达等）不永久缓存 null，移除后下次可重试
+                messageLoads.TryRemove(key, out _);
+                return null;
+            }
+            return CloneSnapshot(result);
         }
         catch (Exception ex)
         {
@@ -139,7 +143,13 @@ internal sealed class MessageService : IMessageService
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
-            return result == null ? null : CloneForward(result);
+            if (result == null)
+            {
+                // 瞬时失败不永久缓存 null，移除后下次可重试
+                forwardLoads.TryRemove(forwardId, out _);
+                return null;
+            }
+            return CloneForward(result);
         }
         catch (Exception ex)
         {
@@ -157,7 +167,13 @@ internal sealed class MessageService : IMessageService
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
-            return result == null ? null : result with { Data = result.Data.ToArray() };
+            if (result == null)
+            {
+                // 瞬时失败不永久缓存 null，移除后下次可重试
+                resourceLoads.TryRemove(localUri, out _);
+                return null;
+            }
+            return result with { Data = result.Data.ToArray() };
         }
         catch (Exception ex)
         {
@@ -277,8 +293,8 @@ internal sealed class MessageService : IMessageService
         }
         if (string.IsNullOrWhiteSpace(descriptor.Source)) return null;
 
-        var bytes = await bot.HttpGetBinary(descriptor.Source);
-        if (bytes.LongLength > FileSizeLimit)
+        var bytes = await DownloadResourceAsync(descriptor.Source);
+        if (bytes == null)
         {
             logger.Info("消息资源过大，跳过保存: {0}", localUri);
             return null;
@@ -299,6 +315,41 @@ internal sealed class MessageService : IMessageService
         reference.UpdatedTime = DateTime.UtcNow;
         await history.UpsertResourceReferenceAsync(reference);
         return new LocalMessageResource(localUri, descriptor.Kind, descriptor.OriginalName, GetContentType(descriptor.Kind, descriptor.OriginalName ?? descriptor.Source), bytes);
+    }
+
+    /// <summary>
+    /// 下载消息资源：先用 Content-Length 预检（超过上限直接拒绝），
+    /// 下载时按块流式读取并累计字节数，超过限制立即中断，避免整文件读入内存。
+    /// 上限来自核心配置 ResourceSizeLimitMb。
+    /// </summary>
+    private async Task<byte[]?> DownloadResourceAsync(string source)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, source);
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        var contentLength = response.Content.Headers.ContentLength;
+        if (contentLength > _resourceSizeLimit)
+        {
+            logger.Info("消息资源 Content-Length 超过限制（{0} 字节），拒绝下载: {1}", contentLength, source);
+            return null;
+        }
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        long total = 0;
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk);
+            if (read <= 0) break;
+            total += read;
+            if (total > _resourceSizeLimit)
+            {
+                logger.Info("消息资源超过 {0} 字节，中断下载: {1}", _resourceSizeLimit, source);
+                return null;
+            }
+            buffer.Write(chunk, 0, read);
+        }
+        return buffer.ToArray();
     }
 
     private async Task<LocalMessageResource?> ReadStoredResourceAsync(string localUri, string kind, string? originalName, bool isImage, long objectId)

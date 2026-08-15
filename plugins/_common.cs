@@ -1,3 +1,4 @@
+using CommonLib;
 using NapcatClient.MessageType;
 
 namespace BotPlugin;
@@ -111,6 +112,15 @@ static class PluginUtils
         List<TypedMessage> list = messageChain.Select(message => message.Clone()).ToList();
         return list;
     }
+}
+
+/// <summary>
+/// 群消息发送通道：发送失败仅记录日志，不向上抛出异常。
+/// </summary>
+public interface MessageChannel
+{
+    Task SendGroupMessage(long groupId, string message);
+    Task SendGroupMessage(long groupId, IEnumerable<TypedMessage> messageChain);
 }
 
 

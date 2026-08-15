@@ -133,11 +133,14 @@ public sealed class Cron : ToolSet
         {
             return null;
         }
-        if (Enum.TryParse<ClockRunStatus>(value, ignoreCase: true, out var status))
+        // 拒绝纯数字字符串（如 "0"）：Enum.TryParse 会把数字解析成枚举值，掩盖非法状态输入
+        if (long.TryParse(value, out _)
+            || !Enum.TryParse<ClockRunStatus>(value, ignoreCase: true, out var status)
+            || !Enum.IsDefined(status))
         {
-            return status;
+            throw new ArgumentException($"未知执行状态: {value}");
         }
-        throw new ArgumentException($"未知执行状态: {value}");
+        return status;
     }
 
     private static object ToSummary(ClockTask task) => new

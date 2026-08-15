@@ -10,7 +10,8 @@ namespace Agent.Tools;
 /// 通过 <see cref="ISkillManagementService"/> 读取 Skill，支持由运行时或 WebUI 管理服务提供内容。
 /// Prompt 返回技能名列表，让模型在 system prompt 中看到可用技能；
 /// 模型通过 skill_read 读取具体技能内容后执行。
-/// 技能表在构造时获取一次启用 Skill 快照；读取时仍由服务校验启用状态。
+/// 技能表在构造时获取一次启用 Skill 快照，每次 skill_read / skill_list 前会刷新，
+/// 使新上传/启用的技能立即可读；读取时仍由服务校验启用状态。
 /// </summary>
 public class SkillToolSet : ToolSet
 {
@@ -19,14 +20,17 @@ public class SkillToolSet : ToolSet
 
     private readonly ToolSetBridge bridge;
     private readonly ISkillManagementService skillService;
-    private readonly IReadOnlyDictionary<string, ManagedSkill> skills;
+    /// <summary>启用技能快照：构造时初始化，读取前刷新；引用赋值原子，读取方始终看到完整快照</summary>
+    private Dictionary<string, ManagedSkill> skills;
 
-    /// <summary>兼容独立 TUI 运行；机器人运行时应传入接口实例。</summary>
+    /// <summary>兼容独立 TUI 运行（同步构造，仅用于启动期一次性场景）；机器人运行时应使用 CreateAsync。</summary>
     public SkillToolSet(string skillsPath)
         : this(new FileSkillManagementService(skillsPath))
     {
     }
 
+    // 同步依赖 ListSkillsAsync().GetAwaiter().GetResult()：仅 TUI 等启动期一次性构造时阻塞可接受；
+    // 并发/异步环境下请使用 CreateAsync 异步工厂，避免 sync-over-async。
     private SkillToolSet(FileSkillManagementService skillService)
         : this(skillService, skillService.ListSkillsAsync().GetAwaiter().GetResult())
     {
@@ -78,19 +82,28 @@ public class SkillToolSet : ToolSet
         return sb.ToString();
     }
 
-    private async Task<string> ListSkillsAsync(SkillListArgs _)
+    /// <summary>
+    /// 刷新技能快照：从服务重新拉取启用技能列表，
+    /// 使新上传/启用的技能立即可读（skill_list / skill_read 前调用）。
+    /// </summary>
+    private async Task RefreshSnapshotAsync()
     {
-        var enabledSkills = (await skillService.ListSkillsAsync())
+        var latest = (await skillService.ListSkillsAsync())
             .Where(static skill => skill.Enabled)
             .OrderBy(static skill => skill.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(static skill => skill.Name)
-            .ToList();
-        if (enabledSkills.Count == 0)
+            .ToDictionary(static skill => skill.Name, StringComparer.OrdinalIgnoreCase);
+        skills = latest;
+    }
+
+    private async Task<string> ListSkillsAsync(SkillListArgs _)
+    {
+        await RefreshSnapshotAsync(); // 先刷新，保证与 skill_read 看到的快照一致
+        if (skills.Count == 0)
         {
             return "技能目录为空，没有可用技能。";
         }
-        var sb = new StringBuilder($"可用技能（共 {enabledSkills.Count} 个）：\n");
-        sb.AppendJoin('\n', enabledSkills);
+        var sb = new StringBuilder($"可用技能（共 {skills.Count} 个）：\n");
+        sb.AppendJoin('\n', skills.Keys);
         return sb.ToString();
     }
 
@@ -101,6 +114,7 @@ public class SkillToolSet : ToolSet
         {
             throw new ArgumentException("skill 参数不能为空");
         }
+        await RefreshSnapshotAsync(); // 读取前刷新快照，避免快照过期导致新上传的技能不可读
         if (!skills.ContainsKey(name))
         {
             throw new ArgumentException($"未找到技能: {name}（可用 skill_list 查看全部技能）");

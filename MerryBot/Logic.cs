@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Builder;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace MerryBot;
@@ -24,15 +23,15 @@ internal partial class Logic
     private readonly WebApplication webUiApplication;
     private readonly ConfigRegistry configRegistry;
 
-    public Logic(BotClient botClient, string dbPath)
+    public Logic(BotClient botClient, PluginStorageDatabase pluginStorageDatabase)
     {
         this.botClient = botClient;
-        PluginStorageDatabase = new(dbPath);
+        PluginStorageDatabase = pluginStorageDatabase;
         var historyDbPath = Path.Combine(botClient.PathPrefix, "group_history.db");
         var historyStoragePath = Path.Combine(botClient.PathPrefix, "storage");
         historyRecorder = new HistoryRecorder(historyDbPath, historyStoragePath, GetCoreMachineCode());
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
-        messageService = new MessageService(botClient.Bot, historyRecorder, logger, botClient.SelfId);
+        messageService = new MessageService(botClient.Bot, historyRecorder, logger, ConfigManager.Instance.ResourceSizeLimitMb * 1024 * 1024);
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, GetCoreWebAddress());
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
@@ -45,9 +44,22 @@ internal partial class Logic
         LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         LoadPlugins();
-        _ = webUiApplication.RunAsync();
+        _ = RunWebUiAsync();
         botClient.OnGroupMessageReceived += OnGroupMessageReceived;
         RegisterEventHandlers();
+    }
+
+    /// <summary>后台运行 WebUI；异常（如端口占用）记录日志而不是静默丢失。</summary>
+    private async Task RunWebUiAsync()
+    {
+        try
+        {
+            await webUiApplication.RunAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "WebUI 启动/运行失败");
+        }
     }
 
     private void RegisterEventHandlers()
@@ -112,9 +124,8 @@ internal partial class Logic
         {
             return;
         }
-        ReadOnlySpan<TypedMessage> span = CollectionsMarshal.AsSpan(chain);
-        logger.Info($"on message:{groupId}|{BotUtils.MessageChainToString(span)}");
-
+        // 群消息日志只保留群号/发送者/消息链长度摘要，避免完整消息链导致日志膨胀与隐私泄露
+        logger.Debug($"on message:{groupId}|{data.sender.user_id}|chain:{chain.Count}");
         var ingress = messageService.Ingest(data);
 
         var (isTargeted, textMessage) = ExtractMessage(ingress.MessageChain, data.self_id);

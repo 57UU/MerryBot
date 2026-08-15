@@ -62,9 +62,11 @@ public sealed class MemoryToolSet : ToolSet
     }
 
     private async Task<string> DeleteMemoryAsync(DeleteMemoryArgs args)
-        => await memoryService.DeleteMemoryAsync(sessionKey, args.key)
+    {
+        return await memoryService.DeleteMemoryAsync(sessionKey, args.key)
             ? $"已删除记忆: {args.key}"
             : $"未找到记忆: {args.key}";
+    }
 
     private sealed class SaveMemoryArgs
     {
@@ -76,5 +78,9 @@ public sealed class MemoryToolSet : ToolSet
 
     private sealed class RecallMemoryArgs { }
     private sealed class QueryMemoryArgs { [Description("要读取的记忆 key")] public string key { get; set; } = string.Empty; }
-    private sealed class DeleteMemoryArgs { [Description("要删除的记忆 key")] public string key { get; set; } = string.Empty; }
+    private sealed class DeleteMemoryArgs
+    {
+        [Description("要删除的记忆 key")]
+        public string key { get; set; } = string.Empty;
+    }
 }

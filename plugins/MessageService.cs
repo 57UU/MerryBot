@@ -36,7 +36,6 @@ public sealed record LocalMessageResource(
 /// </summary>
 public interface IMessageService
 {
-    public long SelfId { get; }
     Task<ProcessedMessage?> GetMessageAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default);
     Task<ProcessedMessage?> GetReplyAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default);
     Task<ProcessedForwardMessage?> GetForwardAsync(string forwardIdOrReference, long sourceGroupId, CancellationToken cancellationToken = default);

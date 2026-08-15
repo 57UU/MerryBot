@@ -11,8 +11,7 @@ public class Agent
     private Client llmClient;
     private AgentOptions options;
     private IList<ToolSet>? toolSets;
-    //--generate--
-    public string SystemPrompt { get; internal set; }
+    public string SystemPrompt { get; private set; }
     private Agent(
         ContextManager contextManager,
         Client llmClient,
@@ -48,11 +47,6 @@ public class Agent
         var agent = new Agent(contextManager, llmClient, options ?? new AgentOptions(), toolSets ?? []);
         return agent;
     }
-    public Task Compact(CancellationToken cancellationToken)
-    {
-        return Compact(cancellationToken, iteration: 0);
-    }
-
     private async Task Compact(CancellationToken cancellationToken, int iteration)
     {
         Log(new AgentLogEvent(
@@ -137,7 +131,9 @@ public class Agent
                     ? new LlmOptions(MaxTokens: options.MaxOutputTokens, ReasoningEffort: options.ReasoningEffort)
                     : llmOptions;
 
-                var (usage, iterationResult) = await RunIteration(
+                TokenUsage usage;
+                string? iterationResult;
+                (usage, iterationResult) = await RunIteration(
                     cancellationToken,
                     messages,
                     iterationOptions,
@@ -168,7 +164,9 @@ public class Agent
                 contextManager.context.TokenUsed = contextUsage;
                 await contextManager.contextHistory.Append(messages);
             }
-            var completedResult = result ?? string.Empty;
+            // 模型未返回内容（空 content 且无工具调用）时给调用方一个明确的占位提示，
+            // 避免上层表现为"无回复"
+            var completedResult = result ?? "（模型未返回内容）";
             Log(new AgentLogEvent(
                 AgentLogEventKind.ChatCompleted,
                 DateTimeOffset.UtcNow,
@@ -228,8 +226,27 @@ public class Agent
         // 工具并发执行，故用并发队列收集。
         var iterationAdds = new ConcurrentQueue<Message>();
         // 并发执行所有工具调用，结果按调用顺序作为 tool 消息回填
-        var toolResults = await Task.WhenAll(
-            response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue)));
+        string[] toolResults;
+        try
+        {
+            toolResults = await Task.WhenAll(
+                response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue)));
+        }
+        catch (OperationCanceledException)
+        {
+            // 会话取消：为全部未完成的工具调用回填"已取消"结果，避免消息列表留下
+            // 悬空 tool_calls 导致后续请求被 API 拒绝（400），随后继续传播取消
+            foreach (var toolCall in response.ToolCalls)
+            {
+                messages.Add(new Message
+                {
+                    role = Role.Tool,
+                    toolCallId = toolCall.Id,
+                    content = [new MessagePartText { text = $"{{\"error\": \"工具 {toolCall.Name} 已取消\"}}" }],
+                });
+            }
+            throw;
+        }
         for (int i = 0; i < response.ToolCalls.Length; i++)
         {
             messages.Add(new Message
@@ -248,8 +265,13 @@ public class Agent
         return (usage, null);
     }
 
+    /// <summary>工具结果最大长度（字符），超出截断防止长文本/超大图片 base64 撑爆上下文</summary>
+    private const int MaxToolResultLength = 8000;
+
     /// <summary>
-    /// 按工具名在已注册的 ToolSet 中查找并执行，未注册的工具返回错误信息供模型纠正
+    /// 按工具名在已注册的 ToolSet 中查找并执行，未注册的工具返回错误信息供模型纠正。
+    /// 工具执行异常不回抛——转为 error JSON 回填（与 ToolSetBridge 策略统一），模型可自纠；
+    /// 仅会话取消（OperationCanceledException）继续向上传播，由 RunIteration 统一回填取消结果。
     /// </summary>
     private async Task<string> InvokeToolAsync(
         CancellationToken cancellationToken,
@@ -271,6 +293,7 @@ public class Agent
                 if (toolSet.Tools().Any(t => t.function?.name == toolCall.Name))
                 {
                     var result = await toolSet.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
+                    result = TruncateToolResult(result);
                     Log(new AgentLogEvent(
                         AgentLogEventKind.ToolCallCompleted,
                         DateTimeOffset.UtcNow,
@@ -293,8 +316,16 @@ public class Agent
                 missingTool));
             return missingTool;
         }
+        catch (OperationCanceledException)
+        {
+            // 会话取消：继续传播（不转 error JSON），由 RunIteration 统一回填取消结果
+            throw;
+        }
         catch (Exception exception)
         {
+            // 工具执行异常不回抛：转为截断/消毒后的 error JSON 回填，模型可自纠后重试；
+            // OperationCanceledException 已被上方两个分支处理，不会到这里
+            var errorResult = $"{{\"error\": {System.Text.Json.JsonSerializer.Serialize(exception.Message)}}}";
             Log(new AgentLogEvent(
                 AgentLogEventKind.ToolCallFailed,
                 DateTimeOffset.UtcNow,
@@ -303,8 +334,17 @@ public class Agent
                 toolCall.Id,
                 toolCall.Arguments,
                 Exception: exception));
-            throw;
+            return errorResult;
         }
+    }
+
+    private static string TruncateToolResult(string result)
+    {
+        if (string.IsNullOrEmpty(result) || result.Length <= MaxToolResultLength)
+        {
+            return result;
+        }
+        return result[..MaxToolResultLength] + "\n...[已截断]";
     }
 
     private void Log(AgentLogEvent logEvent)

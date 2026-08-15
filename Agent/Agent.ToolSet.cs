@@ -26,22 +26,25 @@ public class ToolSetBridge : ToolSet
 {
     private readonly string? prompt;
     private readonly List<RegisteredTool> tools;
+    private readonly IList<ToolDef> toolDefs;
 
     private ToolSetBridge(string? prompt, List<RegisteredTool> tools)
     {
         this.prompt = prompt;
         this.tools = tools;
+        // 工具定义在构造后不可变，缓存避免每次调用全量重建/遍历（Agent 每轮都会扫 Tools()）
+        this.toolDefs = tools.Select(t => t.Def).ToList();
     }
 
     private sealed class RegisteredTool
     {
         public required ToolDef Def { get; init; }
-        public required Func<JsonElement, Action<Message>, Task<string>> Invoker { get; init; }
+        public required Func<JsonElement, CancellationToken, Action<Message>, Task<string>> Invoker { get; init; }
     }
 
     public override IList<ToolDef> Tools()
     {
-        return tools.Select(t => t.Def).ToList();
+        return toolDefs;
     }
 
     public override async Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
@@ -53,7 +56,12 @@ public class ToolSetBridge : ToolSet
         {
             var args = string.IsNullOrWhiteSpace(toolCall.Arguments) ? "{}" : toolCall.Arguments;
             using var doc = JsonDocument.Parse(args);
-            return await tool.Invoker(doc.RootElement, onIterationAdd);
+            return await tool.Invoker(doc.RootElement, cancellationToken, onIterationAdd);
+        }
+        catch (OperationCanceledException)
+        {
+            // 取消（会话取消或工具超时）不是工具错误：原样传播，由 Agent 统一回填取消结果
+            throw;
         }
         catch (Exception e)
         {
@@ -92,16 +100,23 @@ public class ToolSetBridge : ToolSet
         /// Nullable 与可空引用类型属性自动视为可选参数。函数为异步签名，返回 Task&lt;string&gt;。
         /// </summary>
         public Builder AddFunction<T>(string name, string description, Func<T, Task<string>> function)
-            => AddFunctionCore<T>(name, description, (json, _) => function(json.Deserialize<T>(DeserializeOptions)!));
+            => AddFunctionCore<T>(name, description, (json, _, _) => function(json.Deserialize<T>(DeserializeOptions)!));
 
         /// <summary>
         /// 注册需要在本次工具调用期间向 Agent 追加消息的函数。第二个参数由调用方注入；
         /// 与单参数函数并存，普通工具无需感知该回调。
         /// </summary>
         public Builder AddFunction<T>(string name, string description, Func<T, Action<Message>, Task<string>> function)
-            => AddFunctionCore<T>(name, description, (json, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, onIterationAdd));
+            => AddFunctionCore<T>(name, description, (json, _, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, onIterationAdd));
 
-        private Builder AddFunctionCore<T>(string name, string description, Func<JsonElement, Action<Message>, Task<string>> invoker)
+        /// <summary>
+        /// 注册需要感知取消的工具函数（如网络下载）。第三个参数为本次调用携带的
+        /// CancellationToken，与 Agent 的 per-tool 超时/会话取消联动；与无 token 的重载并存。
+        /// </summary>
+        public Builder AddFunction<T>(string name, string description, Func<T, CancellationToken, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, cancellationToken, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, cancellationToken, onIterationAdd));
+
+        private Builder AddFunctionCore<T>(string name, string description, Func<JsonElement, CancellationToken, Action<Message>, Task<string>> invoker)
         {
             var def = new ToolDef
             {
@@ -110,7 +125,7 @@ public class ToolSetBridge : ToolSet
                 {
                     name = name,
                     description = description,
-                    parameters = JsonSerializer.SerializeToElement(BuildTypeSchema(typeof(T), new HashSet<Type>())),
+                    parameters = JsonSerializer.SerializeToElement(BuildTypeSchema(typeof(T), new List<Type>())),
                 },
             };
             tools.Add(new RegisteredTool
@@ -130,7 +145,7 @@ public class ToolSetBridge : ToolSet
         /// 递归生成 JSON Schema：基础类型映射为 string/integer/number/boolean，
         /// 枚举带 enum 取值，集合带 items，复杂对象递归展开 properties。
         /// </summary>
-        private static Dictionary<string, object?> BuildTypeSchema(Type type, HashSet<Type> visited)
+        private static Dictionary<string, object?> BuildTypeSchema(Type type, List<Type> path)
         {
             var underlying = Nullable.GetUnderlyingType(type);
             if (underlying != null) type = underlying;
@@ -155,12 +170,16 @@ public class ToolSetBridge : ToolSet
 
             var elementType = GetEnumerableElementType(type);
             if (elementType != null)
-                return new() { ["type"] = "array", ["items"] = BuildTypeSchema(elementType, visited) };
+                return new() { ["type"] = "array", ["items"] = BuildTypeSchema(elementType, path) };
 
-            // 复杂对象：展开属性；visited 防止自引用类型无限递归
-            if (!visited.Add(type))
+            // 复杂对象：展开属性；仅当类型出现在当前展开路径上（循环/自引用）时截断为空 schema，
+            // 兄弟属性出现同一类型时仍完整展开（visited 全局去重会把第二次出现降级为空 schema）
+            if (path.Contains(type))
                 return new() { ["type"] = "object" };
 
+            path.Add(type);
+            try
+            {
             var properties = new Dictionary<string, object?>();
             var required = new List<string>();
             foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -168,7 +187,7 @@ public class ToolSetBridge : ToolSet
                 if (prop.GetIndexParameters().Length > 0 || prop.GetMethod == null) continue;
                 if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
                 var propName = prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? prop.Name;
-                var propSchema = BuildTypeSchema(prop.PropertyType, visited);
+                var propSchema = BuildTypeSchema(prop.PropertyType, path);
                 var desc = prop.GetCustomAttribute<DescriptionAttribute>()?.Description;
                 if (!string.IsNullOrEmpty(desc)) propSchema["description"] = desc;
                 if (IsPropertyRequired(prop)) required.Add(propName);
@@ -182,6 +201,11 @@ public class ToolSetBridge : ToolSet
             };
             if (required.Count > 0) schema["required"] = required;
             return schema;
+            }
+            finally
+            {
+                path.RemoveAt(path.Count - 1);
+            }
         }
 
         private static Type? GetEnumerableElementType(Type type)
@@ -211,3 +235,4 @@ public class ToolSetBridge : ToolSet
         }
     }
 }
+

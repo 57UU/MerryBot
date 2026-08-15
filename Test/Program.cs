@@ -3,20 +3,31 @@ using BrowserService;
 using DataProvider;
 using MerryBot;
 using System.Reflection;
-using Tomlyn;
-using Tomlyn.Model;
 
 public static partial class Program
 {
     public static async Task Main(string[] args)
     {
-        string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
-        ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
-        ConfigManager.Initialize().Wait();
-        await TestMarkdownRender();
+        // 手动验证工具（非 CI）：Markdown 渲染依赖本机 Chrome（或 CHROME_BIN 环境变量）
+        // 与 CDN 网络（加载 MathJax/Mermaid 资源）；联网/浏览器测试默认不执行。
+        Console.WriteLine("Markdown 渲染测试开始（依赖: Chrome + CDN 网络）。");
+        try
+        {
+            string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
+            var pluginDb = new PluginStorageDatabase(Path.Combine(dataPath, "plugin_data.db"));
+            ConfigManager.Initialize(pluginDb).Wait();
+            await TestMarkdownRender();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"测试执行失败: {ex.GetType().Name}: {ex.Message}");
+            Console.Error.WriteLine("提示: 请确认已安装 Chrome（或设置 CHROME_BIN 环境变量），且网络可访问 CDN。");
+            Environment.ExitCode = 1;
+        }
     }
     static Browser browser = new Browser(new BrowserOptions() { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
-    static async Task TestWebFetch()
+    // Dev-only：需外网与本地 Chrome，Main 不调用；勿在 CI/自动化中执行。
+    static async Task TestWebFetchDevOnly()
     {
         var url = "https://scu.edu.cn/zzjg1/yxsz.htm";
         var result=await browser.View(url);
@@ -34,154 +45,16 @@ public static partial class Program
     }
 
 
-    public static async Task TestBrowser()
+    // Dev-only：需外网与本地 Chrome，Main 不调用；勿在 CI/自动化中执行。
+    public static async Task TestBrowserDevOnly()
     {
         Browser browser = new Browser(false);
         var result = await browser.Search("React 最近漏洞 安全漏洞 2025", false);
         Console.WriteLine(result);
     }
 
-    public static async Task TestGitFetchMerge()
-    {
-        var (diff, messages, hasChanges) = await ViewVersion.GitFetchMerge();
-        Console.WriteLine($"Has changes: {hasChanges}");
-        Console.WriteLine(diff);
-        Console.WriteLine(messages);
-    }
+    // 注意：禁止在此添加会真实执行 `git fetch` / `git merge` 的测试方法——会修改仓库工作区。
 
-    public static void TestToml()
-    {
-        string tomlContent = @"
-id=2
-[Client]
-server_address = ""192.168.1.1""
-port = 80
-enabled = false
-";
-
-        TomlTable document = TomlSerializer.Deserialize<TomlTable>(tomlContent)!;
-
-        // 从文档中获取值
-        var id = document["id"];
-
-        var childNode = (TomlTable)document["Client"];
-        var address = childNode["server_address"];
-        var port = childNode["port"];
-        var enabled = childNode["enabled"];
-
-
-        Console.WriteLine($"Address: {address}, Port: {port}, Enabled: {enabled}");
-    }
-    class Data
-    {
-        public long Value;
-    }
-    class ScopedData
-    {
-        public int Id;
-        public string Value = "";
-    }
-    public static async Task TestPluginStorageDatabase()
-    {
-        string testDbPath = "test_plugin_data.db";
-        if (File.Exists(testDbPath))
-        {
-            File.Delete(testDbPath);
-        }
-        const string TEST_PLUGIN = "TestPlugin";
-
-        var testData = new Data { Value = 114514 };
-
-        using (var db = new PluginStorageDatabase(testDbPath))
-        {
-            await db.StorePluginData(TEST_PLUGIN, testData);
-            Console.WriteLine("数据已存储");
-
-            Data retrieved = (await db.GetPluginData(TEST_PLUGIN) as Data)!;
-            Console.WriteLine($"数据已取出: {retrieved}");
-
-            if (retrieved == null)
-            {
-                Console.WriteLine("测试失败: 数据为空");
-                return;
-            }
-
-            var retrievedObj = (dynamic)retrieved;
-            if (retrievedObj.Value != 114514)
-            {
-                Console.WriteLine("测试失败: 数据不匹配");
-                return;
-            }
-            Console.WriteLine("第一次测试通过");
-        }
-
-        Console.WriteLine("数据库已关闭");
-
-        using (var db2 = new PluginStorageDatabase(testDbPath))
-        {
-            Data retrieved2 = (await db2.GetPluginData(TEST_PLUGIN) as Data)!;
-            Console.WriteLine($"重新打开后数据: {retrieved2}");
-
-            if (retrieved2 == null)
-            {
-                Console.WriteLine("测试失败: 重新打开后数据为空");
-                return;
-            }
-
-            Data retrievedObj2 = (Data)retrieved2;
-            if (retrievedObj2.Value != 114514)
-            {
-                Console.WriteLine("测试失败: 重新打开后数据不匹配");
-                return;
-            }
-            Console.WriteLine("持久化测试通过");
-            //modify
-            retrievedObj2.Value = 1919810;
-            await db2.StorePluginData(TEST_PLUGIN, retrievedObj2);
-            if (((Data)(await db2.GetPluginData(TEST_PLUGIN))!).Value != 1919810)
-            {
-                Console.WriteLine("测试失败: not match");
-                return;
-            }
-            Console.WriteLine("modify测试通过");
-
-            var alphaTodos = db2.CreateScope("alpha").GetCollection<ScopedData>("todos");
-            var betaTodos = db2.CreateScope("beta").GetCollection<ScopedData>("todos");
-            await alphaTodos.UpsertAsync(new ScopedData { Id = 1, Value = "alpha" });
-            if (await betaTodos.FindByIdAsync(1) is not null)
-            {
-                Console.WriteLine("测试失败: scoped collection 未隔离");
-                return;
-            }
-            await betaTodos.UpsertAsync(new ScopedData { Id = 1, Value = "beta" });
-        }
-
-        using (var db3 = new PluginStorageDatabase(testDbPath))
-        {
-            var alphaTodos = db3.CreateScope("alpha").GetCollection<ScopedData>("todos");
-            var betaTodos = db3.CreateScope("beta").GetCollection<ScopedData>("todos");
-            if ((await alphaTodos.FindByIdAsync(1))?.Value != "alpha" ||
-                (await betaTodos.FindByIdAsync(1))?.Value != "beta")
-            {
-                Console.WriteLine("测试失败: scoped collection 未持久化");
-                return;
-            }
-            if (!await db3.CreateScope("alpha").DropCollectionAsync("todos") ||
-                await alphaTodos.FindByIdAsync(1) is not null ||
-                (await betaTodos.FindByIdAsync(1))?.Value != "beta")
-            {
-                Console.WriteLine("测试失败: scoped collection 删除错误");
-                return;
-            }
-            Console.WriteLine("scope 测试通过");
-        }
-
-        if (File.Exists(testDbPath))
-        {
-            File.Delete(testDbPath);
-        }
-        Console.WriteLine("所有测试通过!");
-    }
     static T? NullableFunction<T>() where T : struct
     {
         return default;

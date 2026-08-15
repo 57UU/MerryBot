@@ -137,7 +137,7 @@ try
         }
         catch (Exception exception)
         {
-            WriteLine($"[agent.error] {exception.Message}");
+            WriteLine($"[agent.error] {exception.GetType().Name}: {exception.Message}");
         }
     }
 }
@@ -147,7 +147,7 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 }
 catch (Exception exception)
 {
-    WriteLine($"[startup.error] {exception.Message}");
+    WriteLine($"[startup.error] {exception.GetType().Name}: {exception.Message}");
 }
 finally
 {

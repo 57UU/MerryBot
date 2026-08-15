@@ -23,7 +23,7 @@ public class Help : Plugin
         }
         if (pluginTags == null)
         {
-            _ = Bot.SendGroupMessage(data.GroupId, "尚未完成加载");
+            _ = Channel.SendGroupMessage(data.GroupId, "尚未完成加载");
             return Task.CompletedTask;
         }
         var groupId = data.GroupId;
@@ -43,7 +43,7 @@ public class Help : Plugin
         }
         //display admin plugins for admin user
         sb.AppendLine("- 管理员插件：");
-        if (data.self_id == Interop.AuthorizedUser)
+        if (data.sender.user_id == Interop.AuthorizedUser)
         {
             foreach (var i in pluginTags)
             {
@@ -58,7 +58,7 @@ public class Help : Plugin
             }
         }
         var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
-        _ = Bot.SendGroupMessage(groupId, help);
+        _ = Channel.SendGroupMessage(groupId, help);
         return Task.CompletedTask;
     }
 }

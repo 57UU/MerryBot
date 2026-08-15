@@ -102,6 +102,16 @@ public class JsonSerializationTests
         var client = TestData.CreateLoadedClient();
 
         Assert.Equal(5, client.GetAllModels().Count);
+
+        // Parsing with comments/trailing commas must not corrupt field values.
+        var gpt4o = client.GetModel("openai", "gpt-4o")!;
+        Assert.Equal("GPT-4o", gpt4o.Name);
+        Assert.Equal("Flagship multimodal model", gpt4o.Description);
+        Assert.Equal(128_000, gpt4o.Limit!.Context);
+
+        var lite = client.GetModel("deepseek", "deepseek-lite")!;
+        Assert.Equal("DeepSeek Lite", lite.Name);
+        Assert.Equal(32_000, lite.Limit!.Context);
     }
 
     [Fact]

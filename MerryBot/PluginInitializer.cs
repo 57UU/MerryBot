@@ -29,6 +29,8 @@ internal class PluginInitializer<T>
         var constructor = constructors[0];
         var parameters = constructor.GetParameters();
         var existingDependency = specificDepency.Select(d => d.GetType()).ToList();
+        List<Edge> newEdges = new();
+        List<object> newDependencies = new();
         foreach (var param in parameters)
         {
             var paramType = Nullable.GetUnderlyingType(param.ParameterType) ?? param.ParameterType;
@@ -36,16 +38,18 @@ internal class PluginInitializer<T>
             if (typeof(IPluginConfig).IsAssignableFrom(paramType))
             {
                 //this is a specific dependency
-                specificDepency.Add(_getConfigFunc(attribute.Id, paramType));
+                newDependencies.Add(_getConfigFunc(attribute.Id, paramType));
                 continue;
             }
             if (!existingDependency.Contains(paramType))
             {
-                edges.Add(new Edge(type, paramType));
+                newEdges.Add(new Edge(type, paramType));
             }
         }
-        this.SpecificDependencies.Add(type, specificDepency);
-        this.nodes.Add(type);
+        edges.AddRange(newEdges);
+        nodes.Add(type);
+        specificDepency.AddRange(newDependencies);
+        SpecificDependencies.Add(type, specificDepency);
     }
     private Dictionary<Type, T> instances = new();
     private List<T> initOrder = new();
@@ -157,7 +161,11 @@ internal class PluginInitializer<T>
         List<int>[] dependencies = new List<int>[nodes.Count];// a,b : b depend on a
         foreach (var edge in edges)
         {
-            var source = typeToIndex[edge.source];
+            if (!typeToIndex.TryGetValue(edge.source, out var source))
+            {
+                logger.Error($"{edge.source.Name} 的依赖边指向未知节点，已跳过该依赖");
+                continue;
+            }
             if (!typeToIndex.TryGetValue(edge.target, out var target))
             {
                 var implementations = nodes
@@ -166,8 +174,11 @@ internal class PluginInitializer<T>
                     .ToList();
                 if (implementations.Count != 1)
                 {
-                    throw new ChainException(
-                        $"{edge.source.Name} 依赖 {edge.target.Name}，但找到 {implementations.Count} 个可用实现");
+                    // 按插件隔离：单个插件依赖解析失败仅记录错误并跳过该依赖边，
+                    // 依赖方会在 Initialize 阶段因缺少依赖被单独跳过，不影响其余插件加载
+                    logger.Error(
+                        $"{edge.source.Name} 依赖 {edge.target.Name}，但找到 {implementations.Count} 个可用实现，已跳过该依赖");
+                    continue;
                 }
                 target = implementations[0].index;
             }

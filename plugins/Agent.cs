@@ -22,6 +22,10 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     private readonly FileSkillManagementService skillService;
     private readonly MemoryManagementService memoryService;
     private readonly ConcurrentDictionary<string, PendingGroupMessages> pendingMessages = new();
+    /// <summary>插件生命周期取消源：随 Dispose 取消，贯穿会话调用链（Agent → LLM → 工具）</summary>
+    private readonly CancellationTokenSource disposeCts = new();
+    /// <summary>群消息调用限速（默认 5 次/20 秒），防止消息刷屏打爆模型 API</summary>
+    private readonly RateLimiter rateLimiter = new();
 
     private sealed class PendingGroupMessages
     {
@@ -136,18 +140,39 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             var session = await sessionManager.GetSessionAsync(sessionId);
             while (true)
             {
+                // 限速：超过阈值时等待窗口过期再继续，避免消息刷屏打爆模型 API
+                if (rateLimiter.CheckIsLimited(groupId))
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(rateLimiter.LimitTime), disposeCts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    continue;
+                }
+
                 List<PendingGroupMessage> batch;
                 lock (pending.SyncRoot)
                 {
                     if (pending.Items.Count == 0)
                     {
                         pending.IsDispatching = false;
+                        // 会话空闲时移除该群条目，避免长期无消息的群泄漏内存；
+                        // 期间到达的新消息会创建新条目独立调度，AgentSession 的互斥队列保证不重复处理
+                        if (pendingMessages.TryGetValue(sessionId, out var current) && ReferenceEquals(current, pending))
+                        {
+                            pendingMessages.TryRemove(sessionId, out _);
+                        }
                         return;
                     }
 
                     batch = [.. pending.Items];
                     pending.Items.Clear();
                 }
+                rateLimiter.Increase(groupId);
 
                 var userInput = FormatBatch(batch);
                 var replyTargets = batch
@@ -156,7 +181,8 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                     .ToArray();
                 var (reply, usage) = await session.ChatAndWaitAsync(
                     userInput,
-                    reply => SendGroupReply(groupId, replyTargets, reply));
+                    reply => SendGroupReply(groupId, replyTargets, reply),
+                    disposeCts.Token);
                 if (!string.IsNullOrWhiteSpace(reply))
                 {
                     try
@@ -168,6 +194,14 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                         Logger.Warn($"记录 AI 消息失败: {groupId}\n{exception.Message}");
                     }
                 }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 插件关闭：静默退出调度循环，释放调度状态
+            lock (pending.SyncRoot)
+            {
+                pending.IsDispatching = false;
             }
         }
         catch (Exception exception)
@@ -184,7 +218,9 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     {
         if (batch.Count == 1)
         {
-            return batch[0].Content;
+            // 单条消息也标注发送者，与批量格式一致：模型据此识别"当前用户"身份
+            //（记忆写入授权等场景需要 user_id）
+            return $"[用户 {batch[0].SenderId}] {batch[0].Content}";
         }
 
         var messages = batch.Select(item => $"[用户 {item.SenderId}] {item.Content}");
@@ -202,7 +238,8 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             .Select(target => (TypedMessage)AtData.FromAt(target.ToString()))
             .Append(TextData.FromText(reply))
             .ToList();
-        _ = Bot.SendGroupMessage(groupId, chain);
+        // Channel 内部已捕获异常并记录日志（含插件 id），不会抛出
+        _ = Channel.SendGroupMessage(groupId, chain);
     }
 
     /// <summary>定时任务回复后记录 AI 消息（sessionId 即会话标识，仅文本 + token 用量）。</summary>
@@ -217,6 +254,9 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
 
     public override void Dispose()
     {
+        disposeCts.Cancel();
+        disposeCts.Dispose();
+        rateLimiter.Dispose();
         try
         {
             clockService.DisposeAsync().AsTask().GetAwaiter().GetResult();

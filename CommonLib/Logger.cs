@@ -1,5 +1,16 @@
 namespace CommonLib;
 
+/// <summary>日志级别，数值越大越严重。</summary>
+public enum LogLevel
+{
+    Trace = 0,
+    Debug = 1,
+    Info = 2,
+    Warn = 3,
+    Error = 4,
+    Fatal = 5,
+}
+
 public interface ISimpleLogger
 {
     public void Trace(string message);
@@ -11,35 +22,30 @@ public interface ISimpleLogger
 }
 public class ConsoleLogger : ISimpleLogger
 {
+    private readonly object _sync = new();
     private ConsoleLogger() { }
     public static ConsoleLogger Instance { get; } = new ConsoleLogger();
-    public void Debug(string message)
+
+    /// <summary>低于该级别的日志将被丢弃（默认输出全部级别）。</summary>
+    public LogLevel MinimumLevel { get; set; } = LogLevel.Trace;
+
+    private void Write(LogLevel level, string tag, string message)
     {
-        Console.WriteLine($"Debug:{message}");
+        if (level < MinimumLevel)
+        {
+            return;
+        }
+        // 加锁避免多线程并发写入时输出交错
+        lock (_sync)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {tag}:{message}");
+        }
     }
 
-    public void Error(string message)
-    {
-        Console.WriteLine($"Error:{message}");
-    }
-
-    public void Fatal(string message)
-    {
-        Console.WriteLine($"Fatal:${message}");
-    }
-
-    public void Info(string message)
-    {
-        Console.WriteLine($"Info:{message}");
-    }
-
-    public void Trace(string message)
-    {
-        Console.WriteLine($"Trace:{message}");
-    }
-
-    public void Warn(string message)
-    {
-        Console.WriteLine($"Warn:{message}");
-    }
+    public void Trace(string message) => Write(LogLevel.Trace, "Trace", message);
+    public void Debug(string message) => Write(LogLevel.Debug, "Debug", message);
+    public void Info(string message) => Write(LogLevel.Info, "Info", message);
+    public void Warn(string message) => Write(LogLevel.Warn, "Warn", message);
+    public void Error(string message) => Write(LogLevel.Error, "Error", message);
+    public void Fatal(string message) => Write(LogLevel.Fatal, "Fatal", message);
 }

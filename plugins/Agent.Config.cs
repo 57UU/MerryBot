@@ -22,4 +22,10 @@ public class AgentConfig : IPluginConfig
 
     [ConfigDescription("视觉提示词", "交给辅助视觉模型的图片描述提示词。")]
     public string VisionPrompt { get; set; } = "请详细描述这张图片的内容。";
+
+    [ConfigDescription("允许执行 shell 命令", "是否注册 bash/终端工具集。默认关闭；开启后模型可在常驻 shell 中执行任意命令，请确认信任该群的用户。")]
+    public bool AllowShell { get; set; } = false;
+
+    [ConfigDescription("图片大小上限", "load_image 等工具允许下载的图片大小上限（MB）。")]
+    public int MaxImageSizeMb { get; set; } = 10;
 }

@@ -224,11 +224,20 @@ public sealed class FileSkillManagementService : ISkillManagementService
                 Directory.CreateDirectory(directory);
                 await using var input = entry.Open();
                 await using var output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                await input.CopyToAsync(output, cancellationToken);
-                extractedBytes += entry.Length;
-                if (extractedBytes > MaxUploadBytes)
+                // 按"实际写出字节数"累计（zip bomb 的声明长度不可信），
+                // 单个 entry 或累计解压大小超过上限立即中止，由 finally 删除已解压内容。
+                var buffer = new byte[64 * 1024];
+                long entryBytes = 0;
+                int read;
+                while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(upload), "Skill ZIP 解压后不能超过 20 MB。");
+                    entryBytes += read;
+                    extractedBytes += read;
+                    if (entryBytes > MaxUploadBytes || extractedBytes > MaxUploadBytes)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(upload), "Skill ZIP 解压后不能超过 20 MB。");
+                    }
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 }
             }
             Directory.Move(temporaryDirectory, destinationDirectory);
