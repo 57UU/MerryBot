@@ -117,9 +117,17 @@ internal sealed class CoreClockStore : IClockStore
             var task = await tasks.FindByIdAsync(expectedTask.Id);
             if (task == null ||
                 task.SessionId != expectedTask.SessionId ||
-                !task.Enabled ||
-                task.NextRunAtUtc != ToNullableUtcDateTime(expectedTask.NextRunAtUtc) ||
-                task.NextRunAtUtc != ToUtcDateTime(scheduledAtUtc))
+                !task.Enabled)
+            {
+                return null;
+            }
+
+            // LiteDB 读回的 DateTime 是本地墙钟（Kind=Local，刻度带本地偏移），
+            // 必须统一转成 UTC 实例再与期望值比较，否则 CAS 永远不相等、领取被静默拒绝。
+            var storedNext = task.NextRunAtUtc?.ToUniversalTime();
+            var expectedNext = expectedTask.NextRunAtUtc?.UtcDateTime;
+            if (storedNext != expectedNext ||
+                storedNext != ToUtcDateTime(scheduledAtUtc))
             {
                 return null;
             }
@@ -194,8 +202,8 @@ internal sealed class CoreClockStore : IClockStore
             .Where(item => item.SessionId == sessionId)
             .Where(item => query.TaskId == null || item.TaskId == query.TaskId)
             .Where(item => query.Status == null || item.Status == query.Status)
-            .Where(item => query.FromUtc == null || item.ScheduledAtUtc >= ToUtcDateTime(query.FromUtc.Value))
-            .Where(item => query.ToUtc == null || item.ScheduledAtUtc <= ToUtcDateTime(query.ToUtc.Value))
+            .Where(item => query.FromUtc == null || item.ScheduledAtUtc.ToUniversalTime() >= ToUtcDateTime(query.FromUtc.Value))
+            .Where(item => query.ToUtc == null || item.ScheduledAtUtc.ToUniversalTime() <= ToUtcDateTime(query.ToUtc.Value))
             .OrderByDescending(item => item.ScheduledAtUtc)
             .Take(limit)
             .Select(ToModel)
@@ -270,8 +278,12 @@ internal sealed class CoreClockStore : IClockStore
     private static DateTime? ToNullableUtcDateTime(DateTimeOffset? value) =>
         value?.UtcDateTime;
 
-    private static DateTimeOffset ToDateTimeOffset(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+    private static DateTimeOffset ToDateTimeOffset(DateTime value)
+    {
+        // LiteDB 读回的 DateTime 是本地墙钟（Kind=Local，刻度已含本地偏移）：
+        // 必须转成 UTC 实例，否则下游拿到的时间比真实时刻偏移一个本地时区（如 +8 小时）。
+        return new DateTimeOffset(value.ToUniversalTime());
+    }
 
     private static DateTimeOffset? ToNullableDateTimeOffset(DateTime? value) =>
         value is { } timestamp ? ToDateTimeOffset(timestamp) : null;

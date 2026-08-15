@@ -94,11 +94,6 @@ public record PluginInterop(
     /// </summary>
     public List<MessageInterceptor> Interceptors { get; } = new();
     /// <summary>
-    /// 定时任务执行器：core 先以空转发器创建调度器，Agent 插件初始化时注册自己的执行器（Inner）。
-    /// 未注册时到点任务标记失败并记录原因，调度器不受影响。
-    /// </summary>
-    public DelegatingClockExecutor ClockExecutor { get; } = new();
-    /// <summary>
     /// find the plugin of specific type
     /// </summary>
     /// <typeparam name="T">插件的类型</typeparam>

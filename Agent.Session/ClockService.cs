@@ -10,7 +10,7 @@ public sealed class ClockService : IAsyncDisposable
     private const int ResultSummaryLimit = 2000;
 
     private readonly IClockStore _store;
-    private readonly IClockExecutor _executor;
+    private readonly DelegatingClockExecutor _executor;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly SemaphoreSlim _wakeSignal = new(0, 1);
@@ -25,13 +25,16 @@ public sealed class ClockService : IAsyncDisposable
 
     public ClockService(
         IClockStore store,
-        IClockExecutor executor,
+        DelegatingClockExecutor executor,
         TimeProvider? timeProvider = null)
     {
         _store = store;
         _executor = executor;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    /// <summary>调度器持有的执行器；宿主/插件通过设置其 <c>Inner</c> 注册真正的执行逻辑。</summary>
+    public DelegatingClockExecutor Executor => _executor;
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {

@@ -44,7 +44,7 @@ try
     sessionManager = new AgentSessionManager(CreateAgentAsync);
     clockService = new ClockService(
         new InMemoryClockStore(),
-        new AgentSessionClockExecutor(sessionManager));
+        new DelegatingClockExecutor { Inner = new AgentSessionClockExecutor(sessionManager) });
     await clockService.StartAsync(shutdown.Token);
 
     chatApp.Bind(sessionManager, clockService, browser, terminalToolSets);

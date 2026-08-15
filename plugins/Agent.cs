@@ -49,7 +49,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         });
         sessionManager = new AgentSessionManager(CreateAgent);
         // 调度器由 core 拥有：插件只注册自己的执行器（把任务内容投给本插件的 AgentSession 执行）
-        Interop.ClockExecutor.Inner = new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync);
+        Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync);
         persistenceStartTask = InitializePersistenceAsync();
     }
     private static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
