@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -54,90 +55,29 @@ public class AnthropicBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        var maxTokens = options.MaxTokens ?? _defaultMaxTokens;
-        var thinkingEnabled = !string.IsNullOrWhiteSpace(options.ReasoningEffort);
-        var thinkingBudget = 0;
-        if (thinkingEnabled)
-        {
-            // thinkingEnabled 由 IsNullOrWhiteSpace 保证非空
-            thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort!);
-            // Anthropic 要求 budget_tokens < max_tokens，且 thinking 计入 max_tokens 消耗：
-            // 预算占满时模型将没有输出余量，max_tokens 必须抬到预算之上。
-            // 保留用户配置意图——仅在用户配置值不足时抬升，取"用户配置值"与
-            // "预算 + 1 最小余量"的较大者，而不是无条件放大到 预算+4096
-            // （避免 high 档把用户配置的 4096 覆盖成 36864）；用户显式配置更大的
-            // MaxOutputTokens 时保持不变。
-            if (maxTokens <= thinkingBudget)
-            {
-                maxTokens = Math.Max(maxTokens, thinkingBudget + 1);
-            }
-        }
+        var (maxTokens, thinkingEnabled, thinkingBudget) = ResolveGenerationConfig(options);
 
         var apiMessages = BuildMessages(messages);
         if (_enablePromptCache)
         {
             ApplyCacheBreakpoints(apiMessages);
         }
-        var requestBody = new Dictionary<string, object>
-        {
-            ["model"] = model,
-            ["max_tokens"] = maxTokens,
-            ["messages"] = apiMessages,
-        };
-        if (!string.IsNullOrWhiteSpace(systemPrompt))
-        {
-            // 启用缓存时 system 必须为块数组才能在文本块上打 cache_control 断点；
-            // 关闭时保持字符串下发，请求体与未启用时完全一致
-            requestBody["system"] = _enablePromptCache
-                ? new List<object>
-                {
-                    new Dictionary<string, object>
-                    {
-                        ["type"] = "text",
-                        ["text"] = systemPrompt,
-                        ["cache_control"] = CacheControl,
-                    },
-                }
-                : systemPrompt;
-        }
-        if (thinkingEnabled)
-        {
-            // 开启 thinking 时 API 不允许 temperature/top_p/top_k，直接不下发
-            requestBody["thinking"] = new Dictionary<string, object>
-            {
-                ["type"] = "enabled",
-                ["budget_tokens"] = thinkingBudget,
-            };
-        }
-        else if (options.Temperature != null)
-        {
-            requestBody["temperature"] = options.Temperature;
-        }
-        if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
-        if (options.ExtraBody != null)
-        {
-            foreach (var (key, value) in options.ExtraBody)
-            {
-                requestBody[key] = value;
-            }
-        }
-
-        string jsonData = JsonSerializer.Serialize(requestBody);
+        string jsonData = JsonSerializer.Serialize(
+            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: false));
 
         string responseBody;
-        // 两段超时：发送到响应头（首字节）由 ttfbCts 控制，响应体读取受 totalCts 总时长约束；
+        // 非流式请求只挂总时长超时：LLM 服务端"算完整轮才发响应头"，首字节约等于
+        // 整个生成耗时，TTFB（首 token 延迟）对非流式无意义且会误杀长生成；
         // 超时映射为不可重试的 RequestTimeoutException，避免 LLM 非幂等请求超时重试造成双倍计费
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.TotalGeneration);
-        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
-        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)
             {
@@ -208,6 +148,299 @@ public class AnthropicBackend : Backend
             thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
         var usage = json.Usage ?? new AnthropicUsage();
         return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
+    }
+
+    /// <summary>
+    /// 解析生成配置：max_tokens（含 thinking 预算抬升）与 thinking 开关。
+    /// thinkingEnabled 由 IsNullOrWhiteSpace 保证非空；Anthropic 要求
+    /// budget_tokens &lt; max_tokens，且 thinking 计入 max_tokens 消耗：预算占满时
+    /// 模型将没有输出余量，max_tokens 必须抬到预算之上。保留用户配置意图——
+    /// 仅在用户配置值不足时抬升，取"用户配置值"与"预算 + 1 最小余量"的较大者，
+    /// 而不是无条件放大到 预算+4096（避免 high 档把用户配置的 4096 覆盖成 36864）；
+    /// 用户显式配置更大的 MaxOutputTokens 时保持不变。
+    /// </summary>
+    private (int maxTokens, bool thinkingEnabled, int thinkingBudget) ResolveGenerationConfig(LlmOptions options)
+    {
+        var maxTokens = options.MaxTokens ?? _defaultMaxTokens;
+        var thinkingEnabled = !string.IsNullOrWhiteSpace(options.ReasoningEffort);
+        var thinkingBudget = 0;
+        if (thinkingEnabled)
+        {
+            thinkingBudget = ThinkingBudgetTokens(options.ReasoningEffort!);
+            if (maxTokens <= thinkingBudget)
+            {
+                maxTokens = Math.Max(maxTokens, thinkingBudget + 1);
+            }
+        }
+        return (maxTokens, thinkingEnabled, thinkingBudget);
+    }
+
+    /// <summary>构造请求体：非流式与流式共用，流式追加 stream 标志。</summary>
+    private Dictionary<string, object> BuildRequestBody(
+        string systemPrompt,
+        LlmOptions options,
+        string model,
+        int maxTokens,
+        bool thinkingEnabled,
+        int thinkingBudget,
+        List<object> apiMessages,
+        bool stream)
+    {
+        var requestBody = new Dictionary<string, object>
+        {
+            ["model"] = model,
+            ["max_tokens"] = maxTokens,
+            ["messages"] = apiMessages,
+        };
+        if (!string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            // 启用缓存时 system 必须为块数组才能在文本块上打 cache_control 断点；
+            // 关闭时保持字符串下发，请求体与未启用时完全一致
+            requestBody["system"] = _enablePromptCache
+                ? new List<object>
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = "text",
+                        ["text"] = systemPrompt,
+                        ["cache_control"] = CacheControl,
+                    },
+                }
+                : systemPrompt;
+        }
+        if (thinkingEnabled)
+        {
+            // 开启 thinking 时 API 不允许 temperature/top_p/top_k，直接不下发
+            requestBody["thinking"] = new Dictionary<string, object>
+            {
+                ["type"] = "enabled",
+                ["budget_tokens"] = thinkingBudget,
+            };
+        }
+        else if (options.Temperature != null)
+        {
+            requestBody["temperature"] = options.Temperature;
+        }
+        if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
+        if (stream)
+        {
+            requestBody["stream"] = true;
+        }
+        if (options.ExtraBody != null)
+        {
+            foreach (var (key, value) in options.ExtraBody)
+            {
+                requestBody[key] = value;
+            }
+        }
+        return requestBody;
+    }
+
+    /// <summary>
+    /// 流式生成（SSE，event: 行 + data: 行）。text_delta → TextDelta、
+    /// thinking_delta → ReasoningDelta；thinking 块在 content_block_stop 收尾时
+    /// 组装完整块（完整 signature 只在最后一个 thinking_delta 携带）；tool_use 的
+    /// id/name 在 content_block_start 到达，参数经 input_json_delta 累积。
+    /// </summary>
+    public async IAsyncEnumerable<StreamEvent> GenerateStream(
+        IList<Message> messages,
+        string systemPrompt,
+        LlmOptions options,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        string model = options.Model ?? _defaultModel
+            ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
+
+        var (maxTokens, thinkingEnabled, thinkingBudget) = ResolveGenerationConfig(options);
+        var apiMessages = BuildMessages(messages);
+        if (_enablePromptCache)
+        {
+            ApplyCacheBreakpoints(apiMessages);
+        }
+        string jsonData = JsonSerializer.Serialize(
+            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: true));
+
+        using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
+        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
+        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
+        request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
+        request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
+        request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+            throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
+        }
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
+        using var reader = new StreamReader(responseStream, Encoding.UTF8);
+        var textBuilder = new StringBuilder();
+        var reasoningBuilder = new StringBuilder();
+        // thinking 块累积（含签名，须原样回传）；redacted_thinking 在 start 事件即完整
+        var thinkingBlocks = new List<ThinkingBlock>();
+        var pendingThinking = new Dictionary<int, PendingThinking>();
+        var pendingToolCalls = new Dictionary<int, (string Id, string Name, StringBuilder Arguments)>();
+        AnthropicUsage? usage = null;
+        string? line;
+        while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
+        {
+            if (line.Length == 0)
+            {
+                continue; // SSE 帧分隔空行
+            }
+            if (line.StartsWith("event:", StringComparison.Ordinal))
+            {
+                continue; // 事件名已由 data 内的 type 字段表达，无需单独跟踪
+            }
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var data = line["data:".Length..].Trim();
+            if (data.Length == 0)
+            {
+                continue;
+            }
+            var streamEvent = JsonSerializer.Deserialize<AnthropicStreamEvent>(data);
+            if (streamEvent is null)
+            {
+                continue;
+            }
+            switch (streamEvent.Type)
+            {
+                case "message_start":
+                    if (streamEvent.Message?.Usage != null)
+                    {
+                        usage = streamEvent.Message.Usage;
+                    }
+                    break;
+                case "content_block_start":
+                    if (streamEvent.ContentBlock != null)
+                    {
+                        switch (streamEvent.ContentBlock.Type)
+                        {
+                            case "thinking":
+                                pendingThinking[streamEvent.Index] = new PendingThinking(streamEvent.ContentBlock.Thinking ?? string.Empty);
+                                break;
+                            case "redacted_thinking":
+                                thinkingBlocks.Add(new ThinkingBlock
+                                {
+                                    Type = "redacted_thinking",
+                                    Data = streamEvent.ContentBlock.Data ?? string.Empty,
+                                });
+                                break;
+                            case "tool_use":
+                                pendingToolCalls[streamEvent.Index] = (
+                                    streamEvent.ContentBlock.Id ?? string.Empty,
+                                    streamEvent.ContentBlock.Name ?? string.Empty,
+                                    new StringBuilder());
+                                break;
+                        }
+                    }
+                    break;
+                case "content_block_delta":
+                    if (streamEvent.Delta != null)
+                    {
+                        switch (streamEvent.Delta.Type)
+                        {
+                            case "text_delta":
+                                if (streamEvent.Delta.Text is { Length: > 0 } text)
+                                {
+                                    textBuilder.Append(text);
+                                    yield return new TextDelta(text);
+                                }
+                                break;
+                            case "thinking_delta":
+                                if (streamEvent.Delta.Thinking is { Length: > 0 } thinking)
+                                {
+                                    reasoningBuilder.Append(thinking);
+                                    yield return new ReasoningDelta(thinking);
+                                    if (pendingThinking.TryGetValue(streamEvent.Index, out var pending))
+                                    {
+                                        pending.Text.Append(thinking);
+                                    }
+                                }
+                                // 完整 signature 只在最后一个 thinking_delta 携带
+                                if (streamEvent.Delta.Signature is { Length: > 0 }
+                                    && pendingThinking.TryGetValue(streamEvent.Index, out var sigPending))
+                                {
+                                    sigPending.Signature = streamEvent.Delta.Signature;
+                                }
+                                break;
+                            case "input_json_delta":
+                                if (streamEvent.Delta.PartialJson is { Length: > 0 }
+                                    && pendingToolCalls.TryGetValue(streamEvent.Index, out var toolCall))
+                                {
+                                    toolCall.Arguments.Append(streamEvent.Delta.PartialJson);
+                                }
+                                break;
+                        }
+                    }
+                    break;
+                case "content_block_stop":
+                    // thinking 块收尾：累积文字 + 最终 signature
+                    if (pendingThinking.Remove(streamEvent.Index, out var finishedThinking))
+                    {
+                        thinkingBlocks.Add(new ThinkingBlock
+                        {
+                            Type = "thinking",
+                            Thinking = finishedThinking.Text.ToString(),
+                            Signature = finishedThinking.Signature,
+                        });
+                    }
+                    break;
+                case "message_delta":
+                    // message_start 带 input/cache 用量，message_delta 带 output 用量
+                    if (streamEvent.Usage != null)
+                    {
+                        usage ??= new AnthropicUsage();
+                        usage.OutputTokens = streamEvent.Usage.OutputTokens;
+                    }
+                    break;
+                case "message_stop":
+                    break; // 流自然结束，跳出循环后统一组装终结事件
+                case "error":
+                    throw MapStreamError(streamEvent.Error);
+            }
+        }
+
+        var toolCalls = pendingToolCalls
+            .OrderBy(pair => pair.Key)
+            .Select(pair => new ToolCall(pair.Value.Id, pair.Value.Name, pair.Value.Arguments.ToString()))
+            .ToArray();
+        var result = new GenerateResponse(
+            textBuilder.Length > 0 ? textBuilder.ToString() : null,
+            toolCalls.Length > 0 ? toolCalls : null,
+            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
+            thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
+        var tokenUsage = usage is null
+            ? TokenUsage.Zero
+            : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
+        yield return new StreamCompleted(result, tokenUsage);
+    }
+
+    /// <summary>流中 error 事件映射为 LlmException：overloaded/rate_limit 可重试，其余不可重试。</summary>
+    private static LlmException MapStreamError(AnthropicStreamError? error)
+    {
+        var message = error?.Message is { Length: > 0 } ? error.Message : "未知流式错误";
+        return error?.Type switch
+        {
+            "overloaded_error" => new ServerErrorException(message, 503),
+            "rate_limit_error" => new RateLimitException(message, 429),
+            _ => new InvalidResponseException($"Anthropic 流式错误: {message}"),
+        };
+    }
+
+    /// <summary>流式 thinking 块累积器（值类型元组无法就地改 Signature，用可变类）。</summary>
+    private sealed class PendingThinking
+    {
+        public readonly StringBuilder Text;
+        public string Signature = string.Empty;
+
+        public PendingThinking(string initial) => Text = new StringBuilder(initial);
     }
 
     /// <summary>
@@ -506,5 +739,62 @@ internal class AnthropicUsage
 
     [JsonIgnore]
     public int CachedTokens => CacheReadInputTokens + CacheCreationInputTokens;
+}
+
+internal class AnthropicStreamEvent
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; }
+
+    [JsonPropertyName("index")]
+    public int Index { get; set; }
+
+    [JsonPropertyName("message")]
+    public AnthropicStreamMessage? Message { get; set; }
+
+    [JsonPropertyName("content_block")]
+    public AnthropicContentBlock? ContentBlock { get; set; }
+
+    [JsonPropertyName("delta")]
+    public AnthropicStreamDelta? Delta { get; set; }
+
+    [JsonPropertyName("usage")]
+    public AnthropicUsage? Usage { get; set; }
+
+    [JsonPropertyName("error")]
+    public AnthropicStreamError? Error { get; set; }
+}
+
+internal class AnthropicStreamMessage
+{
+    [JsonPropertyName("usage")]
+    public AnthropicUsage? Usage { get; set; }
+}
+
+internal class AnthropicStreamDelta
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; }
+
+    [JsonPropertyName("text")]
+    public string? Text { get; set; }
+
+    [JsonPropertyName("thinking")]
+    public string? Thinking { get; set; }
+
+    [JsonPropertyName("signature")]
+    public string? Signature { get; set; }
+
+    [JsonPropertyName("partial_json")]
+    public string? PartialJson { get; set; }
+}
+
+internal class AnthropicStreamError
+{
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
 }
 #pragma warning restore CS8618

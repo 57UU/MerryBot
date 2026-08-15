@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace LlmBackend;
@@ -18,15 +19,30 @@ public enum LlmModelCapabilities
 /// <summary>请求超时的默认值，未在 LlmOptions 中指定时生效。</summary>
 public static class LlmDefaults
 {
-    /// <summary>发送请求到收到响应头（首字节）的超时</summary>
+    /// <summary>
+    /// 首字节（首 token）超时，仅流式请求生效：衡量服务端产出第一个 chunk 的延迟。
+    /// 非流式请求不设此段——服务端"算完整轮才发响应头"，TTFB 对非流式无意义，
+    /// 且默认值远小于总时长时会误杀深度思考模型的长生成，只受 TotalGeneration 约束。
+    /// </summary>
     public static readonly TimeSpan TimeToFirstByte = TimeSpan.FromSeconds(60);
     /// <summary>整个生成过程（含响应体读取）的总超时上限</summary>
     public static readonly TimeSpan TotalGeneration = TimeSpan.FromMinutes(5);
+    /// <summary>流式生成的默认总超时：长输出常见，比一次性生成的默认值放宽</summary>
+    public static readonly TimeSpan StreamingTotalGeneration = TimeSpan.FromMinutes(30);
 }
 
 public interface Backend
 {
     public Task<(GenerateResponse, TokenUsage)> Generate(CancellationToken cancellationToken, IList<Message> messages, string systemPrompt, LlmOptions options);
+
+    /// <summary>
+    /// 流式生成：按序产出增量事件，终结事件 <see cref="StreamCompleted"/> 携带完整
+    /// GenerateResponse 与 TokenUsage。枚举器是惰性的——请求在首次 MoveNextAsync 时发出，
+    /// 提前 break 会经 DisposeAsync 释放连接。取消令牌经枚举器通道传入：
+    /// 消费方用 <c>await foreach (var e in GenerateStream(...).WithCancellation(ct))</c>
+    /// 或显式 <c>GetAsyncEnumerator(ct)</c>，方法参数位置不传令牌。
+    /// </summary>
+    public IAsyncEnumerable<StreamEvent> GenerateStream(IList<Message> messages, string systemPrompt, LlmOptions options, [EnumeratorCancellation] CancellationToken cancellationToken = default);
 }
 
 public record LlmOptions(
@@ -36,6 +52,7 @@ public record LlmOptions(
     IEnumerable<ToolDef>? Tools = null,
     IDictionary<string, object>? ExtraBody = null,
     string? ReasoningEffort = null,
+    /// <summary>首字节（首 token）超时，仅流式请求生效；非流式只受 TotalTimeout 约束</summary>
     TimeSpan? TimeToFirstByte = null,
     TimeSpan? TotalTimeout = null
     );
@@ -137,3 +154,18 @@ public record TokenUsage(
         a.completionUsage + b.completionUsage,
         a.cachedUsage + b.cachedUsage);
 };
+
+/// <summary>流式生成事件基类：正文/推理增量 + 携带完整响应的终结事件。</summary>
+public abstract record StreamEvent;
+
+/// <summary>正文增量（逐 token 或逐块，按序拼接即为完整正文）。</summary>
+public sealed record TextDelta(string Delta) : StreamEvent;
+
+/// <summary>
+/// 推理增量（OpenAI reasoning_content / Anthropic thinking 文字 / Responses reasoning 摘要），
+/// 按序拼接；工具调用不做增量流，完整结果在终结事件带回。
+/// </summary>
+public sealed record ReasoningDelta(string Delta) : StreamEvent;
+
+/// <summary>终结事件：携带完整 GenerateResponse 与 TokenUsage（正文/推理/工具调用/thinking 块均为全量）。</summary>
+public sealed record StreamCompleted(GenerateResponse Response, TokenUsage Usage) : StreamEvent;

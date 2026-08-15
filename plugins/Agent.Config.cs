@@ -17,8 +17,8 @@ public class AgentConfig : IPluginConfig
     [ConfigDescription("上下文压缩比例", "上下文达到模型窗口的此比例后开始压缩。")]
     public double ContextCompactRatio { get; set; } = 0.7;
 
-    [ConfigDescription("视觉模型", "主模型不支持视觉时使用的辅助视觉模型 ID；留空则禁用。")]
-    public string VisionLlmModel { get; set; } = string.Empty;
+    [ConfigDescription("视觉模型列表", "主模型不支持视觉时依次使用的辅助视觉模型 ID 列表；按顺序逐个尝试，某个失效自动切换到下一个；留空则禁用。")]
+    public List<string> VisionLlmModels { get; set; } = [];
 
     [ConfigDescription("视觉提示词", "交给辅助视觉模型的图片描述提示词。")]
     public string VisionPrompt { get; set; } = "请详细描述这张图片的内容。";

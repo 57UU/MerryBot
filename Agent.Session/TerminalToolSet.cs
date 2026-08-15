@@ -49,7 +49,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _sessionId = sessionId;
         this.user = user;
-        _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClient: null);
+        _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClients: null);
         _maxImageBytes = maxImageBytes;
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {

@@ -92,6 +92,25 @@
                                                       @onchange="e => SetListText(section.Id, field.Key, e.Value?.ToString())">@GetText(section.Id, field.Key)</textarea>
                                             <div class="config-field-description">请使用 JSON 数组，例如 <code>[123, 456]</code>。</div>
                                             break;
+                                        case "stringlist":
+                                            <div class="config-stringlist">
+                                                @foreach (var (item, index) in GetStringList(section.Id, field.Key).Select((value, i) => (value, i)))
+                                                {
+                                                    <div class="config-stringlist-row">
+                                                        <input class="form-control" value="@item"
+                                                               @onchange="e => SetStringListItem(section.Id, field.Key, index, e.Value?.ToString() ?? string.Empty)" />
+                                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => RemoveStringListItem(section.Id, field.Key, index)">删除</button>
+                                                    </div>
+                                                }
+                                                <div class="config-stringlist-add">
+                                                    <input class="form-control" list="saved-llm-models" value="@GetStringListDraft(section.Id, field.Key)"
+                                                           @onchange="e => SetStringListDraft(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)"
+                                                           placeholder="选择或输入模型 ID" />
+                                                    <button type="button" class="btn btn-primary btn-sm" @onclick="() => AddStringListItem(section.Id, field.Key)">添加</button>
+                                                </div>
+                                                <div class="config-field-description">按顺序使用；某个模型失效时自动切换到下一个。</div>
+                                            </div>
+                                            break;
                                     }
                                 </div>
                             }
@@ -126,6 +145,7 @@
     private readonly Dictionary<string, Dictionary<string, object?>> Edits = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> SaveErrors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> SaveStatus = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> StringListDrafts = new(StringComparer.Ordinal);
     private IReadOnlyList<string> LlmModelIds = [];
     private string? Error;
     private string? SavingSectionId;
@@ -158,6 +178,7 @@
             Edits.Clear();
             SaveErrors.Clear();
             SaveStatus.Clear();
+            StringListDrafts.Clear();
             foreach (var section in Snapshot.Sections)
             {
                 Edits[section.Id] = section.Fields.ToDictionary(field => field.Key, NormalizeValue, StringComparer.Ordinal);
@@ -173,11 +194,13 @@
     {
         if (field.Value is not JsonElement value)
         {
-            return field.Type == "number"
-                ? Convert.ToString(field.Value, CultureInfo.InvariantCulture) ?? string.Empty
-                : field.Type == "list"
-                    ? JsonSerializer.Serialize(field.Value)
-                    : field.Value;
+            return field.Type switch
+            {
+                "number" => Convert.ToString(field.Value, CultureInfo.InvariantCulture) ?? string.Empty,
+                "list" => JsonSerializer.Serialize(field.Value),
+                "stringlist" => new List<string>(),
+                _ => field.Value,
+            };
         }
 
         return field.Type switch
@@ -186,6 +209,12 @@
             "number" => value.GetRawText(),
             "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False && value.GetBoolean(),
             "list" => value.GetRawText(),
+            "stringlist" => value.ValueKind == JsonValueKind.Array
+                ? value.EnumerateArray()
+                    .Select(item => item.GetString() ?? string.Empty)
+                    .Where(static item => !string.IsNullOrWhiteSpace(item))
+                    .ToList()
+                : new List<string>(),
             _ => null,
         };
     }
@@ -210,6 +239,64 @@
 
     private void SetListText(string sectionId, string key, string? value)
         => SetText(sectionId, key, value ?? "[]");
+
+    // ── stringlist（字符串列表）控件 ──────────────────────────────────────────
+
+    private static string StringListDraftKey(string sectionId, string key) => $"{sectionId}|{key}";
+
+    private IReadOnlyList<string> GetStringList(string sectionId, string key)
+        => Edits.TryGetValue(sectionId, out var section)
+            && section.TryGetValue(key, out var value)
+            && value is List<string> list
+            ? list
+            : [];
+
+    private void SetStringListItem(string sectionId, string key, int index, string value)
+    {
+        if (Edits.TryGetValue(sectionId, out var section)
+            && section.TryGetValue(key, out var current)
+            && current is List<string> list
+            && index >= 0
+            && index < list.Count)
+        {
+            list[index] = value;
+        }
+    }
+
+    private void AddStringListItem(string sectionId, string key)
+    {
+        var draft = GetStringListDraft(sectionId, key).Trim();
+        if (draft.Length == 0)
+        {
+            return;
+        }
+        var list = GetStringList(sectionId, key) as List<string>;
+        if (list is null)
+        {
+            list = [];
+            Edits[sectionId][key] = list;
+        }
+        list.Add(draft);
+        SetStringListDraft(sectionId, key, string.Empty);
+    }
+
+    private void RemoveStringListItem(string sectionId, string key, int index)
+    {
+        if (Edits.TryGetValue(sectionId, out var section)
+            && section.TryGetValue(key, out var current)
+            && current is List<string> list
+            && index >= 0
+            && index < list.Count)
+        {
+            list.RemoveAt(index);
+        }
+    }
+
+    private string GetStringListDraft(string sectionId, string key)
+        => StringListDrafts.TryGetValue(StringListDraftKey(sectionId, key), out var draft) ? draft : string.Empty;
+
+    private void SetStringListDraft(string sectionId, string key, string value)
+        => StringListDrafts[StringListDraftKey(sectionId, key)] = value;
 
     private static bool IsLlmModelField(ConfigFieldDto field)
         => field.Type == "string"

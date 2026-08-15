@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
     <ProjectReference Include="..\MerryBot\MerryBot.csproj" />
+    <ProjectReference Include="..\MerryBot.WebUI\MerryBot.WebUI.csproj" />
   </ItemGroup>
 
 </Project>

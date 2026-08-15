@@ -75,6 +75,43 @@
     font-family: Consolas, Menlo, monospace;
 }
 
+.config-stringlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.config-stringlist-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.config-stringlist-row .form-control {
+    flex: 1;
+}
+
+.config-stringlist-row .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.config-stringlist-add {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.15rem;
+}
+
+.config-stringlist-add .form-control {
+    flex: 1;
+}
+
+.config-stringlist-add .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .config-error,
 .config-save-error {
     color: #b42318;

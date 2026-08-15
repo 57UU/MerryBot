@@ -212,7 +212,14 @@ public sealed class ConfigRegistry
             if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(List<>))
             {
                 var elementType = declaredType.GetGenericArguments()[0];
-                if (TryGetScalarKind(Nullable.GetUnderlyingType(elementType) ?? elementType, out _))
+                var underlyingElementType = Nullable.GetUnderlyingType(elementType) ?? elementType;
+                if (underlyingElementType == typeof(string))
+                {
+                    // 字符串列表在 WebUI 中渲染为下拉 + 添加/删除控件
+                    result = new ConfigProperty(property, name, description, ConfigFieldKind.StringList, declaredType, elementType);
+                    return true;
+                }
+                if (TryGetScalarKind(underlyingElementType, out _))
                 {
                     result = new ConfigProperty(property, name, description, ConfigFieldKind.List, declaredType, elementType);
                     return true;
@@ -243,14 +250,14 @@ public sealed class ConfigRegistry
                 throw new ArgumentException($"字段 {Name} 不允许为空。");
             }
 
-            return Kind == ConfigFieldKind.List
+            return Kind is ConfigFieldKind.List or ConfigFieldKind.StringList
                 ? ConvertList(element)
                 : ConvertScalar(element, ValueType, Kind);
         }
 
         public object? CloneValue(object? value)
         {
-            if (value is not IList list || Kind != ConfigFieldKind.List)
+            if (value is not IList list || Kind is not (ConfigFieldKind.List or ConfigFieldKind.StringList))
             {
                 return value;
             }
@@ -273,7 +280,7 @@ public sealed class ConfigRegistry
             {
                 return value.ToString();
             }
-            if (Kind != ConfigFieldKind.List || value is not IEnumerable values)
+            if (Kind is not (ConfigFieldKind.List or ConfigFieldKind.StringList) || value is not IEnumerable values)
             {
                 return value;
             }
@@ -409,5 +416,6 @@ public sealed class ConfigRegistry
         Number,
         Enum,
         List,
+        StringList,
     }
 }

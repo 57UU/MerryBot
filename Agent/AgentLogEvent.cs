@@ -10,6 +10,8 @@ public enum AgentLogEventKind
     ChatFailed,
     ModelRequest,
     ModelResponse,
+    /// <summary>流式生成中的正文增量（高频事件，Result 为单个增量文本），供 UI 逐字渲染</summary>
+    ModelTextDelta,
     ContextCompaction,
     ToolCallStarted,
     ToolCallCompleted,

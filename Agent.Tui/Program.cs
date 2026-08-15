@@ -16,7 +16,9 @@ Directory.CreateDirectory(skillsPath);
 
 var cfg = TuiConfigStore.Load();
 var (activeProvider, activeModel) = cfg.ResolveActive();
-var backend = new DynamicBackend(
+// 直接构造真实后端：运行时切换供应商/模型经 Client.UpdateBackend 生效，
+// 无需重建 Client/Agent（重试与上下文保持）
+var backend = new ChatCompletionBackend(
     activeProvider?.ApiBase ?? string.Empty,
     activeProvider?.ApiKey ?? string.Empty,
     activeModel);
@@ -26,7 +28,7 @@ var catalog = new CatalogService();
 
 using IApplication app = Application.Create();
 app.Init();
-var chatApp = new ChatApp(app, cfg, backend, llmClient, history, catalog);
+var chatApp = new ChatApp(app, cfg, llmClient, history, catalog);
 
 var terminalToolSets = new ConcurrentBag<TerminalToolSet>();
 Browser? browser = null;

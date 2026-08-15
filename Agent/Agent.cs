@@ -197,13 +197,34 @@ public class Agent
         cancellationToken.ThrowIfCancellationRequested();
 
         Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
-        var (response, usage) = await llmClient.Generate(cancellationToken, messages, SystemPrompt, llmOptions);
-        Log(new AgentLogEvent(
-            AgentLogEventKind.ModelResponse,
-            DateTimeOffset.UtcNow,
-            iteration,
-            Result: response.Content,
-            Usage: usage));
+
+        // 流式生成：正文增量以 ModelTextDelta 事件实时上报（供 UI 逐字渲染），
+        // 完整响应（正文/推理/工具调用/thinking 块）由终结事件承载，消息组装与原来一致
+        GenerateResponse? response = null;
+        TokenUsage usage = TokenUsage.Zero;
+        await foreach (var streamEvent in llmClient.GenerateStream(messages, SystemPrompt, llmOptions).WithCancellation(cancellationToken))
+        {
+            switch (streamEvent)
+            {
+                case TextDelta { Delta.Length: > 0 } textDelta:
+                    Log(new AgentLogEvent(
+                        AgentLogEventKind.ModelTextDelta,
+                        DateTimeOffset.UtcNow,
+                        iteration,
+                        Result: textDelta.Delta));
+                    break;
+                case StreamCompleted completed:
+                    response = completed.Response;
+                    usage = completed.Usage;
+                    break;
+            }
+        }
+        if (response is null)
+        {
+            // 流被取消/中断且未收到终结事件，无法组装助手消息；取消已由
+            // OperationCanceledException 传播，走到这里说明是异常中断
+            throw new InvalidResponseException("模型流式响应中断，未收到完整结果");
+        }
 
         // 记录 assistant 回复（含工具调用与 reasoning）
         string? assistantContent = response.Content;

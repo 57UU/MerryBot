@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -41,45 +42,21 @@ public class ResponsesBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        var requestBody = new Dictionary<string, object>
-        {
-            ["model"] = model,
-            ["input"] = BuildInput(messages),
-        };
-        if (!string.IsNullOrWhiteSpace(systemPrompt))
-        {
-            requestBody["instructions"] = systemPrompt;
-        }
-        if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
-        if (options.MaxTokens != null) requestBody["max_output_tokens"] = options.MaxTokens;
-        if (options.ReasoningEffort != null)
-        {
-            requestBody["reasoning"] = new Dictionary<string, object> { ["effort"] = options.ReasoningEffort };
-        }
-        if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
-        if (options.ExtraBody != null)
-        {
-            foreach (var (key, value) in options.ExtraBody)
-            {
-                requestBody[key] = value;
-            }
-        }
-
-        string jsonData = JsonSerializer.Serialize(requestBody, RequestJsonOptions);
+        string jsonData = JsonSerializer.Serialize(
+            BuildRequestBody(messages, systemPrompt, options, model, stream: false), RequestJsonOptions);
 
         string responseBody;
-        // 两段超时：发送到响应头（首字节）由 ttfbCts 控制，响应体读取受 totalCts 总时长约束；
+        // 非流式请求只挂总时长超时：LLM 服务端"算完整轮才发响应头"，首字节约等于
+        // 整个生成耗时，TTFB（首 token 延迟）对非流式无意义且会误杀长生成；
         // 超时映射为不可重试的 RequestTimeoutException，避免 LLM 非幂等请求超时重试造成双倍计费
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.TotalGeneration);
-        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
-        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
             request.Headers.Authorization = new("Bearer", _apiKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)
             {
@@ -144,6 +121,161 @@ public class ResponsesBackend : Backend
             reasoningContent: reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
         var usage = json.Usage ?? new ResponsesUsage();
         return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
+    }
+
+    /// <summary>构造请求体：非流式与流式共用，流式追加 stream 标志。</summary>
+    private static Dictionary<string, object> BuildRequestBody(
+        IList<Message> messages,
+        string systemPrompt,
+        LlmOptions options,
+        string model,
+        bool stream)
+    {
+        var requestBody = new Dictionary<string, object>
+        {
+            ["model"] = model,
+            ["input"] = BuildInput(messages),
+        };
+        if (!string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            requestBody["instructions"] = systemPrompt;
+        }
+        if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
+        if (options.MaxTokens != null) requestBody["max_output_tokens"] = options.MaxTokens;
+        if (options.ReasoningEffort != null)
+        {
+            requestBody["reasoning"] = new Dictionary<string, object> { ["effort"] = options.ReasoningEffort };
+        }
+        if (options.Tools != null) requestBody["tools"] = BuildTools(options.Tools);
+        if (stream)
+        {
+            requestBody["stream"] = true;
+        }
+        if (options.ExtraBody != null)
+        {
+            foreach (var (key, value) in options.ExtraBody)
+            {
+                requestBody[key] = value;
+            }
+        }
+        return requestBody;
+    }
+
+    /// <summary>
+    /// 流式生成（SSE）。output_text.delta → TextDelta、reasoning_text/summary 摘要
+    /// delta → ReasoningDelta；function_call 的 id/name 在 output_item.added 到达，
+    /// 参数经 function_call_arguments.delta 按 item_id 累积；response.completed 携带
+    /// 完整 usage。
+    /// </summary>
+    public async IAsyncEnumerable<StreamEvent> GenerateStream(
+        IList<Message> messages,
+        string systemPrompt,
+        LlmOptions options,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        string model = options.Model ?? _defaultModel
+            ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
+
+        string jsonData = JsonSerializer.Serialize(
+            BuildRequestBody(messages, systemPrompt, options, model, stream: true), RequestJsonOptions);
+
+        using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
+        using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
+        ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
+        request.Headers.Authorization = new("Bearer", _apiKey);
+        request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+            throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
+        }
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
+        using var reader = new StreamReader(responseStream, Encoding.UTF8);
+        var textBuilder = new StringBuilder();
+        var reasoningBuilder = new StringBuilder();
+        // function_call 条目：item_id → (output_index, call_id, name)；参数分片按 item_id 累积
+        var toolCallItems = new Dictionary<string, (int OutputIndex, string CallId, string Name, StringBuilder Arguments)>();
+        ResponsesUsage? usage = null;
+        string? line;
+        while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
+        {
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var data = line["data:".Length..].Trim();
+            if (data.Length == 0)
+            {
+                continue;
+            }
+            var streamEvent = JsonSerializer.Deserialize<ResponsesStreamEvent>(data);
+            if (streamEvent is null)
+            {
+                continue;
+            }
+            switch (streamEvent.Type)
+            {
+                case "response.output_text.delta":
+                    if (streamEvent.Delta is { Length: > 0 } text)
+                    {
+                        textBuilder.Append(text);
+                        yield return new TextDelta(text);
+                    }
+                    break;
+                case "response.reasoning_text.delta":
+                case "response.reasoning_summary_text.delta":
+                    if (streamEvent.Delta is { Length: > 0 } reasoning)
+                    {
+                        reasoningBuilder.Append(reasoning);
+                        yield return new ReasoningDelta(reasoning);
+                    }
+                    break;
+                case "response.output_item.added":
+                    if (streamEvent.Item is { Type: "function_call" } item)
+                    {
+                        toolCallItems[streamEvent.ItemId ?? string.Empty] = (
+                            streamEvent.OutputIndex,
+                            item.CallId ?? string.Empty,
+                            item.Name ?? string.Empty,
+                            new StringBuilder());
+                    }
+                    break;
+                case "response.function_call_arguments.delta":
+                    if (streamEvent.ItemId is { Length: > 0 }
+                        && streamEvent.Delta is { Length: > 0 } args
+                        && toolCallItems.TryGetValue(streamEvent.ItemId, out var toolCall))
+                    {
+                        toolCall.Arguments.Append(args);
+                        toolCallItems[streamEvent.ItemId] = toolCall;
+                    }
+                    break;
+                case "response.completed":
+                    usage = streamEvent.Response?.Usage ?? usage;
+                    break;
+                case "response.failed":
+                    throw new InvalidResponseException(
+                        $"Responses 流式失败: {streamEvent.Response?.Error?.Message ?? streamEvent.Message ?? "未知错误"}");
+                case "error":
+                    throw new InvalidResponseException($"Responses 流式错误: {streamEvent.Message ?? "未知错误"}");
+            }
+        }
+
+        var toolCalls = toolCallItems.Values
+            .OrderBy(item => item.OutputIndex)
+            .Select(item => new ToolCall(item.CallId, item.Name, item.Arguments.ToString()))
+            .ToArray();
+        var result = new GenerateResponse(
+            textBuilder.Length > 0 ? textBuilder.ToString() : null,
+            toolCalls.Length > 0 ? toolCalls : null,
+            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
+        var tokenUsage = usage is null
+            ? TokenUsage.Zero
+            : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
+        yield return new StreamCompleted(result, tokenUsage);
     }
 
     /// <summary>构造 input 数组：user/assistant 消息 + function_call_output 工具结果条目。</summary>
@@ -293,5 +425,59 @@ internal class ResponsesInputTokensDetails
 {
     [JsonPropertyName("cached_tokens")]
     public int CachedTokens { get; set; }
+}
+
+internal class ResponsesStreamEvent
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; }
+
+    [JsonPropertyName("item_id")]
+    public string? ItemId { get; set; }
+
+    [JsonPropertyName("output_index")]
+    public int OutputIndex { get; set; }
+
+    [JsonPropertyName("delta")]
+    public string? Delta { get; set; }
+
+    [JsonPropertyName("item")]
+    public ResponsesStreamItem? Item { get; set; }
+
+    [JsonPropertyName("response")]
+    public ResponsesStreamResponse? Response { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+}
+
+internal class ResponsesStreamItem
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; }
+
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("call_id")]
+    public string? CallId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+}
+
+internal class ResponsesStreamResponse
+{
+    [JsonPropertyName("usage")]
+    public ResponsesUsage? Usage { get; set; }
+
+    [JsonPropertyName("error")]
+    public ResponsesStreamError? Error { get; set; }
+}
+
+internal class ResponsesStreamError
+{
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
 }
 #pragma warning restore CS8618

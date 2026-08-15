@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 供 MerryBot.Test 直接测试流式块解析（ParseChunk 等 internal 成员） -->
+    <InternalsVisibleTo Include="MerryBot.Test" />
+  </ItemGroup>
+
 </Project>

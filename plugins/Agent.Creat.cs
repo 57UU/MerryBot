@@ -23,25 +23,32 @@ public partial class AgentPlugin : Plugin
         var skillToolSet = await SkillToolSet.CreateAsync(skillService);
         var memoryPromptInjection = await memoryService.GetPromptInjectionAsync(sessionId);
 
-        // ── 辅助视觉模型：主模型不具备视觉能力时用于看图 ─────────────────────
-        Client? visionClient = null;
-        if (!string.IsNullOrWhiteSpace(agentConfig.VisionLlmModel))
+        // ── 辅助视觉模型：主模型不具备视觉能力时用于看图，支持多个并逐层降级 ────────
+        var visionClients = new List<Client>();
+        var visionModelIds = agentConfig.VisionLlmModels ?? [];
+        foreach (var modelId in visionModelIds)
         {
+            if (string.IsNullOrWhiteSpace(modelId))
+            {
+                continue;
+            }
             try
             {
-                visionClient = (await llmProvider.CreateClientAsync(agentConfig.VisionLlmModel)).Client;
+                visionClients.Add((await llmProvider.CreateClientAsync(modelId)).Client);
             }
             catch (Exception e)
             {
-                Logger.Warn($"辅助视觉模型不可用（VisionLlmModel={agentConfig.VisionLlmModel}），图片将无法查看：{e.Message}");
+                Logger.Warn($"辅助视觉模型不可用（{modelId}），将跳过：{e.Message}");
             }
         }
         var visionRouter = new VisionRouter(
             resolved.Model.Capabilities.HasFlag(LlmModelCapabilities.ImageInput),
-            visionClient,
+            visionClients,
             agentConfig.VisionPrompt);
         Logger.Info($"Agent 视觉能力: 主模型={(resolved.Model.Capabilities.HasFlag(LlmModelCapabilities.ImageInput) ? "有" : "无")}"
-            + (string.IsNullOrWhiteSpace(agentConfig.VisionLlmModel) ? "，未配置辅助视觉模型" : $"，辅助视觉模型={agentConfig.VisionLlmModel}"));
+            + (visionClients.Count == 0
+                ? "，未配置可用的辅助视觉模型"
+                : $"，辅助视觉模型={string.Join(", ", visionModelIds.Where(id => !string.IsNullOrWhiteSpace(id)))}"));
 
         // bash 工具门禁：AllowShell 默认关闭，未开启时不注册 TerminalToolSet（模型无法执行 shell）
         var tools = new List<ToolSet>
