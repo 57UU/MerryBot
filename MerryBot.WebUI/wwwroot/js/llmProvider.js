@@ -13,5 +13,8 @@ window.llmProviderApi = {
             return null;
         }
         return await response.json();
+    },
+    scrollIntoView: function (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 };

@@ -28,7 +28,8 @@
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     font-family: var(--font);
     margin: 0;
     padding: 0;
@@ -48,7 +49,11 @@ a:hover {
     text-decoration: underline;
 }
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
     line-height: 1.3;
     color: var(--text);
 }
@@ -420,6 +425,19 @@ textarea.form-control {
 
 .table tbody tr:hover {
     background: var(--surface-2);
+}
+
+/* 长列表表格：限制高度，内部滚动，表头吸顶 */
+.table-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 /* ============ 卡片 ============ */
@@ -852,6 +870,10 @@ textarea.form-control {
     display: flex;
 }
 
+.flex-column {
+    flex-direction: column;
+}
+
 .inline-row {
     display: flex;
     align-items: center;
@@ -1166,7 +1188,7 @@ textarea.form-control {
     }
 
     /* input 嵌套在 .top-row 内,nav-scrollable 是 .top-row 的兄弟,用 :has() 关联 */
-    .top-row:has(.nav-toggler:checked) ~ .nav-scrollable {
+    .top-row:has(.nav-toggler:checked)~.nav-scrollable {
         display: flex;
     }
 

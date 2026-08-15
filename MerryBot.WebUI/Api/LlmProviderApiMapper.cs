@@ -45,7 +45,9 @@ public static class LlmProviderApiMapper
         });
         routes.MapPut("/models/{**id}", async (string id, LlmSaveModelRequest request, CancellationToken cancellationToken) =>
         {
-            await manager.SaveModelAsync(id, new LlmModelSaveCommand(
+            // catch-all 参数不解码百分号编码，手动还原 %2F → /（否则含 / 的模型 ID 会以字面 %2F 落库）
+            var modelId = Uri.UnescapeDataString(id);
+            await manager.SaveModelAsync(modelId, new LlmModelSaveCommand(
                 request.ProviderId,
                 request.Name,
                 request.RemoteModelId,
@@ -59,7 +61,7 @@ public static class LlmProviderApiMapper
         });
         routes.MapDelete("/models/{**id}", async (string id, CancellationToken cancellationToken) =>
         {
-            await manager.DeleteModelAsync(id, cancellationToken);
+            await manager.DeleteModelAsync(Uri.UnescapeDataString(id), cancellationToken);
             return Results.NoContent();
         });
         routes.MapPost("/keys", async (LlmSaveKeyRequest request, CancellationToken cancellationToken) =>
@@ -73,7 +75,7 @@ public static class LlmProviderApiMapper
         });
         routes.MapPut("/default/{**modelId}", async (string modelId, CancellationToken cancellationToken) =>
         {
-            await manager.SetDefaultModelAsync(modelId, cancellationToken);
+            await manager.SetDefaultModelAsync(Uri.UnescapeDataString(modelId), cancellationToken);
             return Results.NoContent();
         });
     }

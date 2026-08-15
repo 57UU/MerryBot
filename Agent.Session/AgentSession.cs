@@ -196,4 +196,10 @@ public class AgentSession
         }
         return (response, usage);
     }
+
+    /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>
+    public Task ResetAsync() => _Agent.ResetAsync();
+
+    /// <summary>手动触发上下文压缩。供 TUI /compact。</summary>
+    public Task CompactAsync(CancellationToken cancellationToken) => _Agent.CompactAsync(cancellationToken);
 }

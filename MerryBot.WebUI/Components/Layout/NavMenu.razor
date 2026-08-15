@@ -57,11 +57,11 @@
     </nav>
 
     <div class="nav-footer">
-        <div class="d-flex gap-2">
-            <button class="btn btn-danger btn-sm flex-fill" @onclick="RestartAsync" disabled="@Restarting">
+        <div class="d-flex flex-column gap-2">
+            <button class="btn btn-danger btn-sm" @onclick="RestartAsync" disabled="@Restarting">
                 @(Restarting ? "重启中…" : "重启程序")
             </button>
-            <button class="btn btn-secondary btn-sm flex-fill" @onclick="ReloadAsync" disabled="@Reloading">
+            <button class="btn btn-secondary btn-sm" @onclick="ReloadAsync" disabled="@Reloading">
                 @(Reloading ? "重载中…" : "重载")
             </button>
         </div>

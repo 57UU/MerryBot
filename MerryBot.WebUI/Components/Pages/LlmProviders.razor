@@ -38,7 +38,7 @@
             }
             else if (CatalogProviders.Count > 0)
             {
-                <div style="overflow-x:auto" class="mb-3-custom">
+                <div class="table-scroll mb-3-custom">
                     <table class="table">
                         <thead><tr><th>Provider</th><th>ID</th><th>可用模型</th><th></th></tr></thead>
                         <tbody>
@@ -80,7 +80,7 @@
                 }
                 else if (CatalogModels.Count > 0)
                 {
-                    <div style="overflow-x:auto">
+                    <div class="table-scroll">
                         <table class="table">
                             <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th></th></tr></thead>
                             <tbody>
@@ -91,7 +91,10 @@
                                     <td>@FormatLimit(model.ContextLength)</td>
                                     <td>@FormatLimit(model.MaxOutputTokens)</td>
                                     <td>@model.Capabilities</td>
-                                    <td><button class="btn btn-primary" @onclick="() => ImportAsync(model)">添加模型</button></td>
+                                    <td>
+                                        <button class="btn btn-primary" @onclick="() => ImportAsync(model)">添加模型</button>
+                                        <button class="btn btn-secondary" @onclick="() => FillManualFormAsync(model)">填入下方表格</button>
+                                    </td>
                                 </tr>
                             }
                             </tbody>
@@ -102,13 +105,16 @@
         </div>
     </section>
 
-    <section class="message-item-custom mb-3-custom">
+    <section class="message-item-custom mb-3-custom" @ref="ManualFormSection">
         <div class="message-header-custom"><strong>手工维护配置</strong></div>
         <div class="message-content-custom">
             <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
                 <h5>Provider</h5>
+                <label>Provider ID</label>
                 <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
+                <label class="mt-2">显示名称</label>
                 <input class="form-control mt-2" @bind="EditProviderName" placeholder="显示名称" required />
+                <label class="mt-2">API 地址</label>
                 <input class="form-control mt-2" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
                 <label class="mt-2">API 格式</label>
                 <select class="form-control" @bind="EditApiFormat">
@@ -120,11 +126,17 @@
             </form>
             <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
                 <h5>模型</h5>
+                <label>本地模型 ID</label>
                 <input class="form-control" @bind="EditModelId" placeholder="本地模型 ID，例如 provider/model" required />
+                <label class="mt-2">Provider ID</label>
                 <input class="form-control mt-2" @bind="EditModelProviderId" placeholder="Provider ID" required />
+                <label class="mt-2">显示名称</label>
                 <input class="form-control mt-2" @bind="EditModelName" placeholder="显示名称" required />
+                <label class="mt-2">上游 model ID</label>
                 <input class="form-control mt-2" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
+                <label class="mt-2">上下文长度</label>
                 <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
+                <label class="mt-2">最大输出</label>
                 <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
                 <label class="mt-2">思维强度（Reasoning Effort）</label>
                 <select class="form-control" @bind="EditModelReasoningEffort">
@@ -219,6 +231,7 @@
                                     {
                                         <button class="btn btn-secondary ms-2" @onclick="() => SetDefaultAsync(model.Id)">设为默认</button>
                                     }
+                                    <button class="btn btn-secondary ms-2" @onclick="() => FillManualFormAsync(model)">填入下方表格</button>
                                     <button class="btn btn-danger ms-2" @onclick="() => DeleteModelAsync(model.Id)">删除模型</button>
                                 </li>
                             }
@@ -261,6 +274,7 @@
     private int EditModelMaxOutput { get; set; } = 4_096;
     private string EditModelReasoningEffort { get; set; } = string.Empty;
     private bool EditModelEnablePromptCache { get; set; }
+    private ElementReference ManualFormSection;
 
     // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
     private CancellationTokenSource? _providerSearchCts;
@@ -452,6 +466,48 @@
             Error = $"导入失败：{ex.Message}";
         }
     }
+
+    /// <summary>把 models.dev 目录模型填入下方"手工维护配置"的模型表单，便于微调后保存。</summary>
+    private async Task FillManualFormAsync(LlmCatalogModelDto model)
+    {
+        EditModelId = MakeLocalModelId(model.ProviderId, model.ModelId);
+        EditModelProviderId = model.ProviderId;
+        EditModelName = model.Name;
+        EditModelRemoteId = model.ModelId;
+        EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
+        EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
+        EditModelReasoningEffort = string.Empty;
+        EditModelEnablePromptCache = false;
+        await ScrollToManualFormAsync();
+    }
+
+    /// <summary>把已导入的本地模型回填到下方"手工维护配置"的模型表单，便于微调后覆盖保存。</summary>
+    private async Task FillManualFormAsync(LlmModelDto model)
+    {
+        EditModelId = model.Id;
+        EditModelProviderId = model.ProviderId;
+        EditModelName = model.Name;
+        EditModelRemoteId = model.RemoteModelId;
+        EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
+        EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
+        EditModelReasoningEffort = model.ReasoningEffort ?? string.Empty;
+        EditModelEnablePromptCache = model.EnablePromptCache;
+        await ScrollToManualFormAsync();
+    }
+
+    private async Task ScrollToManualFormAsync()
+    {
+        if (ManualFormSection.Context is not null)
+        {
+            await JSRuntime.InvokeVoidAsync("llmProviderApi.scrollIntoView", ManualFormSection);
+        }
+    }
+
+    /// <summary>与插件 MakeLocalModelId 一致的本地模型 ID 生成规则。</summary>
+    private static string MakeLocalModelId(string providerId, string modelId)
+        => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
+            ? modelId
+            : $"{providerId}/{modelId}";
 
     private async Task SaveKeyAsync()
     {

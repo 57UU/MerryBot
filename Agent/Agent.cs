@@ -359,5 +359,19 @@ public class Agent
         }
     }
 
+    /// <summary>手动触发上下文压缩（供 TUI /compact）。iteration=0 仅用于日志标注。</summary>
+    public Task CompactAsync(CancellationToken cancellationToken) => Compact(cancellationToken, 0);
+
+    /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>
+    public async Task ResetAsync()
+    {
+        contextManager.context.Messages = new List<Message>();
+        contextManager.context.TokenUsed = 0;
+        if (contextManager.contextHistory is not null)
+        {
+            await contextManager.contextHistory.Clear();
+        }
+    }
+
 
 }

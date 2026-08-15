@@ -9,6 +9,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
+    <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Terminal.Gui" Version="2.4.17" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
 </Project>
