@@ -35,7 +35,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     /// <summary>控制命令类型：None 为普通聊天消息，New/Compact 为会话控制命令。</summary>
     private enum ControlKind { None, New, Compact }
 
-    private sealed record PendingGroupMessage(long SenderId, string Content, ControlKind Kind = ControlKind.None);
+    private sealed record PendingGroupMessage(long SenderId, string Content, ControlKind Kind = ControlKind.None, string? Topic = null);
     private readonly AgentConfig agentConfig;
 
     public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider, AgentConfig agentConfig) : base(interop)
@@ -123,7 +123,15 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             {
                 return Task.CompletedTask;
             }
-            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, kind));
+            var args = string.Join(' ', command.Args);
+            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, kind,
+                Topic: kind == ControlKind.Compact ? args : null));
+            // /new 带参数时，参数作为新对话第一条消息（与 #新对话 后接内容语义一致）
+            if (kind == ControlKind.New && args.Length > 0)
+            {
+                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
+                    $"[id:{context.SenderId},nickname:{context.SenderNickname}]{args}"));
+            }
             return Task.CompletedTask;
         }
 
@@ -226,8 +234,9 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                             SendGroupReply(groupId, [item.SenderId], "已开启新对话");
                             break;
                         case ControlKind.Compact:
-                            await session.CompactAsync(disposeCts.Token);
-                            SendGroupReply(groupId, [item.SenderId], "已压缩上下文");
+                            await session.CompactAsync(disposeCts.Token, item.Topic);
+                            SendGroupReply(groupId, [item.SenderId],
+                                string.IsNullOrWhiteSpace(item.Topic) ? "已压缩上下文" : $"已按主题「{item.Topic}」压缩上下文");
                             break;
                     }
                 }

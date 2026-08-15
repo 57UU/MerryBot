@@ -200,6 +200,6 @@ public class AgentSession
     /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>
     public Task ResetAsync() => _Agent.ResetAsync();
 
-    /// <summary>手动触发上下文压缩。供 TUI /compact。</summary>
-    public Task CompactAsync(CancellationToken cancellationToken) => _Agent.CompactAsync(cancellationToken);
+    /// <summary>手动触发上下文压缩（topic 为空时全量通用压缩）。供 TUI /compact 与群聊 /compact 命令。</summary>
+    public Task CompactAsync(CancellationToken cancellationToken, string? topic = null) => _Agent.CompactAsync(cancellationToken, topic);
 }

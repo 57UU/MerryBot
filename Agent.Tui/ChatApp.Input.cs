@@ -13,7 +13,7 @@ public sealed partial class ChatApp
         /model [query]   选择活动模型（带参数直接匹配，如 /model deepseek）
         /provider        供应商管理：list / add / edit <n> / models <n> / remove <n>
         /new             清空当前会话上下文
-        /compact         手动压缩上下文
+        /compact [topic] 手动压缩上下文（可指定主题，如 /compact 项目计划）
         /stop            取消当前对话
         /debug           切换调试日志
         /refresh         重新拉取 models.dev 目录
@@ -54,7 +54,7 @@ public sealed partial class ChatApp
                 StartAsync(DoNewAsync);
                 break;
             case "compact":
-                StartAsync(DoCompactAsync);
+                StartAsync(() => DoCompactAsync(arg));
                 break;
             case "stop":
                 DoStop();

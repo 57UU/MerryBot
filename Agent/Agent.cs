@@ -47,7 +47,7 @@ public class Agent
         var agent = new Agent(contextManager, llmClient, options ?? new AgentOptions(), toolSets ?? []);
         return agent;
     }
-    private async Task Compact(CancellationToken cancellationToken, int iteration)
+    private async Task Compact(CancellationToken cancellationToken, int iteration, string? topic)
     {
         Log(new AgentLogEvent(
             AgentLogEventKind.ContextCompaction,
@@ -58,7 +58,7 @@ public class Agent
         {
             await contextManager.Compact(
                 cancellationToken,
-                (token, context) => CompactContext(token, context, iteration));
+                (token, context) => CompactContext(token, context, iteration, topic));
             Log(new AgentLogEvent(
                 AgentLogEventKind.ContextCompaction,
                 DateTimeOffset.UtcNow,
@@ -79,10 +79,15 @@ public class Agent
     private async Task<(string result, TokenUsage tokenUsage)> CompactContext(
         CancellationToken cancellationToken,
         Context context,
-        int iteration)
+        int iteration,
+        string? topic)
     {
         var forkedContext = context.Fork();
-        forkedContext.Messages.Add(Message.User("请将上文压缩为一个段落，无需保留system prompt"));
+        // 指定 topic 时要求模型围绕该主题压缩
+        var instruction = string.IsNullOrWhiteSpace(topic)
+            ? "请将上文压缩为一个段落，无需保留system prompt"
+            : $"请将上文压缩为一个段落，无需保留system prompt，重点保留与主题「{topic}」相关的内容";
+        forkedContext.Messages.Add(Message.User(instruction));
         Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
         var (result, tokenUsage) = await llmClient.Generate(cancellationToken, forkedContext.Messages, SystemPrompt, new LlmOptions());
         Log(new AgentLogEvent(
@@ -151,7 +156,7 @@ public class Agent
                 contextManager.context.TokenUsed = contextUsage;
                 if (contextManager.ContextRatio >= options.ContextCompactRatio)
                 {
-                    await Compact(cancellationToken, iteration + 1);
+                    await Compact(cancellationToken, iteration + 1, null);
                     messages = contextManager.context.Messages;
                     compacted = true;
                     contextUsage = 0;
@@ -380,8 +385,8 @@ public class Agent
         }
     }
 
-    /// <summary>手动触发上下文压缩（供 TUI /compact）。iteration=0 仅用于日志标注。</summary>
-    public Task CompactAsync(CancellationToken cancellationToken) => Compact(cancellationToken, 0);
+    /// <summary>手动触发上下文压缩（供 TUI /compact 与群聊 /compact 命令）。iteration=0 仅用于日志标注；topic 为空时全量通用压缩。</summary>
+    public Task CompactAsync(CancellationToken cancellationToken, string? topic = null) => Compact(cancellationToken, 0, topic);
 
     /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>
     public async Task ResetAsync()

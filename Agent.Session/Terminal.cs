@@ -31,16 +31,19 @@ public class Terminal : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// 创建终端：user 非空时以 sudo -u user 运行 bash；user 为空直接运行 bash
-    /// （Linux 用 /bin/bash，Windows 用 PATH 中的 bash，便于开发环境测试）。
+    /// 创建终端：user 非空时以 sudo -u user 运行 /bin/bash（忽略 shell 参数）；
+    /// shell 为必填项，指定要启动的 shell 可执行文件（如 /bin/bash、bash、pwsh、cmd 等）。
     /// </summary>
-    public static Terminal Create(string? user = null)
+    public static Terminal Create(string shell, string? user = null)
     {
+        if (string.IsNullOrWhiteSpace(shell))
+        {
+            throw new ArgumentException("shell 不能为空", nameof(shell));
+        }
         if (!string.IsNullOrEmpty(user))
         {
             return new Terminal("sudo", $"-u {user} /bin/bash");
         }
-        string shell = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "bash" : "/bin/bash";
         return new Terminal(shell, string.Empty);
     }
 

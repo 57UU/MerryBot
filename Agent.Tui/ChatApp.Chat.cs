@@ -98,12 +98,14 @@ public sealed partial class ChatApp
         AppendChat("sys", "[ctx] 已清空当前会话上下文。");
     }
 
-    private async Task DoCompactAsync()
+    private async Task DoCompactAsync(string? topic)
     {
         var session = _session ?? await _sessionManager!.GetSessionAsync(SessionId);
         _session = session;
-        await session.CompactAsync(CancellationToken.None);
-        AppendChat("sys", "[ctx] 已压缩上下文。");
+        await session.CompactAsync(CancellationToken.None, string.IsNullOrWhiteSpace(topic) ? null : topic);
+        AppendChat("sys", string.IsNullOrWhiteSpace(topic)
+            ? "[ctx] 已压缩上下文。"
+            : $"[ctx] 已按主题「{topic}」压缩上下文。");
     }
 
     private async Task DoRefreshAsync()

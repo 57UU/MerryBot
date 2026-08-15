@@ -30,8 +30,70 @@ public class TerminalToolSet : ToolSet, IDisposable
     private readonly VisionRouter _visionRouter;
     /// <summary>图片读取大小上限（字节），防止超大图片撑爆内存</summary>
     private readonly int _maxImageBytes;
+    /// <summary>构造时按平台探测到的 shell，前后台终端创建与 prompt 注入共用</summary>
+    private readonly string _detectedShell;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
+
+    /// <summary>
+    /// 按平台优先级探测可用 shell：
+    ///   Windows: bash → pwsh → powershell → cmd
+    ///   Linux/Unix: /bin/bash → /bin/sh
+    /// 先查绝对路径（File.Exists），再扫 PATH 环境变量中的目录，返回第一个命中的可执行文件。
+    /// </summary>
+    private static string DetectShell()
+    {
+        IEnumerable<string> candidates;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            candidates = new[] { "bash", "pwsh", "powershell", "cmd" };
+        }
+        else
+        {
+            candidates = new[] { "/bin/bash", "/bin/sh" };
+        }
+
+        // 候选可能是绝对路径，先直接试 File.Exists
+        foreach (var candidate in candidates)
+        {
+            if (Path.IsPathRooted(candidate))
+            {
+                if (File.Exists(candidate)) return candidate;
+                continue;
+            }
+            if (IsOnPath(candidate)) return candidate;
+        }
+
+        throw new PlatformNotSupportedException("未检测到任何可用 shell");
+    }
+
+    /// <summary>在 PATH 环境变量中查找指定可执行文件（Windows 自动追加 .exe/.com/.bat 等扩展）</summary>
+    private static bool IsOnPath(string executable)
+    {
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(pathEnv)) return false;
+        var paths = pathEnv.Split(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ';' : ':');
+        var extensions = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? new[] { string.Empty, ".exe", ".com", ".bat", ".cmd", ".ps1" }
+            : new[] { string.Empty };
+        foreach (var dir in paths)
+        {
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            try
+            {
+                foreach (var ext in extensions)
+                {
+                    var full = Path.Combine(dir, executable + ext);
+                    if (File.Exists(full)) return true;
+                }
+            }
+            catch
+            {
+                // 单个目录无权访问等异常跳过，继续下一个
+            }
+        }
+        return false;
+    }
 
     private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime)
     {
@@ -55,11 +117,14 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             throw new PlatformNotSupportedException("user（sudo 模式）仅支持 Linux");
         }
-        // 懒加载：首次前台调用取 .Value 时才启动共享 bash 进程
-        _sync = new Lazy<Terminal>(() => Terminal.Create(user));
+        // 先探测 shell，前后台统一使用，检测结果同时写入工具 prompt
+        _detectedShell = DetectShell();
+        // 懒加载：首次前台调用取 .Value 时才启动共享常驻终端进程
+        _sync = new Lazy<Terminal>(() => Terminal.Create(_detectedShell, user));
 
-        var builder = new ToolSetBridge.Builder(
-            "如需执行命令，调用 shell 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。");
+        var prompt =
+            $"如需执行命令，调用 shell 工具；当前检测到的 shell 为：{_detectedShell}，请使用该 shell 的正确语法编写命令。命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。";
+        var builder = new ToolSetBridge.Builder(prompt);
         builder.AddFunction<BashArgs>("shell",
             "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
             "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
@@ -228,7 +293,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         Terminal? terminal = null;
         try
         {
-            terminal = Terminal.Create(user);
+            terminal = Terminal.Create(_detectedShell, user);
             int? effectiveTimeout = disableTimeout ? null : (timeout ?? DefaultBackgroundTimeoutSeconds);
             if (effectiveTimeout is <= 0)
             {
