@@ -23,11 +23,12 @@ public partial class PluginStorageDatabase : IDisposable
 
     /// <summary>
     /// Creates a database view that can only access collections owned by the specified plugin.
+    /// prefix 控制物理集合名的命名空间（如 "plugin" 或 "core"），默认 "plugin" 保持插件数据兼容。
     /// </summary>
-    public PluginDatabaseScope CreateScope(string pluginId)
+    public PluginDatabaseScope CreateScope(string pluginId, string prefix = "plugin")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
-        return new PluginDatabaseScope(_db, pluginId);
+        return new PluginDatabaseScope(_db, pluginId, prefix);
     }
 
     // Plugin-level

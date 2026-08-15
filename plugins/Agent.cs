@@ -16,9 +16,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     private readonly ILlmProviderRegistry llmProvider;
     private readonly AgentSessionManager sessionManager;
     private readonly Browser browser;
-    private readonly PluginClockStore clockStore;
-    private readonly ClockService clockService;
-    private readonly Task clockServiceStartTask;
+    private readonly Task persistenceStartTask;
     private readonly FileSkillManagementService skillService;
     private readonly MemoryManagementService memoryService;
     private readonly ConcurrentDictionary<string, PendingGroupMessages> pendingMessages = new();
@@ -50,11 +48,9 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
         });
         sessionManager = new AgentSessionManager(CreateAgent);
-        clockStore = new PluginClockStore(Interop.PluginStorage.PluginDatabaseScope);
-        clockService = new ClockService(
-            clockStore,
-            new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync));
-        clockServiceStartTask = InitializePersistenceAndClockAsync();
+        // 调度器由 core 拥有：插件只注册自己的执行器（把任务内容投给本插件的 AgentSession 执行）
+        Interop.ClockExecutor.Inner = new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync);
+        persistenceStartTask = InitializePersistenceAsync();
     }
     private static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
     {
@@ -89,11 +85,10 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
 
     }
 
-    private async Task InitializePersistenceAndClockAsync()
+    private async Task InitializePersistenceAsync()
     {
-        await clockStore.EnsureInitializedAsync();
+        // 定时任务存储的初始化已随调度器移至 core（StartClockAsync）；这里只初始化本插件的记忆库
         await DatabaseContextHistory.EnsureInitializedAsync(Interop.PluginStorage.PluginDatabaseScope);
-        await clockService.StartAsync();
     }
 
 
@@ -257,14 +252,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         disposeCts.Cancel();
         disposeCts.Dispose();
         rateLimiter.Dispose();
-        try
-        {
-            clockService.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-        finally
-        {
-            browser.Dispose();
-        }
+        browser.Dispose();
     }
 
     Task<IReadOnlyList<ManagedSkill>> ISkillManagementService.ListSkillsAsync(CancellationToken cancellationToken)

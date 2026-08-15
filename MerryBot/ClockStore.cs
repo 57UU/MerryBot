@@ -3,14 +3,15 @@ using DataProvider;
 using LiteDB;
 using LiteDB.Async;
 
-namespace BotPlugin;
+namespace MerryBot;
 
 /// <summary>
-/// LiteDB-backed scheduler storage owned by the agent plugin namespace.
-/// 注意：claimLock 仅为进程内互斥；多实例部署（多个机器人进程共享同一数据库）时，
-/// 需要外部互斥（如分布式锁）保证同一任务不会同时被多个实例领取执行。
+/// LiteDB-backed scheduler storage owned by core，使用 core 命名空间（scope "core"），与插件数据隔离；
+/// 不兼容旧版 agent 插件 scope 下已存在的定时任务数据（无需迁移）。
+/// claimLock 仅为进程内互斥；多实例部署（多个机器人进程共享同一数据库）时，需要外部互斥
+/// （如分布式锁）保证同一任务不会同时被多个实例领取执行。
 /// </summary>
-internal sealed class PluginClockStore : IClockStore
+internal sealed class CoreClockStore : IClockStore
 {
     private const string SchemaVersionId = "persistence-schema-version";
     private const string SchemaVersion = "1";
@@ -20,7 +21,7 @@ internal sealed class PluginClockStore : IClockStore
     private readonly ILiteCollectionAsync<MetaRecord> meta;
     private readonly SemaphoreSlim claimLock = new(1, 1);
 
-    public PluginClockStore(PluginDatabaseScope database)
+    public CoreClockStore(PluginDatabaseScope database)
     {
         ArgumentNullException.ThrowIfNull(database);
         tasks = database.GetCollection<ClockTaskRecord>("clock_tasks");

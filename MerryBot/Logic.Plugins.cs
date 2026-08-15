@@ -58,7 +58,8 @@ internal partial class Logic
                 botClient.PathPrefix,
                 EventRegister,
                 messageService,
-                new BotMessageChannel(botClient.Bot, new NLogAdapter(), attribute.Id)
+                new BotMessageChannel(botClient.Bot, new NLogAdapter(), attribute.Id),
+                clockService
                 );
                 pluginInteropMap.Add(type, interop);
                 pluginInitializer.AddDependency(type, attribute, [interop]);
@@ -173,6 +174,8 @@ internal partial class Logic
         webUiApplication.StopAsync().GetAwaiter().GetResult();
         webUiApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
         historyRecorder.Dispose();
+        // 调度器在数据库释放前停止：等待运行中的定时任务（≤5s）收敛
+        clockService.DisposeAsync().AsTask().GetAwaiter().GetResult();
         PluginStorageDatabase.Dispose();
         _reconnectCts.Cancel();
         botClient.Close();

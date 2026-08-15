@@ -1,3 +1,4 @@
+using Agent.Session;
 using BotPlugin;
 using CommonLib;
 using DataProvider;
@@ -22,6 +23,9 @@ internal partial class Logic
     private readonly MessageService messageService;
     private readonly WebApplication webUiApplication;
     private readonly ConfigRegistry configRegistry;
+    /// <summary>core 拥有的定时任务调度器：Agent 插件只注册执行器，生命周期归宿主</summary>
+    private readonly ClockService clockService;
+    private readonly CoreClockStore clockStore;
 
     public Logic(BotClient botClient, PluginStorageDatabase pluginStorageDatabase)
     {
@@ -43,6 +47,10 @@ internal partial class Logic
         GroupApiMapper.Map(webUiApplication, this, historyRecorder);
         LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
+        // 调度器先于插件创建；存储用 core 自己的命名空间（prefix "core"），与插件数据隔离
+        clockStore = new CoreClockStore(PluginStorageDatabase.CreateScope("clock", prefix: "core"));
+        clockService = new ClockService(clockStore, new DelegatingClockExecutor());
+        _ = StartClockAsync();
         LoadPlugins();
         _ = RunWebUiAsync();
         _ = ReconnectLoopAsync();
@@ -89,6 +97,20 @@ internal partial class Logic
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>后台启动定时任务调度器；异常（如存储损坏）记录日志而不是静默丢失。</summary>
+    private async Task StartClockAsync()
+    {
+        try
+        {
+            await clockStore.EnsureInitializedAsync();
+            await clockService.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "ClockService 启动失败");
         }
     }
 

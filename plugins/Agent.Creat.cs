@@ -17,7 +17,7 @@ public partial class AgentPlugin : Plugin
         }
         // Channel 内部已捕获异常并记录日志（含插件 id），不会抛出
         Action<string> sendMessage = (msg) => _ = Channel.SendMessage(sessionKey, msg);
-        await clockServiceStartTask;
+        await persistenceStartTask;
 
         var resolved = await llmProvider.CreateClientAsync(agentConfig.LlmModel);
         var skillToolSet = await SkillToolSet.CreateAsync(skillService);
@@ -50,7 +50,7 @@ public partial class AgentPlugin : Plugin
             new TodoListToolSet(),
             new WebTools(browser),
             skillToolSet,
-            new Cron(sessionId, clockService),
+            new Cron(sessionId, Interop.ClockService),
             new MemoryToolSet(memoryService, sessionId, memoryPromptInjection),
         };
         if (agentConfig.AllowShell)

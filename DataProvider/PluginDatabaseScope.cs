@@ -5,16 +5,19 @@ namespace DataProvider;
 
 /// <summary>
 /// A database view limited to one plugin's collection namespace.
+/// prefix 控制物理集合名的命名空间（如 "plugin" 或 "core"），与 <see cref="PluginStorageDatabase.CreateScope"/> 的 prefix 一致。
 /// The owning <see cref="PluginStorageDatabase"/> manages the underlying connection.
 /// </summary>
 public sealed class PluginDatabaseScope
 {
     private readonly LiteDatabaseAsync _database;
+    private readonly string _prefix;
 
-    internal PluginDatabaseScope(LiteDatabaseAsync database, string pluginId)
+    internal PluginDatabaseScope(LiteDatabaseAsync database, string pluginId, string prefix = "plugin")
     {
         _database = database;
         PluginId = pluginId;
+        _prefix = string.IsNullOrWhiteSpace(prefix) ? "plugin" : prefix.Trim();
     }
 
     /// <summary>
@@ -46,7 +49,7 @@ public sealed class PluginDatabaseScope
         {
             throw new ArgumentException($"集合名过长：编码后 {encodedName.Length} 个字符，超过上限 {MaxCollectionNameLength}", nameof(name));
         }
-        return $"plugin_{encodedPluginId.Length}_{encodedPluginId}_{encodedName}";
+        return $"{_prefix}_{encodedPluginId.Length}_{encodedPluginId}_{encodedName}";
     }
 
     private static string Encode(string value)

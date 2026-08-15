@@ -227,6 +227,8 @@ public override Task OnMessageAsync(
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
 |PluginDatabaseScope PluginDatabase {get;}|获取当前插件的 scoped LiteDB 数据库|
+|ClockService ClockService {get;}|core 拥有的定时任务调度器（生命周期归宿主，插件不负责创建/释放）|
+|DelegatingClockExecutor ClockExecutor {get;}|定时任务执行器注册口：core 先以空转发器建调度器，Agent 插件初始化时设置 `Inner` 注册自己的执行器|
 |T? GetVariable<T>(string key)|获取当前插件命名空间下`Variable`中的配置项|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
 |Action<int> Shutdown|关闭程序，参数为退出码|

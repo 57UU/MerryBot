@@ -1,3 +1,4 @@
+using Agent.Session;
 using CommonLib;
 using DataProvider;
 using NapcatClient;
@@ -84,13 +85,19 @@ public record PluginInterop(
     string PathPrefix,
     EventRegister EventRegister,
     IMessageService MessageService,
-    MessageChannel Channel
+    MessageChannel Channel,
+    ClockService ClockService
     )
 {
     /// <summary>
     /// 注册拦截器，拦截器只会拦截当前插件的消息，不会拦截其他插件的消息
     /// </summary>
     public List<MessageInterceptor> Interceptors { get; } = new();
+    /// <summary>
+    /// 定时任务执行器：core 先以空转发器创建调度器，Agent 插件初始化时注册自己的执行器（Inner）。
+    /// 未注册时到点任务标记失败并记录原因，调度器不受影响。
+    /// </summary>
+    public DelegatingClockExecutor ClockExecutor { get; } = new();
     /// <summary>
     /// find the plugin of specific type
     /// </summary>

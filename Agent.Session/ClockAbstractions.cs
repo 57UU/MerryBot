@@ -66,3 +66,20 @@ public interface IClockExecutor
         ClockTask task,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// 转发执行器：core 先以空转发器创建调度器，插件初始化完成后再注册自己的执行器（Inner）。
+/// Inner 未注册时到点任务标记失败并记录原因，调度器不受影响。
+/// </summary>
+public sealed class DelegatingClockExecutor : IClockExecutor
+{
+    public IClockExecutor? Inner { get; set; }
+
+    public Task<ClockExecutionResult> ExecuteAsync(ClockTask task, CancellationToken cancellationToken)
+    {
+        var inner = Inner;
+        return inner == null
+            ? Task.FromResult(ClockExecutionResult.Failure("定时任务执行器未注册（Agent 插件未加载）"))
+            : inner.ExecuteAsync(task, cancellationToken);
+    }
+}
