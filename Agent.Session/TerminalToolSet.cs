@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 using LlmBackend;
 
 namespace Agent.Session;
@@ -125,11 +126,24 @@ public class TerminalToolSet : ToolSet, IDisposable
         var prompt =
             $"如需执行命令，调用 shell 工具；当前检测到的 shell 为：{_detectedShell}，请使用该 shell 的正确语法编写命令。命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。";
         var builder = new ToolSetBridge.Builder(prompt);
-        builder.AddFunction<BashArgs>("shell",
-            "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
-            "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
-            "image_path 用于命令生成图片后附带查看（如 python 绘图输出的 png），主模型有视觉能力时直接查看，否则由辅助视觉模型描述。",
-            RunAsync);
+        // 图片查看能力：主模型或辅助视觉模型任一可用才在 shell 工具中暴露 image_path 参数与描述
+        var hasVision = _visionRouter.MainHasVision || _visionRouter.HasVisionFallback;
+        var shellDescription = hasVision
+            ? "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
+              "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
+              "image_path 用于命令生成图片后附带查看（如 python 绘图输出的 png），主模型有视觉能力时直接查看，否则由辅助视觉模型描述。"
+            : "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
+              "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时。";
+        if (hasVision)
+        {
+            builder.AddFunction<BashArgsWithImage>("shell", shellDescription,
+                (BashArgsWithImage args, CancellationToken ct, Action<Message> onIterationAdd) => RunAsync(args, ct, onIterationAdd));
+        }
+        else
+        {
+            builder.AddFunction<BashArgs>("shell", shellDescription,
+                (BashArgs args, CancellationToken ct, Action<Message> onIterationAdd) => RunAsync(args, ct, onIterationAdd));
+        }
         builder.AddFunction<TaskListArgs>("task_list",
             "列出所有后台 shell 任务：id、说明、运行中/已完成、已耗时。",
             _ => Task.FromResult(ListTasks()));
@@ -147,8 +161,8 @@ public class TerminalToolSet : ToolSet, IDisposable
         => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
-    /// <summary>工具参数：bash</summary>
-    private sealed class BashArgs
+    /// <summary>工具参数：bash（基类不含图片查看；无视觉能力时注册此类，schema 不暴露 image_path）</summary>
+    private class BashArgs
     {
         [Description("要执行的命令")]
         public string command { get; set; } = string.Empty;
@@ -168,8 +182,18 @@ public class TerminalToolSet : ToolSet, IDisposable
         [Description("禁用超时，仅后台生效")]
         public bool? disable_timeout { get; set; }
 
+        /// <summary>图片查看路径（仅 BashArgsWithImage 暴露），schema 生成时被 [JsonIgnore] 跳过。</summary>
+        [JsonIgnore]
+        public virtual string? ImagePath => null;
+    }
+
+    /// <summary>带图片查看能力的 bash 参数（主模型或辅助视觉模型可用时注册，schema 含 image_path）。</summary>
+    private sealed class BashArgsWithImage : BashArgs
+    {
         [Description("命令执行后要查看的图片文件路径（可选）。命令生成了图片（如图表、截图）时提供，模型会直接查看或用辅助视觉模型描述；相对路径按 shell 当前工作目录解析")]
         public string? image_path { get; set; }
+
+        public override string? ImagePath => image_path;
     }
 
     /// <summary>工具参数：task_output</summary>
@@ -207,7 +231,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw new ArgumentException("timeout 必须大于 0");
         }
         var output = await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
-        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd, cancellationToken, onIterationAdd);
+        return await AppendImageIfRequestedAsync(output, args.ImagePath, args.cwd, cancellationToken, onIterationAdd);
     }
 
     /// <summary>

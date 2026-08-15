@@ -68,13 +68,21 @@ public class Client
     /// 流式调用后端生成回复，最多尝试 maxAttempt 次。
     /// 仅重试首元素产出前的可重试异常（限速/服务器错误/网络错误）：流一旦开始产出
     /// 便无法透明重试（消费者会看到重复文本），中途失败直接抛出。
+    /// 迭代器转发使 [EnumeratorCancellation] 生效：消费方 WithCancellation(ct) 的
+    /// 取消令牌经枚举器通道绑定到本参数，最终传给后端与重试等待。
     /// </summary>
-    public IAsyncEnumerable<StreamEvent> GenerateStream(
+    public async IAsyncEnumerable<StreamEvent> GenerateStream(
         IList<Message> messages,
         string systemPrompt,
         LlmOptions options,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        => new RetryableStream(this, messages, systemPrompt, options, cancellationToken);
+    {
+        await using var enumerator = new RetryableStream(this, messages, systemPrompt, options, cancellationToken);
+        while (await enumerator.MoveNextAsync().ConfigureAwait(false))
+        {
+            yield return enumerator.Current;
+        }
+    }
 
     /// <summary>
     /// 重试状态机：外层 MoveNextAsync 失败时，仅当"尚未产出首元素"且还有重试次数才

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace LlmBackend;
@@ -42,7 +41,7 @@ public interface Backend
     /// 消费方用 <c>await foreach (var e in GenerateStream(...).WithCancellation(ct))</c>
     /// 或显式 <c>GetAsyncEnumerator(ct)</c>，方法参数位置不传令牌。
     /// </summary>
-    public IAsyncEnumerable<StreamEvent> GenerateStream(IList<Message> messages, string systemPrompt, LlmOptions options, [EnumeratorCancellation] CancellationToken cancellationToken = default);
+    public IAsyncEnumerable<StreamEvent> GenerateStream(IList<Message> messages, string systemPrompt, LlmOptions options, CancellationToken cancellationToken = default);
 }
 
 public record LlmOptions(

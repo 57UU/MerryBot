@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Agent;
 using LlmBackend;
 using LlmClient;
@@ -33,7 +32,7 @@ public sealed class VisionRouterTests
             IList<Message> messages,
             string systemPrompt,
             LlmOptions options,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
     }
 

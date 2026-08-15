@@ -46,6 +46,17 @@ internal sealed class MessageService : IMessageService
         => history.RecordAiMessageAsync(sessionKey, "ai", content,
             usage.promptUsage, usage.completionUsage, usage.totalUsage);
 
+    /// <summary>分页查询群聊历史消息（按时间倒序，第 1 页为最新；过滤已撤回消息）。</summary>
+    public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesAsync(long groupId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var stored = await history.GetMessagesByGroupIdAsync(groupId, page, pageSize);
+        return stored.Where(static m => !m.IsDeleted).Select(FromStoredMessage).ToList();
+    }
+
+    /// <summary>群聊历史消息总数（含撤回消息）。</summary>
+    public Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default)
+        => history.GetMessageCountByGroupIdAsync(groupId);
+
     public MessageIngress Ingest(ReceivedGroupMessage raw)
     {
         var localized = LocalizeChain(raw.message, raw.GroupId);

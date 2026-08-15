@@ -44,8 +44,13 @@ public class MessageTool : ToolSet
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
         builder.AddFunction<MessageArgs>("get_reply", "获取被回复消息的完整内容", args => GetReplyMessage(args.messageId));
-        builder.AddFunction<GetMessageImageArgs>("load_image", "获取对话中的图片并查看。", GetMessageImageAsync);
-        builder.AddFunction<MarkdownMessageArgs>("send_markdown", "将Markdown渲染为图片并发送到当前群。", args => SendMarkdownMessage(args.markdown));
+        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按时间倒序，第 1 页为最近的消息", args => GetGroupContextAsync(args));
+        // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
+        if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
+        {
+            builder.AddFunction<GetMessageImageArgs>("load_image", "获取对话中的图片并查看。", GetMessageImageAsync);
+        }
+        builder.AddFunction<MarkdownMessageArgs>("send_markdown", "以MD格式发送文本", args => SendMarkdownMessage(args.markdown));
         bridge = builder.Build();
     }
 
@@ -60,6 +65,16 @@ public class MessageTool : ToolSet
     {
         [Description("图片引用地址")]
         public string image { get; set; } = string.Empty;
+    }
+
+    /// <summary>群聊上下文分页参数：按时间倒序，第 1 页为最近的消息。</summary>
+    private sealed class GetGroupContextArgs
+    {
+        [Description("页码，从 1 开始，第 1 页为最近的消息")]
+        public int page { get; set; } = 1;
+
+        [Description("每页消息条数，默认 20，范围 1-50")]
+        public int pageSize { get; set; } = 20;
     }
 
     private sealed class MarkdownMessageArgs
@@ -100,7 +115,28 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，
+    /// 分页获取群聊历史消息上下文：按时间倒序，第 1 页为最近的消息。
+    /// 附带总条数与页码信息，便于模型逐页翻看早期对话。
+    /// </summary>
+    private async Task<string> GetGroupContextAsync(GetGroupContextArgs args)
+    {
+        var page = Math.Max(1, args.page);
+        var pageSize = Math.Clamp(args.pageSize, 1, 50);
+        var messages = await messageService.GetGroupMessagesAsync(groupId, page, pageSize);
+        var total = await messageService.GetGroupMessageCountAsync(groupId);
+        if (messages.Count == 0)
+        {
+            return total == 0
+                ? "当前群暂无历史消息。"
+                : $"没有更多历史消息了（共 {total} 条，当前第 {page} 页）。";
+        }
+
+        var totalPages = Math.Max(1, (total + pageSize - 1) / pageSize);
+        var body = string.Join("\n", messages.Select(FormatMessage));
+        return Cap($"群聊历史消息（共 {total} 条，第 {page}/{totalPages} 页，每页 {pageSize} 条）：\n{body}");
+    }
+
+    /// <summary>按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，</summary>
     /// 否则调用辅助视觉模型生成文字描述。引用来自消息文本中显示的 image 标识
     /// （pipeline 已把图片 Url/File 改写为 merrybot://resource/image/{hash} 本地引用）。
     /// </summary>
