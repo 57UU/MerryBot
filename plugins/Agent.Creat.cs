@@ -64,7 +64,7 @@ public partial class AgentPlugin : Plugin
         };
         if (agentConfig.AllowShell)
         {
-            tools.Add(new TerminalToolSet(sessionManager, sessionId, visionRouter: visionRouter, maxImageBytes: agentConfig.MaxImageSizeMb * 1024 * 1024));
+            tools.Add(new TerminalToolSet(sessionManager, sessionId, user: agentConfig.ShellUser, visionRouter: visionRouter, maxImageBytes: agentConfig.MaxImageSizeMb * 1024 * 1024));
         }
 
         var agentOptions = new AgentOptions

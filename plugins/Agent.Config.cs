@@ -29,6 +29,9 @@ public class AgentConfig : IPluginConfig
     [ConfigDescription("允许执行 shell 命令", "是否注册 bash/终端工具集。默认关闭；开启后模型可在常驻 shell 中执行任意命令，请确认信任该群的用户。")]
     public bool AllowShell { get; set; } = false;
 
+    [ConfigDescription("shell 运行用户", "AllowShell 开启后，shell 命令以该 Linux 用户身份（sudo -u user）执行；留空则以机器人进程所属用户执行。仅 Linux 生效")]
+    public string? ShellUser { get; set; }
+
     [ConfigDescription("图片大小上限", "load_image 等工具允许下载的图片大小上限（MB）。")]
     public int MaxImageSizeMb { get; set; } = 10;
 }
