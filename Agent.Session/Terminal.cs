@@ -40,7 +40,7 @@ public class Terminal : IDisposable
         {
             throw new ArgumentException("shell 不能为空", nameof(shell));
         }
-        if (!string.IsNullOrEmpty(user))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(user))
         {
             return new Terminal("sudo", $"-u {user} /bin/bash");
         }
