@@ -1,0 +1,10 @@
+.memory-layout { display: grid; grid-template-columns: minmax(13rem, 20rem) minmax(0, 1fr); gap: 1rem; }
+.memory-sessions { align-self: start; padding-bottom: .5rem; }
+.memory-session { width: 100%; border: 0; border-left: 3px solid transparent; background: transparent; padding: .65rem .8rem; text-align: left; display: flex; flex-direction: column; gap: .2rem; }
+.memory-session:hover, .memory-session.active { background: rgba(13, 110, 253, .1); border-left-color: #0d6efd; }
+.memory-session small { color: #6c757d; }
+.memory-new, .memory-entry { display: grid; gap: .6rem; }
+.memory-entry { padding: 1rem 0; border-top: 1px solid rgba(0,0,0,.12); }
+.memory-entry:first-of-type { border-top: 0; }
+.memory-entry-actions { display: flex; gap: .5rem; }
+@media (max-width: 768px) { .memory-layout { grid-template-columns: 1fr; } }

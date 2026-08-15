@@ -1,0 +1,143 @@
+@inject IJSRuntime JSRuntime
+
+<div class="top-row">
+    <div class="nav-container">
+        <a class="nav-brand" href="">
+            <span class="nav-brand-logo">M</span>
+            <span>
+                MerryBot
+                <span class="nav-brand-sub">QQ Bot Framework</span>
+            </span>
+        </a>
+    </div>
+    <input type="checkbox" title="导航菜单" class="nav-toggler" />
+</div>
+
+<div class="nav-scrollable" @onclick="CloseNavIfToggled">
+    <nav class="nav-column">
+        <NavMenuItem Href="" Match=NavLinkMatch.All Icon="🏠">
+            概览
+        </NavMenuItem>
+
+        <NavMenuItem Href="statistics" Icon="📊">
+            统计数据
+        </NavMenuItem>
+
+        <NavMenuItem Href="groups" Icon="👥">
+            群聊管理
+        </NavMenuItem>
+
+        <NavMenuItem Href="groupmessages" Icon="💬">
+            群聊消息
+        </NavMenuItem>
+
+        <NavMenuItem Href="aimessages" Icon="🤖">
+            AI 消息
+        </NavMenuItem>
+
+        <NavMenuItem Href="llmproviders" Icon="🧠">
+            LLM 配置
+        </NavMenuItem>
+
+        <NavMenuItem Href="config" Icon="⚙️">
+            配置
+        </NavMenuItem>
+
+        <NavMenuItem Href="skills" Icon="🧩">
+            Skill 管理
+        </NavMenuItem>
+
+        <NavMenuItem Href="memories" Icon="🗂️">
+            记忆管理
+        </NavMenuItem>
+    </nav>
+
+    <div class="nav-footer">
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm flex-fill" @onclick="RestartAsync" disabled="@Restarting">
+                @(Restarting ? "重启中…" : "重启程序")
+            </button>
+            <button class="btn btn-secondary btn-sm flex-fill" @onclick="ReloadAsync" disabled="@Reloading">
+                @(Reloading ? "重载中…" : "重载")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool Restarting;
+    private bool Reloading;
+
+    private async Task CloseNavIfToggled()
+    {
+        // 移动端：点击导航项后关闭展开的菜单
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("closeNavMenu");
+        }
+        catch
+        {
+            // 忽略 JS 调用失败（例如电路已断开）
+        }
+    }
+
+    private async Task<bool> ConfirmAsync(string message)
+    {
+        try
+        {
+            return await JSRuntime.InvokeAsync<bool>("confirm", message);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task NotifyRestartingAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "正在重启,请稍后刷新页面…");
+        }
+        catch
+        {
+            // 重启瞬间连接断开属预期
+        }
+    }
+
+    private async Task RestartAsync()
+    {
+        if (Restarting) return;
+        if (!await ConfirmAsync("确定要重新编译并重启 MerryBot 吗?未保存的配置修改会丢失。")) return;
+
+        Restarting = true;
+        try
+        {
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/restart");
+        }
+        catch
+        {
+            // 重启瞬间连接断开属预期
+        }
+        await NotifyRestartingAsync();
+        Restarting = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (Reloading) return;
+        if (!await ConfirmAsync("确定要重载 MerryBot 吗?(不重新编译)未保存的配置修改会丢失。")) return;
+
+        Reloading = true;
+        try
+        {
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/reload");
+        }
+        catch
+        {
+            // 重启瞬间连接断开属预期
+        }
+        await NotifyRestartingAsync();
+        Reloading = false;
+    }
+}

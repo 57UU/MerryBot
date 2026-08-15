@@ -61,12 +61,11 @@ public sealed class Cron : ToolSet
 
     public override IList<ToolDef> Tools() => _bridge.Tools();
 
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall)
-        => _bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
+        => _bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
 
     public override string? Prompt() =>
-        "定时任务工具：clock_create、clock_list、clock_get、clock_update、clock_delete、clock_log。" +
-        "任务属于当前会话；cron 使用 Linux 五字段格式（分 时 日 月 周），默认时区为 Asia/Shanghai，默认超时为 600 秒。";
+        "clock工具属于当前会话；cron 使用 Linux 五字段格式（分 时 日 月 周），默认时区为 Asia/Shanghai，默认超时为 600 秒。";
 
     private async Task<string> CreateAsync(ClockCreateArgs args)
     {

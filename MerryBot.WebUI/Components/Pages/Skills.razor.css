@@ -1,0 +1,2 @@
+.skill-upload-row, .skill-actions { display: flex; gap: .5rem; align-items: center; }
+.skill-upload-row .form-control { max-width: 38rem; }

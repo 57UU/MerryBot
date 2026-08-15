@@ -1,5 +1,7 @@
 using Agent.Session;
+using Agent.Tools;
 using BrowserService;
+using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Concurrent;
@@ -8,7 +10,7 @@ using System.Text;
 namespace BotPlugin;
 
 [PluginTag("agent", "Agent", "强大的Agent机器人")]
-public partial class AgentPlugin : Plugin
+public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManagementService
 {
     private readonly ILlmProviderRegistry llmProvider;
     private readonly AgentSessionManager sessionManager;
@@ -16,7 +18,8 @@ public partial class AgentPlugin : Plugin
     private readonly PluginClockStore clockStore;
     private readonly ClockService clockService;
     private readonly Task clockServiceStartTask;
-    private readonly string skillsPath;
+    private readonly FileSkillManagementService skillService;
+    private readonly MemoryManagementService memoryService;
     private readonly ConcurrentDictionary<string, PendingGroupMessages> pendingMessages = new();
 
     private sealed class PendingGroupMessages
@@ -27,20 +30,22 @@ public partial class AgentPlugin : Plugin
     }
 
     private sealed record PendingGroupMessage(long SenderId, string Content);
+    private readonly AgentConfig agentConfig;
 
-    public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider) : base(interop)
+    public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider, AgentConfig agentConfig) : base(interop)
     {
         this.llmProvider = llmProvider;
+        this.agentConfig = agentConfig;
         Logger.Info("agent plugin start");
 
-        skillsPath = Path.Combine(Interop.PathPrefix, "skills");
-        Directory.CreateDirectory(skillsPath);
+        skillService = new FileSkillManagementService(Path.Combine(Interop.PathPrefix, "skills"));
+        memoryService = new MemoryManagementService(Interop.PluginStorage.PluginDatabaseScope);
         browser = new Browser(new BrowserOptions
         {
             BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
         });
         sessionManager = new AgentSessionManager(CreateAgent);
-        clockStore = new PluginClockStore(Interop.PluginDatabase);
+        clockStore = new PluginClockStore(Interop.PluginStorage.PluginDatabaseScope);
         clockService = new ClockService(
             clockStore,
             new AgentSessionClockExecutor(sessionManager));
@@ -82,7 +87,7 @@ public partial class AgentPlugin : Plugin
     private async Task InitializePersistenceAndClockAsync()
     {
         await clockStore.EnsureInitializedAsync();
-        await DatabaseContextHistory.EnsureInitializedAsync(Interop.PluginDatabase);
+        await DatabaseContextHistory.EnsureInitializedAsync(Interop.PluginStorage.PluginDatabaseScope);
         await clockService.StartAsync();
     }
 
@@ -199,4 +204,32 @@ public partial class AgentPlugin : Plugin
             browser.Dispose();
         }
     }
+
+    Task<IReadOnlyList<ManagedSkill>> ISkillManagementService.ListSkillsAsync(CancellationToken cancellationToken)
+        => skillService.ListSkillsAsync(cancellationToken);
+    Task<string> ISkillManagementService.ReadSkillAsync(string name, bool includeDisabled, CancellationToken cancellationToken)
+        => skillService.ReadSkillAsync(name, includeDisabled, cancellationToken);
+    Task ISkillManagementService.UploadSkillAsync(SkillUpload upload, CancellationToken cancellationToken)
+        => skillService.UploadSkillAsync(upload, cancellationToken);
+    Task ISkillManagementService.SetSkillEnabledAsync(string name, bool enabled, CancellationToken cancellationToken)
+        => skillService.SetSkillEnabledAsync(name, enabled, cancellationToken);
+    Task ISkillManagementService.DeleteSkillAsync(string name, CancellationToken cancellationToken)
+        => skillService.DeleteSkillAsync(name, cancellationToken);
+
+    Task<IReadOnlyList<ManagedMemorySession>> IMemoryManagementService.ListMemorySessionsAsync(CancellationToken cancellationToken)
+        => memoryService.ListMemorySessionsAsync(cancellationToken);
+    Task<string> IMemoryManagementService.GetMemoryIndexAsync(string sessionKey, CancellationToken cancellationToken)
+        => memoryService.GetMemoryIndexAsync(sessionKey, cancellationToken);
+    Task IMemoryManagementService.SaveMemoryIndexAsync(string sessionKey, string content, CancellationToken cancellationToken)
+        => memoryService.SaveMemoryIndexAsync(sessionKey, content, cancellationToken);
+    Task<IReadOnlyList<ManagedMemory>> IMemoryManagementService.ListMemoriesAsync(string sessionKey, CancellationToken cancellationToken)
+        => memoryService.ListMemoriesAsync(sessionKey, cancellationToken);
+    Task<ManagedMemory?> IMemoryManagementService.GetMemoryAsync(string sessionKey, string key, CancellationToken cancellationToken)
+        => memoryService.GetMemoryAsync(sessionKey, key, cancellationToken);
+    Task IMemoryManagementService.SaveMemoryAsync(string sessionKey, string key, string content, CancellationToken cancellationToken)
+        => memoryService.SaveMemoryAsync(sessionKey, key, content, cancellationToken);
+    Task<bool> IMemoryManagementService.DeleteMemoryAsync(string sessionKey, string key, CancellationToken cancellationToken)
+        => memoryService.DeleteMemoryAsync(sessionKey, key, cancellationToken);
+    Task<string?> IMemoryManagementService.GetPromptInjectionAsync(string sessionKey, CancellationToken cancellationToken)
+        => memoryService.GetPromptInjectionAsync(sessionKey, cancellationToken);
 }

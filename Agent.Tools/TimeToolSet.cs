@@ -11,19 +11,18 @@ public sealed class TimeToolSet : ToolSet
     public TimeToolSet(TimeProvider? timeProvider = null)
     {
         this.timeProvider = timeProvider ?? TimeProvider.System;
-        var builder = new ToolSetBridge.Builder(
-            "需要查询当前日期、时间或时区时，调用 current_time 工具。 ");
+        var builder = new ToolSetBridge.Builder();
         builder.AddFunction<CurrentTimeArgs>(
             "current_time",
-            "获取当前本地时间、时区和 UTC 时间。无需参数。",
+            "获取当前本地时间、时区和 UTC 时间。",
             GetCurrentTimeAsync);
         bridge = builder.Build();
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
 
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) =>
-        bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd) =>
+        bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
 
     public override string? Prompt() => bridge.Prompt();
 

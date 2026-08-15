@@ -1,7 +1,7 @@
 using BotPlugin;
 using CommonLib;
+using MerryBot.WebUI.Api;
 using System.Reflection;
-using Tomlyn.Model;
 
 namespace MerryBot;
 
@@ -36,43 +36,32 @@ internal partial class Logic
     private void LoadPlugins()
     {
         var allPlugins = FindPlugins();
-        PluginInitializer<Plugin> pluginInitializer = new();
+        PluginInitializer<Plugin> pluginInitializer = new(GetConfig);
         Dictionary<Type, PluginInterop> pluginInteropMap = new();
         logger.Debug($"find plugin: {string.Join(",", allPlugins.Select(p => p.attribute.Id))}");
         foreach (var (type, attribute) in allPlugins)
         {
             try
             {
-                if (!ConfigManager.Instance.Variables.TryGetValue(attribute.Id, out var pluginVars))
-                {
-                    pluginVars = new TomlTable();
-                    ConfigManager.Instance.Variables[attribute.Id] = pluginVars;
-                }
                 var pluginStorage = new PluginStorage(
                             (s) => PluginStorageDatabase.StorePluginData(attribute.Id, s),
                             () => PluginStorageDatabase.GetPluginData(attribute.Id),
-                            (groupId, s) => PluginStorageDatabase.StoreGroupPluginData(attribute.Id, groupId, s),
-                            groupId => PluginStorageDatabase.GetGroupPluginData(attribute.Id, groupId)
+                            PluginStorageDatabase.CreateScope(attribute.Id)
                             );
                 var interop = new PluginInterop(
                 new PluginLogger(attribute.Id),
                 QqGroupIDs,
                 () => plugins,
                 pluginStorage,
-                PluginStorageDatabase.CreateScope(attribute.Id),
                 botClient,
-                pluginVars,
                 Shutdown,
                 AuthorizedUser,
-                CommandLineArguments,
-                ConfigManager.Save,
                 botClient.PathPrefix,
                 EventRegister,
-                messageService,
-                historyWebApplication
+                messageService
                 );
                 pluginInteropMap.Add(type, interop);
-                pluginInitializer.AddDependency(type, [interop]);
+                pluginInitializer.AddDependency(type, attribute, [interop]);
 
             }
             catch (Exception ex)
@@ -115,6 +104,48 @@ internal partial class Logic
                 }
             });
         }
+        RegisterWebUi();
+    }
+    void RegisterWebUi()
+    {
+        var llmProviderManager = plugins
+    .Select(static plugin => plugin.Instance)
+    .OfType<ILlmProviderManagementService>()
+    .SingleOrDefault();
+        if (llmProviderManager == null)
+        {
+            logger.Warn("LLM Provider 插件未加载，未注册 LLM Provider Web API。");
+        }
+        else
+        {
+            LlmProviderApiMapper.Map(webUiApplication, llmProviderManager, botClient.PathPrefix);
+        }
+
+        var skillManager = plugins
+            .Select(static plugin => plugin.Instance)
+            .OfType<ISkillManagementService>()
+            .SingleOrDefault();
+        if (skillManager == null)
+        {
+            logger.Warn("Agent Skill 管理服务未加载，未注册 Skill Web API。");
+        }
+        else
+        {
+            SkillApiMapper.Map(webUiApplication, skillManager);
+        }
+
+        var memoryManager = plugins
+            .Select(static plugin => plugin.Instance)
+            .OfType<IMemoryManagementService>()
+            .SingleOrDefault();
+        if (memoryManager == null)
+        {
+            logger.Warn("Agent 记忆管理服务未加载，未注册记忆 Web API。");
+        }
+        else
+        {
+            MemoryApiMapper.Map(webUiApplication, memoryManager, historyRecorder);
+        }
     }
 
     public void Shutdown(int exitCode = 0)
@@ -123,8 +154,8 @@ internal partial class Logic
         {
             dispose();
         }
-        historyWebApplication.StopAsync().GetAwaiter().GetResult();
-        historyWebApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        webUiApplication.StopAsync().GetAwaiter().GetResult();
+        webUiApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
         historyRecorder.Dispose();
         PluginStorageDatabase.Dispose();
         botClient.Close();

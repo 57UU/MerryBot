@@ -5,7 +5,7 @@ namespace Agent;
 
 /// <summary>
 /// 图片路由：主模型具备视觉能力（ImageInput）时，图片以用户消息注入当前对话
-/// （通过 ToolSet.OnIterationAdd 回调）；否则调用配置的辅助视觉模型生成文字描述。
+/// （通过 ToolSet.InvokeAsync 的调用级回调）；否则调用配置的辅助视觉模型生成文字描述。
 /// </summary>
 public sealed class VisionRouter
 {

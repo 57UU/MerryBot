@@ -1,17 +1,16 @@
 using System.ComponentModel;
 using System.Text;
+using CommonLib;
 using LlmBackend;
 
 namespace Agent.Tools;
 
 /// <summary>
 /// 技能工具集：注册 skill_list / skill_read 两个工具。
-/// 构造参数为技能文件夹路径，支持两种布局：
-/// - 平铺格式：顶层 *.md（技能名 = 文件名去 .md）
-/// - 文件夹格式：顶层子目录 SKILL.md（技能名 = 子目录名）
+/// 通过 <see cref="ISkillManagementService"/> 读取 Skill，支持由运行时或 WebUI 管理服务提供内容。
 /// Prompt 返回技能名列表，让模型在 system prompt 中看到可用技能；
 /// 模型通过 skill_read 读取具体技能内容后执行。
-/// 技能表在构造时扫描一次；skill_read 仅允许读取已扫描的技能文件，防止路径注入。
+/// 技能表在构造时获取一次启用 Skill 快照；读取时仍由服务校验启用状态。
 /// </summary>
 public class SkillToolSet : ToolSet
 {
@@ -19,24 +18,42 @@ public class SkillToolSet : ToolSet
     private const int MaxReadLength = 20000;
 
     private readonly ToolSetBridge bridge;
-    private readonly IReadOnlyDictionary<string, string> skills;
+    private readonly ISkillManagementService skillService;
+    private readonly IReadOnlyDictionary<string, ManagedSkill> skills;
 
+    /// <summary>兼容独立 TUI 运行；机器人运行时应传入接口实例。</summary>
     public SkillToolSet(string skillsPath)
+        : this(new FileSkillManagementService(skillsPath))
     {
-        if (string.IsNullOrWhiteSpace(skillsPath) || !Directory.Exists(skillsPath))
-        {
-            throw new DirectoryNotFoundException($"技能目录不存在: {skillsPath}");
-        }
-        skills = ScanSkills(skillsPath);
+    }
+
+    private SkillToolSet(FileSkillManagementService skillService)
+        : this(skillService, skillService.ListSkillsAsync().GetAwaiter().GetResult())
+    {
+    }
+
+    private SkillToolSet(ISkillManagementService skillService, IReadOnlyList<ManagedSkill> skills)
+    {
+        this.skillService = skillService;
+        this.skills = skills
+            .Where(static skill => skill.Enabled)
+            .OrderBy(static skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static skill => skill.Name, StringComparer.OrdinalIgnoreCase);
 
         var builder = new ToolSetBridge.Builder(BuildPrompt());
-        builder.AddFunction<SkillListArgs>("skill_list", "列出所有可用技能名称。", _ => Task.FromResult(ListSkills()));
+        builder.AddFunction<SkillListArgs>("skill_list", "列出所有可用技能名称。", ListSkillsAsync);
         builder.AddFunction<SkillReadArgs>("skill_read", "读取指定技能的内容，返回技能文件全文。", ReadSkillAsync);
         bridge = builder.Build();
     }
 
+    public static async Task<SkillToolSet> CreateAsync(ISkillManagementService skillService, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(skillService);
+        return new SkillToolSet(skillService, await skillService.ListSkillsAsync(cancellationToken));
+    }
+
     public override IList<ToolDef> Tools() => bridge.Tools();
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) => bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd) => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：skill_read</summary>
@@ -48,26 +65,6 @@ public class SkillToolSet : ToolSet
 
     /// <summary>工具参数：skill_list（无参数）</summary>
     private sealed class SkillListArgs { }
-
-    /// <summary>扫描技能目录：顶层 *.md（平铺）与顶层子目录 SKILL.md（文件夹格式）</summary>
-    private static IReadOnlyDictionary<string, string> ScanSkills(string skillsPath)
-    {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in Directory.GetFiles(skillsPath, "*.md"))
-        {
-            result[Path.GetFileNameWithoutExtension(file)] = Path.GetFullPath(file);
-        }
-        foreach (var dir in Directory.GetDirectories(skillsPath))
-        {
-            var skillFile = Path.Combine(dir, "SKILL.md");
-            if (File.Exists(skillFile))
-            {
-                result[Path.GetFileName(dir)] = Path.GetFullPath(skillFile);
-            }
-        }
-        return result.OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-    }
 
     private string BuildPrompt()
     {
@@ -81,33 +78,38 @@ public class SkillToolSet : ToolSet
         return sb.ToString();
     }
 
-    private string ListSkills()
+    private async Task<string> ListSkillsAsync(SkillListArgs _)
     {
-        if (skills.Count == 0)
+        var enabledSkills = (await skillService.ListSkillsAsync())
+            .Where(static skill => skill.Enabled)
+            .OrderBy(static skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(static skill => skill.Name)
+            .ToList();
+        if (enabledSkills.Count == 0)
         {
             return "技能目录为空，没有可用技能。";
         }
-        var sb = new StringBuilder($"可用技能（共 {skills.Count} 个）：\n");
-        sb.AppendJoin('\n', skills.Keys);
+        var sb = new StringBuilder($"可用技能（共 {enabledSkills.Count} 个）：\n");
+        sb.AppendJoin('\n', enabledSkills);
         return sb.ToString();
     }
 
-    private Task<string> ReadSkillAsync(SkillReadArgs args)
+    private async Task<string> ReadSkillAsync(SkillReadArgs args)
     {
         var name = args.skill?.Trim() ?? string.Empty;
         if (name.Length == 0)
         {
             throw new ArgumentException("skill 参数不能为空");
         }
-        if (!skills.TryGetValue(name, out var path))
+        if (!skills.ContainsKey(name))
         {
             throw new ArgumentException($"未找到技能: {name}（可用 skill_list 查看全部技能）");
         }
-        var content = File.ReadAllText(path);
+        var content = await skillService.ReadSkillAsync(name, includeDisabled: false);
         if (content.Length <= MaxReadLength)
         {
-            return Task.FromResult(content);
+            return content;
         }
-        return Task.FromResult(content[..MaxReadLength] + $"\n…（内容过长已截断，全文共 {content.Length} 字符）");
+        return content[..MaxReadLength] + $"\n…（内容过长已截断，全文共 {content.Length} 字符）";
     }
 }

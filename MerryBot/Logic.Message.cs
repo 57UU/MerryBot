@@ -17,6 +17,11 @@ internal partial class Logic
                 //if the plugin is not enable, skip it
                 continue;
             }
+
+            if (i.Interop.Interceptors.Any(interceptor => interceptor(data)))
+            {
+                continue;
+            }
             var pluginChain = messageChain.Select(message => message.Clone()).ToList();
             _ = InvokePluginAsync(i, isMentioned, command, pluginChain, data);
         }

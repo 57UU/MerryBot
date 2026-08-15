@@ -9,19 +9,17 @@
 
   <ItemGroup>
     <PackageReference Include="ConsoleTables" Version="2.7.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.11" />
     <PackageReference Include="Tomlyn.Signed" Version="2.4.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
+    <ProjectReference Include="..\Agent.Tools\Agent.Tools.csproj" />
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\DataProvider\DataProvider.csproj" />
     <ProjectReference Include="..\LlmClient\LlmClient.csproj" />
-    <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,174 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>概览</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>概览</h1>
+        <p class="page-header-sub">MerryBot 运行状态、系统信息与资源一览。</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+            @(IsLoading ? "刷新中…" : "刷新")
+        </button>
+    </div>
+</div>
+
+@if (Error != null)
+{
+    <div class="message-item-custom mb-3-custom">加载失败：@Error</div>
+}
+
+<div class="stat-row">
+    <StatCard Title="连接状态" Value="@ConnStatusText" Icon="📡"
+              IconBg="@(Connected == null ? "rgba(100,116,139,0.12)" : (Connected == true ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)"))"
+              IconColor="@(Connected == null ? "#64748b" : (Connected == true ? "#059669" : "#dc2626"))" />
+    <StatCard Title="Skill 数量" Value="@(SkillCount.HasValue ? SkillCount.Value.ToString() : "—")" Icon="🧩" IconBg="rgba(99,102,241,0.12)" IconColor="#4f46e5" />
+    <StatCard Title="群聊数量" Value="@(Status == null ? "—" : Status.GroupCount.ToString())" Icon="👥" IconBg="rgba(6,182,212,0.12)" IconColor="#0891b2" />
+    <StatCard Title="运行时长" Value="@(Status == null ? "—" : FormatUptime(Status.UptimeSeconds))" Icon="⏱️" IconBg="rgba(245,158,11,0.14)" IconColor="#d97706" />
+</div>
+
+<div class="row-layout">
+    <div class="col-half">
+        <div class="card-full-height">
+            <div class="card-header-custom">Bot 信息</div>
+            <div class="card-body-custom">
+                @if (Status == null)
+                {
+                    <span class="text-muted-custom">加载中…</span>
+                }
+                else
+                {
+                    <dl class="kv-list">
+                        <div class="kv-item"><dt>QQ 号</dt><dd>@Status.Bot.SelfId</dd></div>
+                        <div class="kv-item"><dt>昵称</dt><dd>@Status.Bot.Nickname</dd></div>
+                        <div class="kv-item"><dt>Napcat 地址</dt><dd><code>@Status.Bot.NapcatAddress</code></dd></div>
+                    </dl>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-half">
+        <div class="card-full-height">
+            <div class="card-header-custom">系统信息</div>
+            <div class="card-body-custom">
+                @if (Status == null)
+                {
+                    <span class="text-muted-custom">加载中…</span>
+                }
+                else
+                {
+                    <dl class="kv-list">
+                        <div class="kv-item"><dt>操作系统</dt><dd>@Status.OsVersion</dd></div>
+                        <div class="kv-item"><dt>运行时</dt><dd>@Status.Framework</dd></div>
+                        <div class="kv-item"><dt>机器名</dt><dd>@Status.MachineName</dd></div>
+                        <div class="kv-item"><dt>进程 ID</dt><dd>@Status.ProcessId</dd></div>
+                        <div class="kv-item"><dt>内存占用</dt><dd>@FormatBytes(Status.WorkingSetBytes)（托管 @FormatBytes(Status.GcMemoryBytes)）</dd></div>
+                        <div class="kv-item"><dt>WebUI 版本</dt><dd>@Status.Version</dd></div>
+                    </dl>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="page-title">快捷入口</h2>
+<div class="quick-links">
+    <a class="quick-link" href="statistics">📊 <span>统计数据</span></a>
+    <a class="quick-link" href="groups">👥 <span>群聊管理</span></a>
+    <a class="quick-link" href="groupmessages">💬 <span>群聊消息</span></a>
+    <a class="quick-link" href="aimessages">🤖 <span>AI 消息</span></a>
+    <a class="quick-link" href="skills">🧩 <span>Skill 管理</span></a>
+</div>
+
+@code {
+    private StatusPayload? Status;
+    private int? SkillCount;
+    private string? Error;
+    private bool IsLoading;
+
+    private bool? Connected => Status?.Bot.Connected;
+    private string ConnStatusText => Status == null ? "—" : (Status.Bot.Connected ? "已连接" : "未连接");
+
+    private bool _initialized;
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            Status = await JSRuntime.InvokeAsync<StatusPayload>("configApi.request", "GET", "/api/status");
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+
+        // Skill 接口依赖插件加载情况，失败时仅 Skill 数显示「—」，不影响其余状态
+        try
+        {
+            var skills = await JSRuntime.InvokeAsync<List<ManagedSkill>>("configApi.request", "GET", "/api/skills/");
+            SkillCount = skills?.Count ?? 0;
+        }
+        catch
+        {
+            SkillCount = null;
+        }
+
+        IsLoading = false;
+    }
+
+    private static string FormatUptime(double seconds)
+    {
+        var t = TimeSpan.FromSeconds(seconds);
+        return t.TotalDays >= 1
+            ? $"{(int)t.TotalDays} 天 {t.Hours} 小时"
+            : t.TotalHours >= 1
+                ? $"{t.Hours} 小时 {t.Minutes} 分"
+                : $"{Math.Max(0, t.Minutes)} 分 {Math.Max(0, t.Seconds)} 秒";
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024d:F1} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024d:F1} MB",
+        _ => $"{bytes / 1024d / 1024d / 1024d:F2} GB",
+    };
+
+    private sealed class StatusPayload
+    {
+        public BotPayload Bot { get; set; } = new();
+        public int GroupCount { get; set; }
+        public string OsVersion { get; set; } = "";
+        public string Framework { get; set; } = "";
+        public string MachineName { get; set; } = "";
+        public int ProcessId { get; set; }
+        public double UptimeSeconds { get; set; }
+        public long WorkingSetBytes { get; set; }
+        public long GcMemoryBytes { get; set; }
+        public string Version { get; set; } = "";
+    }
+
+    private sealed class BotPayload
+    {
+        public bool Connected { get; set; }
+        public string SelfId { get; set; } = "";
+        public string Nickname { get; set; } = "";
+        public string NapcatAddress { get; set; } = "";
+    }
+}

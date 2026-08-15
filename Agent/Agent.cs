@@ -224,34 +224,20 @@ public class Agent
             return (usage, response.Content);
         }
 
-        // 工具执行期间通过 OnIterationAdd 回调追加的内容（如图片用户消息），
-        // 工具并发执行，故用并发队列收集
+        // 工具执行期间通过回调追加的内容（如图片用户消息）；
+        // 工具并发执行，故用并发队列收集。
         var iterationAdds = new ConcurrentQueue<Message>();
-        foreach (var toolSet in toolSets!)
+        // 并发执行所有工具调用，结果按调用顺序作为 tool 消息回填
+        var toolResults = await Task.WhenAll(
+            response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue)));
+        for (int i = 0; i < response.ToolCalls.Length; i++)
         {
-            toolSet.OnIterationAdd = iterationAdds.Enqueue;
-        }
-        try
-        {
-            // 并发执行所有工具调用，结果按调用顺序作为 tool 消息回填
-            var toolResults = await Task.WhenAll(
-                response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration)));
-            for (int i = 0; i < response.ToolCalls.Length; i++)
+            messages.Add(new Message
             {
-                messages.Add(new Message
-                {
-                    role = Role.Tool,
-                    toolCallId = response.ToolCalls[i].Id,
-                    content = [new MessagePartText { text = toolResults[i] }],
-                });
-            }
-        }
-        finally
-        {
-            foreach (var toolSet in toolSets!)
-            {
-                toolSet.OnIterationAdd = null;
-            }
+                role = Role.Tool,
+                toolCallId = response.ToolCalls[i].Id,
+                content = [new MessagePartText { text = toolResults[i] }],
+            });
         }
 
         // 工具追加的内容排在 tool 结果消息之后，下一轮生成时即可见
@@ -268,7 +254,8 @@ public class Agent
     private async Task<string> InvokeToolAsync(
         CancellationToken cancellationToken,
         ToolCall toolCall,
-        int iteration)
+        int iteration,
+        Action<Message> onIterationAdd)
     {
         Log(new AgentLogEvent(
             AgentLogEventKind.ToolCallStarted,
@@ -283,7 +270,7 @@ public class Agent
             {
                 if (toolSet.Tools().Any(t => t.function?.name == toolCall.Name))
                 {
-                    var result = await toolSet.InvokeAsync(cancellationToken, toolCall);
+                    var result = await toolSet.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
                     Log(new AgentLogEvent(
                         AgentLogEventKind.ToolCallCompleted,
                         DateTimeOffset.UtcNow,

@@ -11,12 +11,11 @@ napcat-server = "ws://localhost:30001"    # napcat websocket地址
 napcat-token = "your_token_here"          # napcat token
 qq-groups = [114514, 1919810]             # 要监听的qq群号列表
 authorized-user = 114514                  # 授权用户（Bot管理员）qq号
-
-[variables.agent]                         # 每个插件有独立的命名空间
-ai-prompt = "你是一个助人为乐的AI助手"     # Agent 的系统提示词
+machine-code = 0                          # 历史记录机器编号；省略时首次启动自动生成
+web-address = "http://0.0.0.0:5000"       # WebUI 监听地址
 ```
 
-> 💡 配置文件的**详细说明和完整参数**（包括所有插件的配置）请参阅 [Configuration.md](Configuration.md)。
+> 💡 Agent 等插件的独立配置由插件配置存储管理，可在 WebUI 中维护；不会写入 `setting.toml`。
 
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
@@ -57,25 +56,25 @@ ai-prompt = "你是一个助人为乐的AI助手"     # Agent 的系统提示词
 
 ### Skills 技能系统
 
-在 shell 用户的家目录下创建 `skills/` 文件夹（如 `/home/merrybot/skills/`），放入技能文件，AI 会自动识别并在需要时读取执行：
+在数据目录下创建 `skills/` 文件夹（如 `data/skills/`），放入技能文件，AI 会自动识别并在需要时读取执行。也可在 WebUI 的“Skill 管理”页上传单文件 `.md` 或目录型 `.zip`，并通过 `.disable` 标记禁用：
 
 ```bash
 # 示例：创建一个翻译技能
-echo "你是一个翻译助手，请将用户输入翻译为英文。" > ~/skills/翻译.txt
+echo "你是一个翻译助手，请将用户输入翻译为英文。" > data/skills/翻译.md
 ```
 
-AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内容，再按指令执行。
+AI 收到匹配的请求时，会先调用 `skill_read` 读取技能内容，再按指令执行。
 
 ### Memory 记忆系统
 
-每个群有独立的持久化记忆空间，以 markdown 文件存储在 `{dataPath}/memory/{groupId}/` 目录下。
+每个群有独立的持久化记忆空间，按 `sessionKey` 隔离并存储在 Agent 插件数据库中。WebUI 的“记忆管理”页会用 Core 历史数据库将 QQ 群 ID 显示为群名。
 
 | 工具 | 功能 |
 |------|------|
-| `save_memory` | 保存或更新一条记忆（写入 `{key}.md`） |
+| `save_memory` | 保存或更新一条记忆 |
 | `recall_memory` | 查看当前群所有记忆的 key 列表 |
 | `query_memory` | 通过 key 读取具体内容 |
-| `delete_memory` | 删除指定记忆（删除文件） |
+| `delete_memory` | 删除指定记忆 |
 
 每次对话开始时，AI 会在 system prompt 中看到所有记忆的 key 列表，按需调用 `query_memory` 查看具体内容。
 
@@ -83,7 +82,7 @@ AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内�
 ```
 用户: 我喜欢用中文回复
 AI → save_memory("用户偏好", "喜欢用中文回复")
-→ 写入文件 data/memory/114514/用户偏好.md
+→ 写入当前 sessionKey 对应的数据库记录
 
 [下一次对话]
 system prompt: ## 已记忆的信息

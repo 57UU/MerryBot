@@ -28,7 +28,7 @@ public class WebTools : ToolSet
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) => bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd) => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：web_search</summary>

@@ -219,9 +219,10 @@ public class HistoryRecorder : IDisposable
             await messagesCollection.InsertAsync(message);
             return true;
         }
-        catch (LiteException)
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
         {
             // 唯一索引与另一条并发写入竞争时，读取并覆盖现有记录。
+            // LiteDB.Async 会将 LiteException 包装成 LiteAsyncException。
             existing = await messagesCollection.FindOneAsync(x => x.MessageKey == message.MessageKey);
             if (existing == null) throw;
             message.Id = existing.Id;
@@ -459,7 +460,7 @@ public class HistoryRecorder : IDisposable
             await forwardMessagesCollection.InsertAsync(forwardEntry);
             return true;
         }
-        catch (LiteException)
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
         {
             existing = await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardEntry.ForwardId);
             if (existing == null) throw;
@@ -482,7 +483,7 @@ public class HistoryRecorder : IDisposable
                 await resourceReferencesCollection.InsertAsync(reference);
                 return reference;
             }
-            catch (LiteException)
+            catch (Exception exception) when (IsLiteDatabaseException(exception))
             {
                 existing = await resourceReferencesCollection.FindOneAsync(x => x.LocalUri == reference.LocalUri);
                 if (existing == null) throw;
@@ -498,6 +499,14 @@ public class HistoryRecorder : IDisposable
         await resourceReferencesCollection.UpdateAsync(existing);
         return existing;
     }
+
+    /// <summary>
+    /// LiteDB.Async 将底层 LiteDB 异常包在 <see cref="LiteAsyncException"/> 中；
+    /// 并发插入时两种异常都应走“重新读取后更新”的幂等分支。
+    /// </summary>
+    private static bool IsLiteDatabaseException(Exception exception) =>
+        exception is LiteException ||
+        exception is LiteAsyncException { InnerException: LiteException };
 
     public async Task<ForwardMessageEntry?> GetForwardMessageByIdAsync(string forwardId)
     {

@@ -2,57 +2,42 @@ using LiteDB;
 using LiteDB.Async;
 using LlmBackend;
 using LlmClient;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-using ModelsDev.Sdk;
-using ModelsDev.Sdk.Models;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 
 namespace BotPlugin;
 
 /// <summary>
-/// 管理可执行 LLM Provider、模型和 API Key。models.dev 仅作为目录元数据来源；
-/// 导入后仍由本地配置决定接口地址、格式和是否启用。
+/// 管理可执行 LLM Provider、模型和 API Key。
+/// 外部模型目录由 WebUI 查询；插件只保存已解析的本地配置。
 /// </summary>
-[PluginTag("llm-provider", "LLM Provider", "管理 LLM Provider、模型、Key 与 models.dev 导入")]
-public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
+[PluginTag("llm-provider", "LLM Provider", "管理 LLM Provider、模型和 Key")]
+public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProviderManagementService
 {
     private const string DefaultModelMetaId = "default-model";
     private const string SchemaVersionMetaId = "schema-version";
     private const string SchemaVersion = "1";
-    private const string CatalogCacheFileName = "models.dev-api.json";
     private readonly ILiteCollectionAsync<ProviderRecord> providers;
     private readonly ILiteCollectionAsync<ModelRecord> models;
     private readonly ILiteCollectionAsync<KeyRecord> keys;
     private readonly ILiteCollectionAsync<MetaRecord> meta;
     private readonly IDataProtector keyProtector;
-    private readonly SemaphoreSlim catalogLock = new(1, 1);
-    private readonly string catalogCachePath;
-    private ModelsDevClient? catalog;
-    private DateTimeOffset? catalogUpdatedAtUtc;
-    private string? catalogSource;
-    private string? catalogRefreshError;
 
     public LlmProviderPlugin(PluginInterop interop) : base(interop)
     {
-        providers = interop.PluginDatabase.GetCollection<ProviderRecord>("providers");
-        models = interop.PluginDatabase.GetCollection<ModelRecord>("models");
-        keys = interop.PluginDatabase.GetCollection<KeyRecord>("keys");
-        meta = interop.PluginDatabase.GetCollection<MetaRecord>("meta");
+        providers = interop.PluginStorage.PluginDatabaseScope.GetCollection<ProviderRecord>("providers");
+        models = interop.PluginStorage.PluginDatabaseScope.GetCollection<ModelRecord>("models");
+        keys = interop.PluginStorage.PluginDatabaseScope.GetCollection<KeyRecord>("keys");
+        meta = interop.PluginStorage.PluginDatabaseScope.GetCollection<MetaRecord>("meta");
 
         Directory.CreateDirectory(interop.PathPrefix);
         var keyRingPath = Path.Combine(interop.PathPrefix, "llm-provider-key-ring");
         Directory.CreateDirectory(keyRingPath);
-        catalogCachePath = Path.Combine(interop.PathPrefix, CatalogCacheFileName);
         keyProtector = DataProtectionProvider
             .Create(new DirectoryInfo(keyRingPath), builder => builder.SetApplicationName("MerryBot.LlmProvider"))
             .CreateProtector("api-key.v1");
 
-        MapApiRoutes();
         _ = EnsureIndexesAsync();
     }
 
@@ -142,90 +127,32 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         }
     }
 
-    private void MapApiRoutes()
-    {
-        var routes = Interop.WebApplication.MapGroup("/api/plugins/llm-provider");
-        routes.MapGet("/config", async (CancellationToken cancellationToken) =>
-            Results.Ok(await GetConfigAsync(cancellationToken)));
-        routes.MapGet("/catalog", async (string? query, string? providerId, CancellationToken cancellationToken) =>
-            Results.Ok(await GetCatalogAsync(query, providerId, refresh: false, cancellationToken: cancellationToken)));
-        routes.MapGet("/catalog/providers", async (string? query, CancellationToken cancellationToken) =>
-            Results.Ok(await GetCatalogProvidersAsync(query, cancellationToken)));
-        routes.MapGet("/catalog/status", async (CancellationToken cancellationToken) =>
-        {
-            await EnsureCatalogAsync(force: false, cancellationToken);
-            return Results.Ok(GetCatalogStatus());
-        });
-        routes.MapPost("/catalog/refresh", async (CancellationToken cancellationToken) =>
-        {
-            await EnsureCatalogAsync(force: true, cancellationToken);
-            return Results.Ok(GetCatalogStatus());
-        });
-        routes.MapPost("/import", async (CatalogImportRequest request, CancellationToken cancellationToken) =>
-            Results.Ok(await ImportFromCatalogAsync(request, cancellationToken)));
-        routes.MapPut("/providers/{id}", async (string id, SaveProviderRequest request, CancellationToken cancellationToken) =>
-        {
-            await SaveProviderAsync(id, request, cancellationToken);
-            return Results.NoContent();
-        });
-        routes.MapDelete("/providers/{id}", async (string id, CancellationToken cancellationToken) =>
-        {
-            await DeleteProviderAsync(id, cancellationToken);
-            return Results.NoContent();
-        });
-        routes.MapPut("/models/{**id}", async (string id, SaveModelRequest request, CancellationToken cancellationToken) =>
-        {
-            await SaveModelAsync(id, request, cancellationToken);
-            return Results.NoContent();
-        });
-        routes.MapDelete("/models/{**id}", async (string id, CancellationToken cancellationToken) =>
-        {
-            await models.DeleteAsync(id);
-            await ClearDefaultModelIfAsync(id);
-            return Results.NoContent();
-        });
-        routes.MapPost("/keys", async (SaveKeyRequest request, CancellationToken cancellationToken) =>
-            Results.Ok(await SaveKeyAsync(request, cancellationToken)));
-        routes.MapDelete("/keys/{id}", async (string id, CancellationToken cancellationToken) =>
-        {
-            await keys.DeleteAsync(id);
-            return Results.NoContent();
-        });
-        routes.MapPut("/default/{**modelId}", async (string modelId, CancellationToken cancellationToken) =>
-        {
-            var model = await models.FindByIdAsync(modelId)
-                ?? throw new KeyNotFoundException($"未找到模型: {modelId}");
-            await meta.UpsertAsync(new MetaRecord { Id = DefaultModelMetaId, Value = model.Id });
-            return Results.NoContent();
-        });
-    }
-
-    private async Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken)
+    public async Task<LlmProviderConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var allProviders = await providers.FindAllAsync();
         var allModels = await models.FindAllAsync();
         var allKeys = await keys.FindAllAsync();
         var defaultModelId = await GetDefaultModelIdAsync(cancellationToken);
-        var providerDtos = allProviders
+        var configuredProviders = allProviders
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(provider => new ProviderDto(
+            .Select(provider => new LlmProviderConfigurationProvider(
                 provider.Id,
                 provider.Name,
                 provider.BaseUrl,
-                ToApiFormatName(provider.ApiFormat),
+                provider.ApiFormat,
                 provider.Enabled,
                 provider.CatalogProviderId,
                 allModels.Where(model => model.ProviderId == provider.Id)
                     .OrderBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
-                    .Select(model => new ModelDto(
+                    .Select(model => new LlmProviderConfigurationModel(
                         model.Id,
                         model.ProviderId,
                         model.Name,
                         model.RemoteModelId,
                         model.ContextLength,
                         model.MaxOutputTokens,
-                        model.Capabilities.ToString(),
+                        model.Capabilities,
                         model.Enabled,
                         model.CatalogUpdatedAtUtc,
                         model.ReasoningEffort,
@@ -233,208 +160,72 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
                     .ToList(),
                 allKeys.Where(key => key.ProviderId == provider.Id)
                     .OrderBy(key => key.Priority)
-                    .Select(key => new KeyDto(key.Id, key.Name, key.Fingerprint, key.Priority, key.Enabled, key.UpdatedAtUtc))
+                    .Select(key => new LlmProviderConfigurationKey(key.Id, key.Name, key.Fingerprint, key.Priority, key.Enabled, key.UpdatedAtUtc))
                     .ToList()))
             .ToList();
-        return new ConfigSnapshot(defaultModelId, providerDtos);
+        return new LlmProviderConfiguration(defaultModelId, configuredProviders);
     }
 
-    private async Task<IReadOnlyList<CatalogModelDto>> GetCatalogAsync(
-        string? query,
-        string? providerId,
-        bool refresh,
-        CancellationToken cancellationToken)
+    public async Task<LlmProviderConfiguration> ImportCatalogModelAsync(
+        LlmProviderCatalogImportCommand command,
+        CancellationToken cancellationToken = default)
     {
-        await EnsureCatalogAsync(refresh, cancellationToken);
-        var text = query?.Trim();
-        var requestedProvider = providerId?.Trim();
-        return catalog!.GetAllProviders()
-            .Where(provider => string.IsNullOrWhiteSpace(requestedProvider) || provider.Id == requestedProvider)
-            .SelectMany(provider => provider.Models.Select(model => ToCatalogDto(provider, model.Key, model.Value)))
-            .Where(model => string.IsNullOrWhiteSpace(text)
-                || model.ProviderName.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || model.ModelId.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || model.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(model => model.ProviderName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(model => model.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(200)
-            .ToList();
-    }
-
-    private async Task<IReadOnlyList<CatalogProviderDto>> GetCatalogProvidersAsync(string? query, CancellationToken cancellationToken)
-    {
-        await EnsureCatalogAsync(force: false, cancellationToken);
-        var text = query?.Trim();
-        return catalog!.GetAllProviders()
-            .Where(provider => string.IsNullOrWhiteSpace(text)
-                || provider.Id.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || provider.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(provider => provider.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(100)
-            .Select(provider => new CatalogProviderDto(provider.Id, provider.Name, provider.Api, provider.Models.Count))
-            .ToList();
-    }
-
-    private async Task EnsureCatalogAsync(bool force, CancellationToken cancellationToken)
-    {
-        if (!force && catalog != null)
-        {
-            return;
-        }
-
-        await catalogLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (!force && catalog != null)
-            {
-                return;
-            }
-
-            if (!force && await TryLoadCatalogCacheAsync(cancellationToken))
-            {
-                return;
-            }
-
-            try
-            {
-                var nextCatalog = new ModelsDevClient();
-                var json = await nextCatalog.DownloadAsync(cancellationToken);
-                nextCatalog.LoadFromJson(json);
-                catalog = nextCatalog;
-                catalogUpdatedAtUtc = DateTimeOffset.UtcNow;
-                catalogSource = "models.dev";
-                catalogRefreshError = null;
-                try
-                {
-                    await SaveCatalogCacheAsync(json, cancellationToken);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    catalogRefreshError = $"目录已更新，但写入本地缓存失败：{ex.Message}";
-                    Logger.Warn(catalogRefreshError);
-                }
-            }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
-            {
-                catalogRefreshError = ex.Message;
-                if (catalog != null)
-                {
-                    Logger.Warn($"models.dev 刷新失败，继续使用本地目录缓存：{ex.Message}");
-                    return;
-                }
-                throw;
-            }
-        }
-        finally
-        {
-            catalogLock.Release();
-        }
-    }
-
-    private async Task<bool> TryLoadCatalogCacheAsync(CancellationToken cancellationToken)
-    {
-        if (!File.Exists(catalogCachePath))
-        {
-            return false;
-        }
-
-        try
-        {
-            var json = await File.ReadAllTextAsync(catalogCachePath, cancellationToken);
-            var cachedCatalog = new ModelsDevClient();
-            cachedCatalog.LoadFromJson(json);
-            catalog = cachedCatalog;
-            catalogUpdatedAtUtc = File.GetLastWriteTimeUtc(catalogCachePath);
-            catalogSource = "local-cache";
-            catalogRefreshError = null;
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            Logger.Warn($"无法读取 models.dev 本地目录缓存，将尝试联网加载：{ex.Message}");
-            return false;
-        }
-    }
-
-    private async Task SaveCatalogCacheAsync(string json, CancellationToken cancellationToken)
-    {
-        var temporaryPath = catalogCachePath + ".tmp";
-        try
-        {
-            await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
-            File.Move(temporaryPath, catalogCachePath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
-    }
-
-    private CatalogStatusDto GetCatalogStatus()
-        => new(catalogSource ?? "unknown", catalogUpdatedAtUtc, catalogRefreshError);
-
-    private async Task<ConfigSnapshot> ImportFromCatalogAsync(CatalogImportRequest request, CancellationToken cancellationToken)
-    {
-        await EnsureCatalogAsync(force: false, cancellationToken);
-        var catalogProvider = catalog!.GetProviderOrThrow(RequireId(request.ProviderId, nameof(request.ProviderId)));
-        var catalogModel = catalog.GetModel(catalogProvider.Id, RequireId(request.ModelId, nameof(request.ModelId)))
-            ?? throw new KeyNotFoundException($"models.dev 中未找到模型: {catalogProvider.Id}/{request.ModelId}");
+        cancellationToken.ThrowIfCancellationRequested();
+        var catalogProviderId = RequireId(command.ProviderId, nameof(command.ProviderId));
+        var catalogModelId = RequireId(command.ModelId, nameof(command.ModelId));
 
         var now = DateTimeOffset.UtcNow;
-        var provider = await providers.FindByIdAsync(catalogProvider.Id);
+        var provider = await providers.FindByIdAsync(catalogProviderId);
         if (provider == null)
         {
             provider = new ProviderRecord
             {
-                Id = catalogProvider.Id,
-                Name = catalogProvider.Name,
-                BaseUrl = NormalizeUrl(request.BaseUrl) ?? NormalizeUrl(catalogProvider.Api) ?? string.Empty,
-                ApiFormat = ParseApiFormat(request.ApiFormat),
-                CatalogProviderId = catalogProvider.Id,
-                Enabled = request.Enabled ?? true,
+                Id = catalogProviderId,
+                Name = RequireText(command.ProviderName, nameof(command.ProviderName)),
+                BaseUrl = NormalizeUrl(command.BaseUrl) ?? NormalizeUrl(command.SuggestedBaseUrl) ?? string.Empty,
+                ApiFormat = ParseApiFormat(command.ApiFormat),
+                CatalogProviderId = catalogProviderId,
+                Enabled = command.Enabled ?? true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
             };
         }
         else
         {
-            // models.dev 刷新只更新目录标识和显示名称，不覆盖用户手工填写的地址/格式/启用状态。
-            provider.Name = catalogProvider.Name;
-            provider.CatalogProviderId = catalogProvider.Id;
+            // 目录导入只更新目录标识和显示名称，不覆盖用户手工填写的地址/格式/启用状态。
+            provider.Name = RequireText(command.ProviderName, nameof(command.ProviderName));
+            provider.CatalogProviderId = catalogProviderId;
             provider.UpdatedAtUtc = now;
         }
         await providers.UpsertAsync(provider);
 
-        var localModelId = MakeLocalModelId(catalogProvider.Id, catalogModel.Id);
+        var localModelId = MakeLocalModelId(catalogProviderId, catalogModelId);
         var model = await models.FindByIdAsync(localModelId) ?? new ModelRecord
         {
             Id = localModelId,
             ProviderId = provider.Id,
             CreatedAtUtc = now,
         };
-        model.Name = catalogModel.Name;
-        model.RemoteModelId = catalogModel.Id;
-        model.ContextLength = catalogModel.Limit?.Context > 0 ? catalogModel.Limit.Context : 32_768;
-        model.MaxOutputTokens = catalogModel.Limit?.Output > 0 ? catalogModel.Limit.Output : 4_096;
-        model.Capabilities = ToCapabilities(catalogModel);
-        model.CatalogProviderId = catalogProvider.Id;
-        model.CatalogModelId = catalogModel.Id;
-        model.CatalogUpdatedAtUtc = catalogUpdatedAtUtc;
-        model.Enabled = request.Enabled ?? model.Enabled || model.CreatedAtUtc == now;
+        model.Name = RequireText(command.ModelName, nameof(command.ModelName));
+        model.RemoteModelId = catalogModelId;
+        model.ContextLength = command.ContextLength > 0 ? command.ContextLength : 32_768;
+        model.MaxOutputTokens = command.MaxOutputTokens > 0 ? command.MaxOutputTokens : 4_096;
+        model.Capabilities = command.Capabilities;
+        model.CatalogProviderId = catalogProviderId;
+        model.CatalogModelId = catalogModelId;
+        model.CatalogUpdatedAtUtc = command.CatalogUpdatedAtUtc;
+        model.Enabled = command.Enabled ?? model.Enabled || model.CreatedAtUtc == now;
         model.UpdatedAtUtc = now;
         await models.UpsertAsync(model);
 
-        if (!string.IsNullOrWhiteSpace(request.ApiKey))
+        if (!string.IsNullOrWhiteSpace(command.ApiKey))
         {
-            await SaveKeyAsync(new SaveKeyRequest(provider.Id, "默认 Key", request.ApiKey, 0, true), cancellationToken);
+            await SaveKeyAsync(new LlmProviderKeySaveCommand(provider.Id, "默认 Key", command.ApiKey, 0, true), cancellationToken);
         }
-        return await GetConfigAsync(cancellationToken);
+        return await GetConfigurationAsync(cancellationToken);
     }
 
-    private async Task SaveProviderAsync(string id, SaveProviderRequest request, CancellationToken cancellationToken)
+    public async Task SaveProviderAsync(string id, LlmProviderSaveCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var providerId = RequireId(id, nameof(id));
@@ -444,26 +235,26 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             Id = providerId,
             CreatedAtUtc = now,
         };
-        provider.Name = RequireText(request.Name, nameof(request.Name));
-        provider.BaseUrl = NormalizeUrl(request.BaseUrl) ?? throw new ArgumentException("API 地址不能为空", nameof(request.BaseUrl));
-        provider.ApiFormat = ParseApiFormat(request.ApiFormat);
-        provider.Enabled = request.Enabled;
+        provider.Name = RequireText(command.Name, nameof(command.Name));
+        provider.BaseUrl = NormalizeUrl(command.BaseUrl) ?? throw new ArgumentException("API 地址不能为空", nameof(command.BaseUrl));
+        provider.ApiFormat = ParseApiFormat(command.ApiFormat);
+        provider.Enabled = command.Enabled;
         provider.UpdatedAtUtc = now;
         await providers.UpsertAsync(provider);
     }
 
-    private async Task SaveModelAsync(string id, SaveModelRequest request, CancellationToken cancellationToken)
+    public async Task SaveModelAsync(string id, LlmModelSaveCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var modelId = RequireId(id, nameof(id));
-        var providerId = RequireId(request.ProviderId, nameof(request.ProviderId));
+        var providerId = RequireId(command.ProviderId, nameof(command.ProviderId));
         if (await providers.FindByIdAsync(providerId) == null)
         {
             throw new KeyNotFoundException($"未找到 Provider: {providerId}");
         }
-        if (request.ContextLength < 1 || request.MaxOutputTokens < 1)
+        if (command.ContextLength < 1 || command.MaxOutputTokens < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(request), "上下文长度和最大输出必须为正数。");
+            throw new ArgumentOutOfRangeException(nameof(command), "上下文长度和最大输出必须为正数。");
         }
         var now = DateTimeOffset.UtcNow;
         var model = await models.FindByIdAsync(modelId) ?? new ModelRecord
@@ -472,48 +263,50 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             CreatedAtUtc = now,
         };
         model.ProviderId = providerId;
-        model.Name = RequireText(request.Name, nameof(request.Name));
-        model.RemoteModelId = RequireText(request.RemoteModelId, nameof(request.RemoteModelId));
-        model.ContextLength = request.ContextLength;
-        model.MaxOutputTokens = request.MaxOutputTokens;
-        model.Capabilities = request.Capabilities;
-        model.ReasoningEffort = NormalizeReasoningEffort(request.ReasoningEffort);
-        model.EnablePromptCache = request.EnablePromptCache;
-        model.Enabled = request.Enabled;
+        model.Name = RequireText(command.Name, nameof(command.Name));
+        model.RemoteModelId = RequireText(command.RemoteModelId, nameof(command.RemoteModelId));
+        model.ContextLength = command.ContextLength;
+        model.MaxOutputTokens = command.MaxOutputTokens;
+        model.Capabilities = command.Capabilities;
+        model.ReasoningEffort = NormalizeReasoningEffort(command.ReasoningEffort);
+        model.EnablePromptCache = command.EnablePromptCache;
+        model.Enabled = command.Enabled;
         model.UpdatedAtUtc = now;
         await models.UpsertAsync(model);
     }
 
-    private async Task<KeyDto> SaveKeyAsync(SaveKeyRequest request, CancellationToken cancellationToken)
+    public async Task<LlmProviderConfigurationKey> SaveKeyAsync(
+        LlmProviderKeySaveCommand command,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var providerId = RequireId(request.ProviderId, nameof(request.ProviderId));
+        var providerId = RequireId(command.ProviderId, nameof(command.ProviderId));
         if (await providers.FindByIdAsync(providerId) == null)
         {
             throw new KeyNotFoundException($"未找到 Provider: {providerId}");
         }
-        var secret = RequireText(request.Secret, nameof(request.Secret));
+        var secret = RequireText(command.Secret, nameof(command.Secret));
         var now = DateTimeOffset.UtcNow;
-        var name = string.IsNullOrWhiteSpace(request.Name) ? "API Key" : request.Name.Trim();
+        var name = string.IsNullOrWhiteSpace(command.Name) ? "API Key" : command.Name.Trim();
         var record = (await keys.FindAllAsync())
             .FirstOrDefault(item => item.ProviderId == providerId && item.Name == name)
             ?? new KeyRecord
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ProviderId = providerId,
-            CreatedAtUtc = now,
-        };
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ProviderId = providerId,
+                CreatedAtUtc = now,
+            };
         record.Name = name;
         record.ProtectedSecret = keyProtector.Protect(secret);
         record.Fingerprint = Fingerprint(secret);
-        record.Priority = request.Priority;
-        record.Enabled = request.Enabled;
+        record.Priority = command.Priority;
+        record.Enabled = command.Enabled;
         record.UpdatedAtUtc = now;
         await keys.UpsertAsync(record);
-        return new KeyDto(record.Id, record.Name, record.Fingerprint, record.Priority, record.Enabled, record.UpdatedAtUtc);
+        return new LlmProviderConfigurationKey(record.Id, record.Name, record.Fingerprint, record.Priority, record.Enabled, record.UpdatedAtUtc);
     }
 
-    private async Task DeleteProviderAsync(string id, CancellationToken cancellationToken)
+    public async Task DeleteProviderAsync(string id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var providerId = RequireId(id, nameof(id));
@@ -529,6 +322,28 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         {
             await meta.DeleteAsync(DefaultModelMetaId);
         }
+    }
+
+    public async Task DeleteModelAsync(string id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var modelId = RequireId(id, nameof(id));
+        await models.DeleteAsync(modelId);
+        await ClearDefaultModelIfAsync(modelId);
+    }
+
+    public async Task DeleteKeyAsync(string id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await keys.DeleteAsync(RequireId(id, nameof(id)));
+    }
+
+    public async Task SetDefaultModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var model = await models.FindByIdAsync(RequireId(modelId, nameof(modelId)))
+            ?? throw new KeyNotFoundException($"未找到模型: {modelId}");
+        await meta.UpsertAsync(new MetaRecord { Id = DefaultModelMetaId, Value = model.Id });
     }
 
     private async Task ClearDefaultModelIfAsync(string modelId)
@@ -555,51 +370,13 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
             .FirstOrDefault();
     }
 
-    private static CatalogModelDto ToCatalogDto(Provider provider, string catalogModelId, ModelInfo model)
-        => new(
-            provider.Id,
-            provider.Name,
-            catalogModelId,
-            model.Name,
-            provider.Api,
-            model.Limit?.Context ?? 0,
-            model.Limit?.Output ?? 0,
-            ToCapabilities(model).ToString(),
-            model.ToolCall,
-            model.Reasoning);
-
     private static LlmModelDescriptor ToDescriptor(ModelRecord source)
         => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort);
-
-    private static LlmModelCapabilities ToCapabilities(ModelInfo model)
-    {
-        var capabilities = LlmModelCapabilities.Text;
-        if (model.Modalities?.Input.Any(item => item.Equals("image", StringComparison.OrdinalIgnoreCase)) == true)
-            capabilities |= LlmModelCapabilities.ImageInput;
-        if (model.Attachment)
-            capabilities |= LlmModelCapabilities.AttachmentInput;
-        if (model.ToolCall)
-            capabilities |= LlmModelCapabilities.ToolCalls;
-        if (model.Reasoning)
-            capabilities |= LlmModelCapabilities.Reasoning;
-        if (model.StructuredOutput)
-            capabilities |= LlmModelCapabilities.StructuredOutput;
-        return capabilities;
-    }
 
     private static string MakeLocalModelId(string providerId, string modelId)
         => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
             ? modelId
             : $"{providerId}/{modelId}";
-
-    private static string ToApiFormatName(LlmApiFormat format)
-        => format switch
-        {
-            LlmApiFormat.OpenAiChatCompletions => "openai-chat-completions",
-            LlmApiFormat.OpenAiResponses => "openai-responses",
-            LlmApiFormat.AnthropicMessages => "anthropic-messages",
-            _ => throw new ArgumentOutOfRangeException(nameof(format)),
-        };
 
     private static LlmApiFormat ParseApiFormat(string? value)
     {
@@ -708,16 +485,4 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry
         public string Value { get; set; } = string.Empty;
     }
 
-    private sealed record CatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
-    private sealed record SaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-    private sealed record SaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, LlmModelCapabilities Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false);
-    private sealed record SaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
-
-    private sealed record ConfigSnapshot(string? DefaultModelId, IReadOnlyList<ProviderDto> Providers);
-    private sealed record ProviderDto(string Id, string Name, string BaseUrl, string ApiFormat, bool Enabled, string? CatalogProviderId, IReadOnlyList<ModelDto> Models, IReadOnlyList<KeyDto> Keys);
-    private sealed record ModelDto(string Id, string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, string Capabilities, bool Enabled, DateTimeOffset? CatalogUpdatedAtUtc, string? ReasoningEffort, bool EnablePromptCache);
-    private sealed record KeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
-    private sealed record CatalogStatusDto(string Source, DateTimeOffset? UpdatedAtUtc, string? RefreshError);
-    private sealed record CatalogProviderDto(string Id, string Name, string? SuggestedBaseUrl, int ModelCount);
-    private sealed record CatalogModelDto(string ProviderId, string ProviderName, string ModelId, string Name, string? SuggestedBaseUrl, int ContextLength, int MaxOutputTokens, string Capabilities, bool ToolCall, bool Reasoning);
 }

@@ -20,7 +20,7 @@ public class TodoListToolSet : ToolSet
     public TodoListToolSet()
     {
         var builder = new ToolSetBridge.Builder(
-            "如需维护多步任务的待办进度，调用 todo_list 工具查看或更新清单（支持查看、整体替换、清空）。");
+            "如需维护多步任务的待办进度，调用 todo_list 工具查看或更新清单");
         builder.AddFunction<TodoListArgs>(
             "todo_list",
             "查看或更新待办清单：不带 todos 参数查看当前清单；传 todos 数组则整体替换（空数组清空）。每项含 title 与 status（pending 待办 / in_progress 进行中 / done 已完成）。",
@@ -29,7 +29,7 @@ public class TodoListToolSet : ToolSet
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) => bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd) => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：todos 缺省表示仅查询</summary>

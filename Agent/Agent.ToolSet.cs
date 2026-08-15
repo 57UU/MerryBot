@@ -8,19 +8,13 @@ using LlmBackend;
 namespace Agent;
 
 /// <summary>
-/// Low Level Tool Set。抽象基类：子类实现具体工具，通用成员（如 OnIterationAdd 回调）由基类提供
+/// Low Level Tool Set。工具调用期间产生的附加消息通过 <paramref name="onIterationAdd"/> 回传给 Agent。
 /// </summary>
 public abstract class ToolSet
 {
     public abstract IList<ToolDef> Tools();
-    public abstract Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall);
+    public abstract Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd);
     public abstract string? Prompt();
-
-    /// <summary>
-    /// 工具在调用期间向当前对话迭代追加内容（例如把图片以用户消息加入）的回调，
-    /// 由 Agent 在工具执行期间注入，执行结束后恢复为 null
-    /// </summary>
-    public Action<Message>? OnIterationAdd { get; set; }
 }
 
 /// <summary>
@@ -42,7 +36,7 @@ public class ToolSetBridge : ToolSet
     private sealed class RegisteredTool
     {
         public required ToolDef Def { get; init; }
-        public required Func<JsonElement, Task<string>> Invoker { get; init; }
+        public required Func<JsonElement, Action<Message>, Task<string>> Invoker { get; init; }
     }
 
     public override IList<ToolDef> Tools()
@@ -50,7 +44,7 @@ public class ToolSetBridge : ToolSet
         return tools.Select(t => t.Def).ToList();
     }
 
-    public override async Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall)
+    public override async Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var tool = tools.FirstOrDefault(t => t.Def.function.name == toolCall.Name)
@@ -59,7 +53,7 @@ public class ToolSetBridge : ToolSet
         {
             var args = string.IsNullOrWhiteSpace(toolCall.Arguments) ? "{}" : toolCall.Arguments;
             using var doc = JsonDocument.Parse(args);
-            return await tool.Invoker(doc.RootElement);
+            return await tool.Invoker(doc.RootElement, onIterationAdd);
         }
         catch (Exception e)
         {
@@ -98,6 +92,16 @@ public class ToolSetBridge : ToolSet
         /// Nullable 与可空引用类型属性自动视为可选参数。函数为异步签名，返回 Task&lt;string&gt;。
         /// </summary>
         public Builder AddFunction<T>(string name, string description, Func<T, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, _) => function(json.Deserialize<T>(DeserializeOptions)!));
+
+        /// <summary>
+        /// 注册需要在本次工具调用期间向 Agent 追加消息的函数。第二个参数由调用方注入；
+        /// 与单参数函数并存，普通工具无需感知该回调。
+        /// </summary>
+        public Builder AddFunction<T>(string name, string description, Func<T, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, onIterationAdd));
+
+        private Builder AddFunctionCore<T>(string name, string description, Func<JsonElement, Action<Message>, Task<string>> invoker)
         {
             var def = new ToolDef
             {
@@ -112,7 +116,7 @@ public class ToolSetBridge : ToolSet
             tools.Add(new RegisteredTool
             {
                 Def = def,
-                Invoker = json => function(json.Deserialize<T>(DeserializeOptions)!),
+                Invoker = invoker,
             });
             return this;
         }

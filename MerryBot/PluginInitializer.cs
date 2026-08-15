@@ -8,15 +8,17 @@ namespace MerryBot;
 internal class PluginInitializer<T>
 {
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-    public PluginInitializer()
+    private readonly Func<string, Type, IPluginConfig> _getConfigFunc;
+    //get config by Id
+    public PluginInitializer(Func<string, Type, IPluginConfig> getConfigFunc)
     {
-
+        _getConfigFunc = getConfigFunc;
     }
     private Dictionary<Type, List<object>> SpecificDependencies = new();
 
     private List<Edge> edges = new List<Edge>();
     private List<Type> nodes = new();
-    public void AddDependency(Type type, List<object> specificDepency)
+    public void AddDependency(Type type, PluginTag attribute, List<object> specificDepency)
     {
         var constructors = type.GetConstructors();
         if (constructors.Length > 1)
@@ -30,6 +32,13 @@ internal class PluginInitializer<T>
         foreach (var param in parameters)
         {
             var paramType = Nullable.GetUnderlyingType(param.ParameterType) ?? param.ParameterType;
+            //is config
+            if (typeof(IPluginConfig).IsAssignableFrom(paramType))
+            {
+                //this is a specific dependency
+                specificDepency.Add(_getConfigFunc(attribute.Id, paramType));
+                continue;
+            }
             if (!existingDependency.Contains(paramType))
             {
                 edges.Add(new Edge(type, paramType));

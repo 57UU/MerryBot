@@ -1,0 +1,183 @@
+@page "/groups"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>群聊管理</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>群聊管理</h1>
+        <p class="page-header-sub">管理 MerryBot 在哪些群聊中启用。改动直接写入 core 配置，立即生效，无需重启。</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+            @(IsLoading ? "刷新中…" : "刷新")
+        </button>
+    </div>
+</div>
+
+@if (Error != null)
+{
+    <div class="message-item-custom mb-3-custom">@Error</div>
+}
+
+<section class="message-item-custom mb-3-custom">
+    <div class="message-header-custom"><strong>启用新群</strong></div>
+    <div class="message-content-custom inline-row">
+        <input class="form-control" @bind="NewGroupText" placeholder="输入 QQ 群号" />
+        <button class="btn btn-primary" @onclick="AddGroupAsync" disabled="@(IsMutating || string.IsNullOrWhiteSpace(NewGroupText))">
+            @(IsMutating ? "处理中…" : "启用")
+        </button>
+    </div>
+</section>
+
+@if (Data == null)
+{
+    <div class="message-item-custom">加载中…</div>
+}
+else if (Data.Groups.Count == 0)
+{
+    <div class="message-item-custom">还没有任何群聊记录，输入群号即可启用。</div>
+}
+else
+{
+    <div class="message-item-custom">
+        <div class="message-content-custom" style="overflow-x:auto">
+            <table class="table">
+                <thead>
+                <tr><th>群号</th><th>群名</th><th>人数</th><th>消息数</th><th>AI 消息数</th><th>状态</th><th></th></tr>
+                </thead>
+                <tbody>
+                @foreach (var group in Data.Groups)
+                {
+                    <tr @key="group.GroupId">
+                        <td><code>@group.GroupId</code></td>
+                        <td>@(string.IsNullOrEmpty(group.Name) ? "—" : group.Name)</td>
+                        <td>@(group.MemberCount > 0 ? group.MemberCount.ToString() : "—")</td>
+                        <td>@group.MessageCount</td>
+                        <td>@group.AiMessageCount</td>
+                        <td>
+                            @if (group.Enabled)
+                            {
+                                <span class="badge" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0;">已启用</span>
+                            }
+                            else
+                            {
+                                <span class="badge">未启用</span>
+                            }
+                        </td>
+                        <td class="inline-row">
+                            @if (group.Enabled)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="() => ToggleAsync(group.GroupId, false)" disabled="@IsMutating">禁用</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(group.GroupId, true)" disabled="@IsMutating">启用</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private GroupListPayload? Data;
+    private string? Error;
+    private bool IsLoading;
+    private bool IsMutating;
+    private string NewGroupText = "";
+
+    private bool _initialized;
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            Data = await JSRuntime.InvokeAsync<GroupListPayload>("configApi.request", "GET", "/api/groups/");
+        }
+        catch (Exception ex)
+        {
+            Error = $"加载失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task AddGroupAsync()
+    {
+        if (!long.TryParse(NewGroupText.Trim(), out var groupId) || groupId <= 0)
+        {
+            Error = "请输入有效的 QQ 群号。";
+            return;
+        }
+        IsMutating = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", $"/api/groups/{groupId}");
+            NewGroupText = "";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"启用失败：{ex.Message}";
+        }
+        finally
+        {
+            IsMutating = false;
+        }
+    }
+
+    private async Task ToggleAsync(long groupId, bool enable)
+    {
+        IsMutating = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", enable ? "PUT" : "DELETE", $"/api/groups/{groupId}");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"操作失败：{ex.Message}";
+        }
+        finally
+        {
+            IsMutating = false;
+        }
+    }
+
+    private sealed class GroupListPayload
+    {
+        public List<GroupEntryPayload> Groups { get; set; } = new();
+    }
+
+    private sealed class GroupEntryPayload
+    {
+        public long GroupId { get; set; }
+        public string? Name { get; set; }
+        public int MemberCount { get; set; }
+        public int MessageCount { get; set; }
+        public int AiMessageCount { get; set; }
+        public bool Enabled { get; set; }
+    }
+}

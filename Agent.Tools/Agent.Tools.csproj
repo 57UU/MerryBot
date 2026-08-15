@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Agent\Agent.csproj" />
     <ProjectReference Include="..\Browser\Browser.csproj" />
+    <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
   </ItemGroup>
 
 </Project>

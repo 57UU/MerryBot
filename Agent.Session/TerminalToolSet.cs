@@ -51,8 +51,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         _sync = new Lazy<Terminal>(() => Terminal.Create(user));
 
         var builder = new ToolSetBridge.Builder(
-            "如需执行命令，调用 bash 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。" +
-            "命令执行后如需查看生成的图片（如图表、截图），提供 image_path 参数，模型会直接查看或用辅助视觉模型描述。");
+            "如需执行命令，调用 bash 工具；命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。");
         builder.AddFunction<BashArgs>("bash",
             "执行 bash 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
             "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时；" +
@@ -71,7 +70,8 @@ public class TerminalToolSet : ToolSet, IDisposable
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) => bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
+        => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：bash</summary>
@@ -116,7 +116,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     /// <summary>工具参数：task_list（无参数）</summary>
     private sealed class TaskListArgs { }
 
-    private async Task<string> RunAsync(BashArgs args)
+    private async Task<string> RunAsync(BashArgs args, Action<Message> onIterationAdd)
     {
         var command = args.command?.Trim() ?? string.Empty;
         if (command.Length == 0)
@@ -134,15 +134,15 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw new ArgumentException("timeout 必须大于 0");
         }
         var output = await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
-        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd);
+        return await AppendImageIfRequestedAsync(output, args.image_path, args.cwd, onIterationAdd);
     }
 
     /// <summary>
-    /// 命令输出后按 image_path 附带查看图片：主模型有视觉能力时通过 OnIterationAdd
+    /// 命令输出后按 image_path 附带查看图片：主模型有视觉能力时通过调用级回调
     /// 把图片注入对话，否则调用辅助视觉模型生成描述并追加到输出。
     /// 相对路径按常驻 shell 的当前工作目录解析（cd 状态跨调用保留，进程 CWD 并不等于 shell CWD）。
     /// </summary>
-    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath, string? cwd)
+    private async Task<string> AppendImageIfRequestedAsync(string output, string? imagePath, string? cwd, Action<Message> onIterationAdd)
     {
         if (string.IsNullOrWhiteSpace(imagePath))
         {
@@ -169,13 +169,8 @@ public class TerminalToolSet : ToolSet, IDisposable
 
         if (_visionRouter.MainHasVision)
         {
-            var add = OnIterationAdd;
-            if (add != null)
-            {
-                add(VisionRouter.BuildImageMessage(data, mimeType, caption));
-                return output + $"\n[图片已注入对话: {imagePath}]";
-            }
-            return output + $"\n[图片加载失败: 注入回调不可用]";
+            onIterationAdd(VisionRouter.BuildImageMessage(data, mimeType, caption));
+            return output + $"\n[图片已注入对话: {imagePath}]";
         }
         if (!_visionRouter.HasVisionFallback)
         {

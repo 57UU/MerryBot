@@ -36,37 +36,36 @@ public class MessageTool : ToolSet
         this.groupId = groupId;
         this.visionRouter = visionRouter;
 
-        var builder = new ToolSetBridge.Builder(
-            "当消息链中出现合并转发（forward）或回复（reply）引用、需要查看被引用消息的完整内容时，使用 get_forward_message / get_reply_message；" +
-            "当消息内容中包含图片、需要查看图片时，使用 get_message_image，把消息文本中显示的图片引用（image merrybot://... 或 image http(s)://... 后面的引用）原样传入。仅当用户明确要求向当前群发送 Markdown 图片时，使用 send_markdown_message。");
-        builder.AddFunction<MessageArgs>("get_forward_message", "获取合并转发消息的完整内容（含每条消息的发送者、时间与内容）", args => GetForwardMessage(args.messageId));
-        builder.AddFunction<MessageArgs>("get_reply_message", "获取被回复消息的完整内容（发送者、时间与内容）", args => GetReplyMessage(args.messageId));
-        builder.AddFunction<GetMessageImageArgs>("get_message_image", "获取对话中的图片并查看。传入消息文本中显示的图片引用（image 后跟的 merrybot:// 本地引用或 http(s):// 地址）。主模型有视觉能力时直接查看原图，否则会用辅助视觉模型描述图片内容。", args => GetMessageImageAsync(args));
-        builder.AddFunction<MarkdownMessageArgs>("send_markdown_message", "将 Markdown（支持 LaTeX、Mermaid）渲染为图片并发送到当前群。仅在用户明确要求发送时调用。", args => SendMarkdownMessage(args.markdown));
+        var builder = new ToolSetBridge.Builder();
+        builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
+        builder.AddFunction<MessageArgs>("get_reply", "获取被回复消息的完整内容", args => GetReplyMessage(args.messageId));
+        builder.AddFunction<GetMessageImageArgs>("load_image", "获取对话中的图片并查看。", GetMessageImageAsync);
+        builder.AddFunction<MarkdownMessageArgs>("send_markdown", "将Markdown渲染为图片并发送到当前群。", args => SendMarkdownMessage(args.markdown));
         bridge = builder.Build();
     }
 
     /// <summary>工具参数：消息 ID</summary>
     private sealed class MessageArgs
     {
-        [Description("QQ 消息 ID：转发消息填转发 ID，回复消息填被回复消息的 ID")]
+        [Description("消息ID")]
         public string messageId { get; set; } = string.Empty;
     }
 
     private sealed class GetMessageImageArgs
     {
-        [Description("图片引用：get_reply_message / get_forward_message 内容中显示的图片标识（如 merrybot://resource/image/xxx 或 http(s):// 图片地址），原样传入即可")]
+        [Description("图片引用地址")]
         public string image { get; set; } = string.Empty;
     }
 
     private sealed class MarkdownMessageArgs
     {
-        [Description("要渲染并发送的完整 Markdown 内容；支持 LaTeX 和 Mermaid")]
+        [Description("markdown内容")]
         public string markdown { get; set; } = string.Empty;
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
-    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall) => bridge.InvokeAsync(cancellationToken, toolCall);
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
+        => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>
@@ -96,11 +95,11 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 按图片引用加载并查看图片：主模型有视觉能力时通过 OnIterationAdd 把图片注入对话，
+    /// 按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，
     /// 否则调用辅助视觉模型生成文字描述。引用来自消息文本中显示的 image 标识
     /// （pipeline 已把图片 Url/File 改写为 merrybot://resource/image/{hash} 本地引用）。
     /// </summary>
-    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args)
+    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args, Action<Message> onIterationAdd)
     {
         var reference = args.image?.Trim() ?? string.Empty;
         if (reference.Length == 0)
@@ -121,12 +120,7 @@ public class MessageTool : ToolSet
         var caption = $"对话图片: {reference}";
         if (visionRouter.MainHasVision)
         {
-            var add = OnIterationAdd;
-            if (add == null)
-            {
-                return "当前无法把图片注入对话（回调不可用），请稍后重试。";
-            }
-            add(VisionRouter.BuildImageMessage(data, contentType, caption));
+            onIterationAdd(VisionRouter.BuildImageMessage(data, contentType, caption));
             return $"已加载图片 {reference} 并注入对话，请直接查看图片内容。";
         }
 
