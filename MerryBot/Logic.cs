@@ -164,7 +164,7 @@ internal partial class Logic
                 sb.Append(item.ToString());
             }
         }
-        return (isTargeted, sb.ToString());
+        return (isTargeted, sb.ToString().Trim());
     }
     private Command? ParseCommand(string textMessage)
     {
