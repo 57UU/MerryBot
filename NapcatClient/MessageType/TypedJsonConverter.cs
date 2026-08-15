@@ -16,39 +16,44 @@ class TypedJsonConverter : JsonConverter<TypedMessage>
 
             if (!root.TryGetProperty("type", out var typeElement))
             {
-                throw new JsonException("Missing 'type' property");
+                // 缺少 type 字段：返回安全兜底文本段，绝不抛异常中断整条消息链
+                return TextData.FromText(string.Empty);
             }
 
-            string type = typeElement.GetString() ?? throw new JsonException("can't read 'type' as string");
+            string type = typeElement.GetString() ?? string.Empty;
+            if (string.IsNullOrEmpty(type))
+            {
+                return TextData.FromText(string.Empty);
+            }
 
             // 检查是否有 data 属性
-            if (root.TryGetProperty("data", out var dataElement))
+            if (!root.TryGetProperty("data", out var dataElement))
             {
+                return TextData.FromText(string.Empty);
+            }
 
-                // 使用 data 部分进行反序列化
-                string dataJson = dataElement.GetRawText();
-                return type switch
-                {
-                    MessageTypeStringStr.Text => JsonSerializer.Deserialize<TextData>(dataJson, options),
-                    MessageTypeStringStr.Image => JsonSerializer.Deserialize<ImageData>(dataJson, options),
-                    MessageTypeStringStr.File => JsonSerializer.Deserialize<FileData>(dataJson, options),
-                    MessageTypeStringStr.At => JsonSerializer.Deserialize<AtData>(dataJson, options),
-                    MessageTypeStringStr.Reply => JsonSerializer.Deserialize<ReplyData>(dataJson, options),
-                    MessageTypeStringStr.Face => JsonSerializer.Deserialize<FaceData>(dataJson, options),
-                    MessageTypeStringStr.Dice => JsonSerializer.Deserialize<DiceData>(dataJson, options),
-                    MessageTypeStringStr.Rps => JsonSerializer.Deserialize<RpsData>(dataJson, options),
-                    MessageTypeStringStr.Poke => JsonSerializer.Deserialize<PokeData>(dataJson, options),
-                    MessageTypeStringStr.Forward => JsonSerializer.Deserialize<ForwardData>(dataJson, options),
-                    MessageTypeStringStr.Record => JsonSerializer.Deserialize<RecordData>(dataJson, options),
-                    MessageTypeStringStr.Video => JsonSerializer.Deserialize<VideoData>(dataJson, options),
-                    MessageTypeStringStr.Json => JsonSerializer.Deserialize<JsonData>(dataJson, options),
-                    _ => throw new JsonException($"Unknown message type: {type}")
-                };
-            }
-            else
+            // 使用 data 部分进行反序列化
+            string dataJson = dataElement.GetRawText();
+            return type switch
             {
-                throw new JsonException("Missing 'data' property");
-            }
+                MessageTypeStringStr.Text => JsonSerializer.Deserialize<TextData>(dataJson, options),
+                MessageTypeStringStr.Image => JsonSerializer.Deserialize<ImageData>(dataJson, options),
+                MessageTypeStringStr.File => JsonSerializer.Deserialize<FileData>(dataJson, options),
+                MessageTypeStringStr.At => JsonSerializer.Deserialize<AtData>(dataJson, options),
+                MessageTypeStringStr.Reply => JsonSerializer.Deserialize<ReplyData>(dataJson, options),
+                MessageTypeStringStr.Face => JsonSerializer.Deserialize<FaceData>(dataJson, options),
+                MessageTypeStringStr.Dice => JsonSerializer.Deserialize<DiceData>(dataJson, options),
+                MessageTypeStringStr.Rps => JsonSerializer.Deserialize<RpsData>(dataJson, options),
+                MessageTypeStringStr.Poke => JsonSerializer.Deserialize<PokeData>(dataJson, options),
+                MessageTypeStringStr.Forward => JsonSerializer.Deserialize<ForwardData>(dataJson, options),
+                MessageTypeStringStr.Mface => JsonSerializer.Deserialize<MfaceData>(dataJson, options),
+                MessageTypeStringStr.Record => JsonSerializer.Deserialize<RecordData>(dataJson, options),
+                MessageTypeStringStr.Video => JsonSerializer.Deserialize<VideoData>(dataJson, options),
+                MessageTypeStringStr.Json => JsonSerializer.Deserialize<JsonData>(dataJson, options),
+                MessageTypeStringStr.Music => JsonSerializer.Deserialize<MusicData>(dataJson, options),
+                // 未知或暂不支持的类型（如 contact、xml 等）：返回兜底文本段，不抛异常
+                _ => TextData.FromText($"[{type}]")
+            };
         }
     }
 

@@ -1,0 +1,179 @@
+@page "/memories"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>记忆管理</PageTitle>
+
+<div class="container-custom memory-page">
+    <h1>记忆管理</h1>
+    <p class="text-muted-custom">记忆已存入 Agent 插件数据库，并按 sessionKey 隔离。<code>index</code> 只能在此页面编辑；Agent 工具不会修改它。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+
+    <div class="memory-layout">
+        <aside class="message-item-custom memory-sessions">
+            <div class="message-header-custom"><strong>会话</strong></div>
+            @if (Sessions is null)
+            {
+                <div class="message-content-custom">加载中…</div>
+            }
+            else if (Sessions.Count == 0)
+            {
+                <div class="message-content-custom">暂时没有已保存记忆的会话。</div>
+            }
+            else
+            {
+                @foreach (var session in Sessions)
+                {
+                    <button class="memory-session @(SelectedSessionKey == session.SessionKey ? "active" : "")" @onclick="() => SelectSessionAsync(session.SessionKey)">
+                        <span>@session.DisplayName</span>
+                        <small>@session.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
+                    </button>
+                }
+            }
+        </aside>
+
+        <section class="memory-detail">
+            @if (SelectedSessionKey is null)
+            {
+                <div class="message-item-custom">从左侧选择一个会话以管理其记忆。</div>
+            }
+            else
+            {
+                <div class="message-item-custom mb-3-custom">
+                    <div class="message-header-custom"><strong>索引（index）</strong></div>
+                    <div class="message-content-custom">
+                        <textarea class="form-control" rows="6" @bind="IndexContent" placeholder="给模型查看的记忆概要"></textarea>
+                        <button class="btn btn-primary mt-2" @onclick="SaveIndexAsync" disabled="@IsSaving">保存索引</button>
+                    </div>
+                </div>
+
+                <div class="message-item-custom mb-3-custom">
+                    <div class="message-header-custom"><strong>新增记忆</strong></div>
+                    <div class="message-content-custom memory-new">
+                        <input class="form-control" @bind="NewKey" placeholder="key，例如：用户偏好" />
+                        <textarea class="form-control" rows="3" @bind="NewContent" placeholder="记忆内容"></textarea>
+                        <button class="btn btn-primary" @onclick="SaveNewAsync" disabled="@IsSaving">保存记忆</button>
+                    </div>
+                </div>
+
+                <div class="message-item-custom">
+                    <div class="message-header-custom"><strong>具体记忆</strong></div>
+                    <div class="message-content-custom">
+                        @if (MemoryItems.Count == 0)
+                        {
+                            <span>暂无具体记忆。</span>
+                        }
+                        @foreach (var memory in MemoryItems)
+                        {
+                            <div class="memory-entry" @key="memory.Key">
+                                <div><code>@memory.Key</code></div>
+                                <textarea class="form-control" rows="4" @bind="memory.Content"></textarea>
+                                <div class="memory-entry-actions">
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => SaveExistingAsync(memory)" disabled="@IsSaving">保存</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteMemoryAsync(memory)" disabled="@IsSaving">删除</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private sealed class MemoryEdit(string key, string content)
+    {
+        public string Key { get; } = key;
+        public string Content { get; set; } = content;
+    }
+
+    private IReadOnlyList<MemorySessionDto>? Sessions;
+    private string? SelectedSessionKey;
+    private string IndexContent = string.Empty;
+    private List<MemoryEdit> MemoryItems = [];
+    private string NewKey = string.Empty;
+    private string NewContent = string.Empty;
+    private string? Error;
+    private bool IsSaving;
+
+    protected override Task OnInitializedAsync() => LoadSessionsAsync();
+
+    private async Task LoadSessionsAsync()
+    {
+        try
+        {
+            Error = null;
+            Sessions = await JSRuntime.InvokeAsync<List<MemorySessionDto>>("configApi.request", "GET", "/api/memories/sessions");
+        }
+        catch (Exception exception) { Error = $"无法读取记忆会话: {exception.Message}"; }
+    }
+
+    private async Task SelectSessionAsync(string sessionKey)
+    {
+        try
+        {
+            Error = null;
+            SelectedSessionKey = sessionKey;
+            var encoded = Uri.EscapeDataString(sessionKey);
+            var indexTask = JSRuntime.InvokeAsync<string>("configApi.request", "GET", $"/api/memories/index?sessionKey={encoded}").AsTask();
+            var memoriesTask = JSRuntime.InvokeAsync<List<ManagedMemory>>("configApi.request", "GET", $"/api/memories/entries?sessionKey={encoded}").AsTask();
+            await Task.WhenAll(indexTask, memoriesTask);
+            IndexContent = indexTask.Result;
+            MemoryItems = memoriesTask.Result.Select(item => new MemoryEdit(item.Key, item.Content)).ToList();
+        }
+        catch (Exception exception) { Error = $"无法读取记忆: {exception.Message}"; }
+    }
+
+    private async Task SaveIndexAsync()
+    {
+        if (SelectedSessionKey is null) return;
+        await SaveAsync("保存索引", "/api/memories/index", new MemoryIndexUpdateRequest(SelectedSessionKey, IndexContent), reload: false);
+    }
+
+    private async Task SaveNewAsync()
+    {
+        if (SelectedSessionKey is null) return;
+        await SaveAsync("保存记忆", "/api/memories/entries", new MemoryEntryUpdateRequest(SelectedSessionKey, NewKey, NewContent), reload: true);
+        NewKey = string.Empty;
+        NewContent = string.Empty;
+    }
+
+    private Task SaveExistingAsync(MemoryEdit memory)
+        => SelectedSessionKey is null
+            ? Task.CompletedTask
+            : SaveAsync("保存记忆", "/api/memories/entries", new MemoryEntryUpdateRequest(SelectedSessionKey, memory.Key, memory.Content), reload: true);
+
+    private async Task DeleteMemoryAsync(MemoryEdit memory)
+    {
+        if (SelectedSessionKey is null || !await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除记忆 “{memory.Key}”吗？")) return;
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", $"/api/memories/entries?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}&key={Uri.EscapeDataString(memory.Key)}");
+            await SelectSessionAsync(SelectedSessionKey);
+            await LoadSessionsAsync();
+        }
+        catch (Exception exception) { Error = $"删除记忆失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+
+    private async Task SaveAsync(string action, string url, object payload, bool reload)
+    {
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", url, payload);
+            if (reload && SelectedSessionKey is not null) await SelectSessionAsync(SelectedSessionKey);
+            await LoadSessionsAsync();
+        }
+        catch (Exception exception) { Error = $"{action}失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+}

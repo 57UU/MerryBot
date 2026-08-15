@@ -5,11 +5,11 @@ using System.Text.Json;
 namespace NapcatClient;
 
 
-public class BotClient
+public class BotClient : IAdapterState
 {
-    public WebSocketService WebSocketService { get; }
+    public WebSocketAdapter Adapter { get; }
     public ISimpleLogger Logger { internal get; set; }
-    public Actions Actions { get; private set; }
+    public Actions Bot { get; private set; }
     public event GroupMessageCallback? OnGroupMessageReceived;
     public event NoticeEventCallback? OnNoticeEventReceived;
     public event GroupUploadEventCallback? OnGroupUploadEventReceived;
@@ -27,72 +27,83 @@ public class BotClient
     public event EssenceEventCallback? OnEssenceEventReceived;
     public event GroupCardEventCallback? OnGroupCardEventReceived;
 
-    public long SelfId { get; private set; } = -1;
-    public string Nickname { get; private set; } = "unknown";
+    public long? SelfId => Bot.SelfId;
+    public string? Nickname => Bot.Nickname;
+    /// <summary>实现 <see cref="IAdapterState"/>：适配器当前连接状态。</summary>
+    public AdapterState State => Adapter.State;
     public string PathPrefix { get; private set; } = "data";
     public BotClient(string address, string token, ISimpleLogger logger, string pathPrefix)
     {
         this.Logger = logger;
         PathPrefix = pathPrefix;
 
-        WebSocketService = new WebSocketService(address, token, logger);
-        WebSocketService.OnMessageReceived += WebSocket_OnMessage;
-        WebSocketService.OnMessageReceived += _ => WebSocketService.ResetMessageTime();
-        WebSocketService.OnDisconnected += _ => WebSocketService.ResetMessageTime();
-        WebSocketService.OnReconnected += _ => WebSocketService.ResetMessageTime();
-
-        WebSocketService.Start();
-        this.Actions = new Actions(Logger, WebSocketService, () => SelfId);
-        Initialize().Wait();
+        // 连接由宿主（Logic）按配置间隔驱动，此处不启动；地址无效时 adapter 自然保持未连接
+        Adapter = new WebSocketAdapter(address, token, logger);
+        Adapter.OnMessageReceived += WebSocket_OnMessage;
+        this.Bot = new Actions(Logger, Adapter);
     }
 
-    public async Task Initialize()
-    {
-        await Task.Delay(100);
-        var result = await Actions.GetAccountInfo();
-        SelfId = result.userId;
-        Nickname = result.nickname;
-    }
-
+    private int _closed;
     public void Close()
     {
-        WebSocketService.Dispose();
+        Interlocked.Exchange(ref _closed, 1);
+        Adapter.Dispose();
     }
 
     private void WebSocket_OnMessage(string? text)
     {
-        if (text == null)
+        try
         {
-            Logger.Debug("empty message received");
-            return;
-        }
-        Logger.Trace($"websocket on message: {text}");
-        var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
-        if (message.TryGetValue("echo", out JsonElement echo))
-        {
-            Actions.AddResponse(echo.GetString()!, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
-        }
-        if (message.TryGetValue("message_type", out JsonElement value))
-        {
-            var messageType = ((JsonElement)value).GetString();
-
-            if (messageType == "group")
+            if (text == null)
             {
-                ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
-                var groupId = receivedGroupMessage.group_id;
-                var rawChain = receivedGroupMessage.message!;
-                receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
-                OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
+                Logger.Debug("empty message received");
+                return;
+            }
+            Logger.Trace($"websocket on message: {text}");
+            var message = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(text)!;
+            if (message.TryGetValue("echo", out JsonElement echo))
+            {
+                var echoId = echo.GetString();
+                if (echoId == null)
+                {
+                    Logger.Debug("echo is not a string, skip response handling");
+                }
+                else
+                {
+                    Bot.AddResponse(echoId, JsonSerializer.Deserialize<ResponseRootObject>(text)!);
+                }
+            }
+            if (message.TryGetValue("message_type", out JsonElement value))
+            {
+                var messageType = ((JsonElement)value).GetString();
+
+                if (messageType == "group")
+                {
+                    ReceivedGroupMessage receivedGroupMessage = BotUtils.Deserialize<ReceivedGroupMessage>(text);
+                    var groupId = receivedGroupMessage.GroupId;
+                    var rawChain = receivedGroupMessage.message;
+                    if (rawChain == null)
+                    {
+                        Logger.Warn($"group message {groupId} has null message chain, skip");
+                        return;
+                    }
+                    receivedGroupMessage.message = BotUtils.ConcatAdjacencyText(rawChain);
+                    OnGroupMessageReceived?.Invoke(groupId, receivedGroupMessage.message, receivedGroupMessage);
+                }
+            }
+            else if (message.TryGetValue("post_type", out JsonElement postTypeValue))
+            {
+                var postType = postTypeValue.GetString();
+
+                if (postType == "notice")
+                {
+                    HandleNoticeEvent(text);
+                }
             }
         }
-        else if (message.TryGetValue("post_type", out JsonElement postTypeValue))
+        catch (Exception ex)
         {
-            var postType = postTypeValue.GetString();
-
-            if (postType == "notice")
-            {
-                HandleNoticeEvent(text);
-            }
+            Logger.Error($"Error handling websocket message: {ex}");
         }
     }
 

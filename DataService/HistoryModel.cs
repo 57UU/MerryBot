@@ -9,6 +9,8 @@ public class GroupMessage
 {
     [BsonId]
     public ObjectId Id { get; set; }
+    /// <summary>群号与消息 ID 组成的稳定业务键，用于幂等写入。</summary>
+    public string MessageKey { get; set; } = string.Empty;
     public long MessageId { get; set; }
     public long GroupId { get; set; }
     public long SenderId { get; set; }
@@ -48,13 +50,16 @@ public class GroupMessage
         Messages = messages;
         Time = time;
         IsDeleted = isDeleted;
+        MessageKey = CreateMessageKey(groupId, messageId);
     }
+
+    public static string CreateMessageKey(long groupId, long messageId) => $"g:{groupId}:m:{messageId}";
 
     public static GroupMessage FromReceivedGroupMessage(ReceivedGroupMessage receivedGroupMessage)
     {
         var time = DateTimeOffset.FromUnixTimeSeconds(receivedGroupMessage.time).UtcDateTime;
         return new GroupMessage(
-            receivedGroupMessage.group_id,
+            receivedGroupMessage.GroupId,
             receivedGroupMessage.sender.user_id,
             receivedGroupMessage.sender.nickname,
             receivedGroupMessage.sender.card,
@@ -197,6 +202,22 @@ public class ForwardMessageEntry
     }
 }
 
+/// <summary>
+/// 本地资源 URI 与远端资源、对象存储记录之间的映射。
+/// 下载状态由 Core 内存维护；数据库只记录可恢复的描述与已落地对象。
+/// </summary>
+public class ResourceReference
+{
+    [BsonId]
+    public string LocalUri { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
+    public string? OriginalName { get; set; }
+    public long? StoredObjectId { get; set; }
+    public bool IsImage { get; set; }
+    public DateTime UpdatedTime { get; set; }
+}
+
 
 public class GroupNameEntry
 {
@@ -212,24 +233,32 @@ public class AiMessageEntry
 {
     [BsonId]
     public long Id { get; set; }
-    public long GroupId { get; set; }
+    public string SessionKey { get; set; }
     public string MessageType { get; set; }
     public string Content { get; set; }
     public long Time { get; set; }
+    public int InputTokens { get; set; }
+    public int OutputTokens { get; set; }
+    public int TotalTokens { get; set; }
 
     public AiMessageEntry()
     {
+        SessionKey = string.Empty;
         MessageType = string.Empty;
         Content = string.Empty;
     }
 
-    public AiMessageEntry(long id, long groupId, string messageType, string content, long time)
+    public AiMessageEntry(long id, string sessionKey, string messageType, string content, long time,
+        int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
     {
         Id = id;
-        GroupId = groupId;
+        SessionKey = sessionKey;
         MessageType = messageType;
         Content = content;
         Time = time;
+        InputTokens = inputTokens;
+        OutputTokens = outputTokens;
+        TotalTokens = totalTokens;
     }
 }
 

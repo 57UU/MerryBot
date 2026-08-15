@@ -1,4 +1,5 @@
 using NapcatClient;
+using NapcatClient.MessageType;
 using System.Text;
 
 namespace BotPlugin;
@@ -14,16 +15,16 @@ public class Help : Plugin
     {
         pluginTags = Interop.PluginInfoGetter();
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
+        if (!isMentioned || command?.Name != "help")
+        {
+            return Task.CompletedTask;
+        }
         if (pluginTags == null)
         {
-            _ = Actions.SendGroupMessage(groupId, "尚未完成加载");
-            return;
-        }
-        if (!IsStartsWith(chain, "/help"))
-        {
-            return;
+            _ = Channel.SendMessage(context.Session, "尚未完成加载");
+            return Task.CompletedTask;
         }
         var sb = new StringBuilder();
         int count = 1;
@@ -41,7 +42,7 @@ public class Help : Plugin
         }
         //display admin plugins for admin user
         sb.AppendLine("- 管理员插件：");
-        if (data.self_id == Interop.AuthorizedUser)
+        if (context.SenderId == Interop.AuthorizedUser)
         {
             foreach (var i in pluginTags)
             {
@@ -56,6 +57,7 @@ public class Help : Plugin
             }
         }
         var help = $"欢迎使用MerryBot\n已加载如下插件：\n{sb.ToString().TrimEnd('\n')}";
-        _ = Actions.SendGroupMessage(groupId, help);
+        _ = Channel.SendMessage(context.Session, help);
+        return Task.CompletedTask;
     }
 }

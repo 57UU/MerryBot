@@ -1,0 +1,139 @@
+@page "/groupmessages"
+@using DataService
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@inject HistoryRecorder HistoryRecorder
+
+<PageTitle>群聊消息</PageTitle>
+
+<div class="container-custom" style="height: 100%;">
+
+	<div class="row-layout" style="height: 100%;">
+		<!-- 左侧群聊列表 -->
+		<div class="col-left">
+			<GroupListPanel SelectedGroupId="SelectedGroupId"
+							OnGroupSelected="OnGroupSelected"
+							OnLoaded="OnGroupsLoaded" />
+		</div>
+
+		<!-- 右侧消息展示 -->
+		<div class="col-right" style="height: 100%;">
+			<PagedMessageContainer TItem="GroupMessage"
+								   ElementId="group-message-container"
+								   GroupId="SelectedGroupId"
+								   EmptyText="暂无消息"
+								   LoadPageAsync="LoadGroupMessagesPage">
+				<HeaderContent>
+					@if (SelectedGroupId > 0)
+					{
+						@if (GroupNames.TryGetValue(SelectedGroupId, out var groupInfo) &&
+								!string.IsNullOrEmpty(groupInfo.Name))
+						{
+							<span>@groupInfo.Name (@SelectedGroupId) - 成员: @groupInfo.MemberCount/@groupInfo.MaxMemberCount |
+								更新于: @groupInfo.UpdatedTime.ToString("yyyy-MM-dd HH:mm")</span>
+						}
+						else
+						{
+							<span>群聊 @SelectedGroupId 的消息</span>
+						}
+					}
+					else
+					{
+						<span>请选择一个群聊</span>
+					}
+				</HeaderContent>
+				<BodyContent>
+					@foreach (var message in context)
+					{
+						@* sender *@
+						<div class="@(message.IsDeleted ? "message-item-deleted-custom" : "message-item-custom") mb-3-custom">
+							<div class="message-header-custom">
+								<p>
+									<strong>@message.SenderNickname</strong>
+									@message.SenderId
+									@(!string.IsNullOrEmpty(message.SenderGroupNickname) ?
+										$"({message.SenderGroupNickname})" : "")
+								</p>
+								<span class="text-muted-custom float-end-custom">
+									@message.MessageId &nbsp;
+									@message.Time.ToString("yyyy-MM-dd HH:mm:ss")
+								</span>
+							</div>
+							@* content *@
+							<div class="message-content-custom">
+								@if (message.IsDeleted)
+								{
+									<span class="message-deleted-text-custom">已撤回</span>
+								}
+								@foreach (var msg in message.Messages)
+								{
+									<MessageRenderer Msg="msg" Mode="MessageRenderMode.Inline" OnForwardClick="OpenForwardModal" />
+								}
+							</div>
+						</div>
+					}
+				</BodyContent>
+			</PagedMessageContainer>
+		</div>
+	</div>
+</div>
+
+<!-- 转发消息模态框 -->
+<div id="forward-modal" class="modal-overlay" style="display: none;"
+	role="dialog" aria-modal="true" aria-labelledby="forward-modal-title"
+	@onkeydown="OnModalKeyDown">
+	<div class="modal-content">
+		<div class="modal-header">
+			<span id="forward-modal-title">转发消息</span>
+			<button type="button" class="modal-close-btn" aria-label="关闭" onclick="closeForwardModal()">×</button>
+		</div>
+		<iframe id="forward-iframe" class="modal-iframe" title="转发消息内容"></iframe>
+	</div>
+</div>
+
+@code {
+	private long SelectedGroupId { get; set; } = 0;
+
+	private IReadOnlyDictionary<long, GroupNameEntry> GroupNames { get; set; } = new Dictionary<long, GroupNameEntry>();
+
+	private Task OnGroupsLoaded(GroupListContext context)
+	{
+		GroupNames = context.GroupNames;
+		// 首次进入自动选中第一个群聊
+		if (SelectedGroupId == 0 && context.GroupIds.Any())
+		{
+			SelectedGroupId = context.GroupIds[0];
+		}
+		return Task.CompletedTask;
+	}
+
+	private Task OnGroupSelected(long groupId)
+	{
+		if (SelectedGroupId == groupId) return Task.CompletedTask;
+		SelectedGroupId = groupId;
+		return Task.CompletedTask;
+	}
+
+	private Task<List<GroupMessage>> LoadGroupMessagesPage(int page, int pageSize)
+		=> HistoryRecorder.GetMessagesByGroupIdAsync(SelectedGroupId, page, pageSize);
+
+	private async Task OpenForwardModal(string forwardId)
+	{
+		try
+		{
+			await JSRuntime.InvokeVoidAsync("openForwardModal", forwardId);
+		}
+		catch (JSDisconnectedException)
+		{
+			// 电路已断开，忽略
+		}
+	}
+
+	private async Task OnModalKeyDown(KeyboardEventArgs e)
+	{
+		if (e.Key == "Escape")
+		{
+			await JSRuntime.InvokeVoidAsync("closeForwardModal");
+		}
+	}
+}

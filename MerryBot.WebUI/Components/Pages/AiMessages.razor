@@ -1,0 +1,74 @@
+@page "/aimessages"
+@using DataService
+@using BotPlugin
+@rendermode InteractiveServer
+@inject HistoryRecorder HistoryRecorder
+
+<PageTitle>AI消息</PageTitle>
+
+<div class="container-custom h-100-custom" style="height: 100%;">
+
+    <div class="row-layout">
+        <!-- 左侧群聊列表 -->
+        <div class="col-left">
+            <GroupListPanel SelectedGroupId="SelectedAiGroupId"
+                            OnGroupSelected="OnGroupSelected"
+                            OnLoaded="OnGroupsLoaded" />
+        </div>
+
+        <!-- 右侧消息展示 -->
+        <div class="col-right">
+            <PagedMessageContainer TItem="AiMessageEntry"
+                                   ElementId="ai-message-container"
+                                   GroupId="SelectedAiGroupId"
+                                   EmptyText="暂无 AI 消息"
+                                   LoadPageAsync="LoadAiMessagesPage">
+                <HeaderContent>
+                    @(SelectedAiGroupId > 0 ? $"群聊 {SelectedAiGroupId} 的 AI 消息" : "请选择一个群聊")
+                </HeaderContent>
+                <BodyContent>
+                    @foreach (var message in context)
+                    {
+                        <div class="message-item-custom mb-3-custom">
+                            <div class="message-header-custom">
+                                <strong>@message.MessageType</strong>
+                                <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="message-content-custom">
+                                <div>@message.Content</div>
+                                @if (message.TotalTokens > 0)
+                                {
+                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @message.TotalTokens</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </BodyContent>
+            </PagedMessageContainer>
+        </div>
+    </div>
+</div>
+
+@code {
+    private long SelectedAiGroupId { get; set; } = 0;
+
+    private Task OnGroupsLoaded(GroupListContext context)
+    {
+        // 首次进入自动选中第一个群聊
+        if (SelectedAiGroupId == 0 && context.GroupIds.Any())
+        {
+            SelectedAiGroupId = context.GroupIds[0];
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task OnGroupSelected(long groupId)
+    {
+        if (SelectedAiGroupId == groupId) return Task.CompletedTask;
+        SelectedAiGroupId = groupId;
+        return Task.CompletedTask;
+    }
+
+    private Task<List<AiMessageEntry>> LoadAiMessagesPage(int page, int pageSize)
+        => HistoryRecorder.GetAiMessagesBySessionKeyAsync(SessionKey.ToString(SelectedAiGroupId), page, pageSize);
+}

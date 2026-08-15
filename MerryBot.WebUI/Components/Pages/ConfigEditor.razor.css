@@ -1,0 +1,150 @@
+.config-page {
+    max-width: 1400px;
+}
+
+.config-layout {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.config-index {
+    position: sticky;
+    top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.config-index-title {
+    margin-bottom: 0.25rem;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.config-index-item {
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.config-index-item:hover,
+.config-index-item:focus-visible {
+    background: var(--surface-2);
+    outline: none;
+}
+
+.config-sections {
+    min-width: 0;
+}
+
+.config-section {
+    scroll-margin-top: 1rem;
+}
+
+.config-section + .config-section {
+    margin-top: 1.25rem;
+}
+
+.config-section-description {
+    margin: 0.75rem 0 1rem;
+}
+
+.config-field {
+    margin-bottom: 1.25rem;
+}
+
+.config-field-description {
+    margin: -0.15rem 0 0.45rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.config-list-editor {
+    font-family: Consolas, Menlo, monospace;
+}
+
+.config-stringlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.config-stringlist-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.config-stringlist-row .form-control {
+    flex: 1;
+}
+
+.config-stringlist-row .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.config-stringlist-add {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.15rem;
+}
+
+.config-stringlist-add .form-control {
+    flex: 1;
+}
+
+.config-stringlist-add .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.config-error,
+.config-save-error {
+    color: #b42318;
+}
+
+.config-save-error,
+.config-save-status {
+    margin-bottom: 0.75rem;
+}
+
+.config-save-status {
+    color: #067647;
+}
+
+@media (max-width: 800px) {
+    .config-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .config-index {
+        position: static;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 0.55rem;
+    }
+
+    .config-index-title {
+        display: none;
+    }
+
+    .config-index-item {
+        width: auto;
+        white-space: nowrap;
+    }
+}

@@ -1,0 +1,124 @@
+@page "/skills"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Skill 管理</PageTitle>
+
+<div class="container-custom skill-page">
+    <h1>Skill 管理</h1>
+    <p class="text-muted-custom">支持直接上传单文件 <code>.md</code>，或上传目录型 Skill 的 <code>.zip</code>。禁用会将入口文件标记为 <code>.disable</code>，运行中的新会话只会读取启用的 Skill。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+
+    <section class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>上传 Skill</strong></div>
+        <div class="message-content-custom skill-upload-row">
+            <input id="skill-upload-file" class="form-control" type="file" accept=".md,.zip" />
+            <button class="btn btn-primary" @onclick="UploadAsync" disabled="@IsUploading">@(IsUploading ? "上传中…" : "上传")</button>
+        </div>
+    </section>
+
+    @if (SkillItems is null)
+    {
+        <span>加载中…</span>
+    }
+    else if (SkillItems.Count == 0)
+    {
+        <div class="message-item-custom">还没有 Skill。</div>
+    }
+    else
+    {
+        <div class="message-item-custom">
+            <div class="message-content-custom" style="overflow-x:auto">
+                <table class="table">
+                    <thead><tr><th>名称</th><th>形式</th><th>状态</th><th>大小</th><th>更新时间</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var skill in SkillItems)
+                    {
+                        <tr @key="skill.Name">
+                            <td><code>@skill.Name</code></td>
+                            <td>@(skill.Layout == SkillLayout.Directory ? "目录" : "Markdown")</td>
+                            <td>@(skill.Enabled ? "启用" : "禁用")</td>
+                            <td>@FormatSize(skill.SizeBytes)</td>
+                            <td>@skill.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="skill-actions">
+                                <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(skill)" disabled="@IsMutating">@(skill.Enabled ? "禁用" : "启用")</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(skill)" disabled="@IsMutating">删除</button>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ManagedSkill>? SkillItems;
+    private string? Error;
+    private bool IsUploading;
+    private bool IsMutating;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            Error = null;
+            SkillItems = await JSRuntime.InvokeAsync<List<ManagedSkill>>("configApi.request", "GET", "/api/skills/");
+        }
+        catch (Exception exception) { Error = $"无法读取 Skill: {exception.Message}"; }
+    }
+
+    private async Task UploadAsync()
+    {
+        IsUploading = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeVoidAsync("skillApi.upload", "skill-upload-file", "/api/skills/upload");
+            await LoadAsync();
+        }
+        catch (Exception exception) { Error = $"上传失败: {exception.Message}"; }
+        finally { IsUploading = false; }
+    }
+
+    private async Task ToggleAsync(ManagedSkill skill)
+    {
+        IsMutating = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", "/api/skills/enabled", new SkillEnabledRequest(skill.Name, !skill.Enabled));
+            await LoadAsync();
+        }
+        catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
+        finally { IsMutating = false; }
+    }
+
+    private async Task DeleteAsync(ManagedSkill skill)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 Skill “{skill.Name}”吗？")) return;
+        IsMutating = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", $"/api/skills/?name={Uri.EscapeDataString(skill.Name)}");
+            await LoadAsync();
+        }
+        catch (Exception exception) { Error = $"删除失败: {exception.Message}"; }
+        finally { IsMutating = false; }
+    }
+
+    private static string FormatSize(long size) => size switch
+    {
+        < 1024 => $"{size} B",
+        < 1024 * 1024 => $"{size / 1024d:F1} KB",
+        _ => $"{size / 1024d / 1024d:F1} MB",
+    };
+}

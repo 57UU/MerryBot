@@ -1,0 +1,135 @@
+@page "/statistics"
+@rendermode InteractiveServer
+@using DataService
+@using BotPlugin
+@using Microsoft.Extensions.Logging
+@inject HistoryRecorder HistoryRecorder
+@inject ILogger<Statistics> Logger
+
+<PageTitle>统计数据</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>统计数据</h1>
+        <p class="page-header-sub">历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
+    </div>
+</div>
+
+<h2 class="page-title">消息统计</h2>
+<div class="stat-row">
+    <StatCard Title="活跃群聊" Value="@(IsLoadingStats ? "—" : GroupCount.ToString())" Icon="👥" IconBg="rgba(99,102,241,0.12)" IconColor="#4f46e5" />
+    <StatCard Title="群聊消息数" Value="@(IsLoadingStats ? "—" : MessageCount.ToString())" Icon="💬" IconBg="rgba(6,182,212,0.12)" IconColor="#0891b2" />
+    <StatCard Title="AI 消息数" Value="@(IsLoadingStats ? "—" : AiMessageCount.ToString())" Icon="🤖" IconBg="rgba(139,92,246,0.12)" IconColor="#7c3aed" />
+    <StatCard Title="图片数量" Value="@(IsLoadingStats ? "—" : ImageCount.ToString())" Icon="🖼️" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
+    <StatCard Title="文件/视频/语音" Value="@(IsLoadingStats ? "—" : FileCount.ToString())" Icon="📦" IconBg="rgba(245,158,11,0.14)" IconColor="#d97706" />
+</div>
+
+<h2 class="page-title">存储占用</h2>
+<div class="stat-row">
+    <div class="storage-card">
+        <span class="storage-icon" style="background:rgba(99,102,241,0.12);">🗄️</span>
+        <div>
+            <div class="storage-label">群聊历史库</div>
+            <div class="storage-value">@GroupHistoryDbSize</div>
+        </div>
+    </div>
+    <div class="storage-card">
+        <span class="storage-icon" style="background:rgba(16,185,129,0.12);">🖼️</span>
+        <div>
+            <div class="storage-label">图片存储</div>
+            <div class="storage-value">@ImageStorageSize</div>
+        </div>
+    </div>
+    <div class="storage-card">
+        <span class="storage-icon" style="background:rgba(245,158,11,0.14);">📦</span>
+        <div>
+            <div class="storage-label">文件存储</div>
+            <div class="storage-value">@FileStorageSize</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<long> GroupIds { get; set; } = new List<long>();
+    private int GroupCount { get; set; } = 0;
+    private int MessageCount { get; set; } = 0;
+    private int AiMessageCount { get; set; } = 0;
+    private int ImageCount { get; set; } = 0;
+    private int FileCount { get; set; } = 0;
+    private string GroupHistoryDbSize { get; set; } = "加载中";
+    private string ImageStorageSize { get; set; } = "加载中";
+    private string FileStorageSize { get; set; } = "加载中";
+
+    private bool IsLoadingStats { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGroupIds();
+        // LoadStatistics 依赖 GroupIds；LoadDbSizesAsync 与统计无依赖，并行执行
+        var statsTask = LoadStatistics();
+        var sizesTask = LoadDbSizesAsync();
+        await Task.WhenAll(statsTask, sizesTask);
+    }
+
+    private async Task LoadGroupIds()
+    {
+        try
+        {
+            GroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
+            GroupCount = GroupIds.Count;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载群聊列表失败");
+            GroupIds = new List<long>();
+            GroupCount = 0;
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            // 消息计数：使用 CountAsync，避免逐群拉取 1000 条消息
+            MessageCount = 0;
+            foreach (var gid in GroupIds)
+            {
+                MessageCount += await HistoryRecorder.GetMessageCountByGroupIdAsync(gid);
+            }
+
+            AiMessageCount = 0;
+            foreach (var gid in GroupIds)
+            {
+                AiMessageCount += await HistoryRecorder.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid));
+            }
+
+            ImageCount = await HistoryRecorder.GetImageCountAsync();
+            FileCount = await HistoryRecorder.GetFileCountAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载统计数据失败");
+        }
+        finally
+        {
+            IsLoadingStats = false;
+        }
+    }
+
+    private async Task LoadDbSizesAsync()
+    {
+        try
+        {
+            GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
+            ImageStorageSize = await HistoryRecorder.GetImageStorageSizeAsync();
+            FileStorageSize = await HistoryRecorder.GetFileStorageSizeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载文件大小失败");
+            GroupHistoryDbSize = "加载失败";
+            ImageStorageSize = "加载失败";
+            FileStorageSize = "加载失败";
+        }
+    }
+}

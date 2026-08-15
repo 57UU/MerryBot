@@ -1,64 +1,75 @@
 using NapcatClient;
 using NapcatClient.MessageType;
-using System.Runtime.InteropServices;
 
 namespace BotPlugin;
 
-[PluginTag("auto-increase", "自动+1", "如果有刷屏消息，将会自动+1", priority: -1, type: PluginType.Background)]
+[PluginTag("auto-increase", "自动+1", "如果有刷屏消息，将会自动+1", type: PluginType.Background)]
 public class AutoIncrease : Plugin
 {
-    const int REPEAT_TIME = 3;
-    public AutoIncrease(PluginInterop interop) : base(interop)
+    private readonly AutoIncreaseConfig config;
+    /// <summary>跟踪群数的上限，防止字典无限增长</summary>
+    private const int MaxTrackedGroups = 500;
+    public AutoIncrease(PluginInterop interop, AutoIncreaseConfig config) : base(interop)
     {
-        var selfId = interop.BotClient.SelfId;
-        interop.Interceptors.Add((data) =>
+        this.config = config;
+        //配置校验：重复次数至少为 2，避免出现 1 次即触发
+        if (config.RepeatTime < 2)
         {
-            return data.sender.user_id == selfId;
-        });
+            config.RepeatTime = 2;
+        }
+        interop.Interceptors.Add((ctx) => ctx.SenderId == ctx.SelfId);
     }
     //store each group
     private readonly Dictionary<long, ChainWithSender> lastMessage = [];
+    private readonly object lastMessageLock = new();
 
-    public override void OnGroupMessage(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
-        var _lastMessage = lastMessage.GetValueOrDefault(groupId);
-        var chainList = data.message;
-        if (_lastMessage == null)
+        lock (lastMessageLock)
         {
-            _lastMessage = new()
+            var groupId = long.Parse(context.Session.Id);
+            var _lastMessage = lastMessage.GetValueOrDefault(groupId);
+            //群已不在监听列表时，移除该群的过期状态，避免残留计数
+            if (_lastMessage != null && !Interop.GroupId.Contains(groupId))
             {
-                chain = chainList,
-                sender = data.sender.user_id
-            };
-            lastMessage[groupId] = _lastMessage;
-        }
-        else
-        {
-            //_lastMessage is not null
-            //上一个消息存在
-            if (
-                MessageUtils.IsEqual(chain, CollectionsMarshal.AsSpan(_lastMessage?.chain))
-                //&& _lastMessage.sender != data.sender.user_id//not by same account
-                )
+                lastMessage.Remove(groupId);
+                _lastMessage = null;
+            }
+            var chainList = messageChain.Select(message => message.Clone()).ToList();
+            if (_lastMessage == null)
             {
-                //this is a duplicated message
-                _lastMessage!.repeatTime++;
-
-                if (!_lastMessage.used && _lastMessage.repeatTime >= REPEAT_TIME)
+                _lastMessage = new()
                 {
-                    //this has not been sent
-                    Logger.Info("+1 message detected");
-                    _ = Actions.SendGroupMessage(groupId, _lastMessage.chain!);
-                    _lastMessage.used = true;
+                    chain = chainList,
+                    sender = context.SenderId
+                };
+                lastMessage[groupId] = _lastMessage;
+                //上限保护：超过上限时移除最早跟踪的群
+                if (lastMessage.Count > MaxTrackedGroups)
+                {
+                    lastMessage.Remove(lastMessage.Keys.First());
                 }
             }
             else
             {
-                //不是重复消息
-                _lastMessage!.Renew(chainList, data.sender.user_id);
+                if (MessageUtils.IsEqual(messageChain, _lastMessage.chain))
+                {
+                    _lastMessage.repeatTime++;
+                    if (!_lastMessage.used && _lastMessage.repeatTime >= config.RepeatTime)
+                    {
+                        Logger.Info("+1 message detected");
+                        _ = Channel.SendMessage(context.Session, _lastMessage.chain!);
+                        _lastMessage.used = true;
+                    }
+                }
+                else
+                {
+                    _lastMessage.Renew(chainList, context.SenderId);
+                }
 
             }
         }
+        return Task.CompletedTask;
     }
 }
 internal class ChainWithSender

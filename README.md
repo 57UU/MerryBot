@@ -11,13 +11,11 @@ napcat-server = "ws://localhost:30001"    # napcat websocket地址
 napcat-token = "your_token_here"          # napcat token
 qq-groups = [114514, 1919810]             # 要监听的qq群号列表
 authorized-user = 114514                  # 授权用户（Bot管理员）qq号
-
-[variables.agent]                         # 每个插件有独立的命名空间
-llm-model = "deepseek-chat"               # 选择的默认llm模型
-ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
+machine-code = 0                          # 历史记录机器编号；省略时首次启动自动生成
+web-address = "http://localhost:5000"      # WebUI 监听地址；仅绑定本机，远程管理请使用 SSH 端口转发
 ```
 
-> 💡 配置文件的**详细说明和完整参数**（包括所有插件的配置）请参阅 [Configuration.md](Configuration.md)。
+> 💡 Agent 等插件的独立配置由插件配置存储管理，可在 WebUI 中维护；不会写入 `setting.toml`。
 
 # 环境变量支持
 `MERRY_BOT`：指向文件夹。如果没有指定，则默认使用工作目录下的`data`文件夹。
@@ -33,13 +31,7 @@ ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 # 主要内置插件
 
 ## AI机器人
-使用openai兼容的API进行开发，可以更改`/plugins/AiMessage.cs`中的ModelPreset来切换模型。另外，可以通过`extra-models.toml`添加自定义Openai-compatible模型。
-
-支持以下命令：
-- `#新对话` 或 `/new` - 开启新对话（清除上下文）
-- `/new 你好` - 开启新对话并发送首条消息
-- `/setllm [model-tag]` - 切换当前会话的 LLM 模型
-- `/getllm` - 查看当前使用的模型及可用模型列表
+在历史后台的“LLM 配置”页搜索并选择 models.dev Provider，再添加所需模型；目录会本地缓存，点击刷新才联网更新。填写 OpenAI Chat Completions 兼容的 API 地址和 Key 后，Agent 会使用设为默认的模型。Provider、模型和 Key 都保存在插件数据库；Key 不写入 `setting.toml`，页面也不会读回原文。
 
 内置了如下function call:
 - bing搜索
@@ -64,25 +56,25 @@ ai-token-deepseek = "xxxxxxxxxx"          # 对应的 API token
 
 ### Skills 技能系统
 
-在 shell 用户的家目录下创建 `skills/` 文件夹（如 `/home/merrybot/skills/`），放入技能文件，AI 会自动识别并在需要时读取执行：
+在数据目录下创建 `skills/` 文件夹（如 `data/skills/`），放入技能文件，AI 会自动识别并在需要时读取执行。也可在 WebUI 的“Skill 管理”页上传单文件 `.md` 或目录型 `.zip`，并通过 `.disable` 标记禁用：
 
 ```bash
 # 示例：创建一个翻译技能
-echo "你是一个翻译助手，请将用户输入翻译为英文。" > ~/skills/翻译.txt
+echo "你是一个翻译助手，请将用户输入翻译为英文。" > data/skills/翻译.md
 ```
 
-AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内容，再按指令执行。
+AI 收到匹配的请求时，会先调用 `skill_read` 读取技能内容，再按指令执行。
 
 ### Memory 记忆系统
 
-每个群有独立的持久化记忆空间，以 markdown 文件存储在 `{dataPath}/memory/{groupId}/` 目录下。
+每个群有独立的持久化记忆空间，按 `sessionKey` 隔离并存储在 Agent 插件数据库中。WebUI 的“记忆管理”页会用 Core 历史数据库将 QQ 群 ID 显示为群名。
 
 | 工具 | 功能 |
 |------|------|
-| `save_memory` | 保存或更新一条记忆（写入 `{key}.md`） |
+| `save_memory` | 保存或更新一条记忆 |
 | `recall_memory` | 查看当前群所有记忆的 key 列表 |
 | `query_memory` | 通过 key 读取具体内容 |
-| `delete_memory` | 删除指定记忆（删除文件） |
+| `delete_memory` | 删除指定记忆 |
 
 每次对话开始时，AI 会在 system prompt 中看到所有记忆的 key 列表，按需调用 `query_memory` 查看具体内容。
 
@@ -90,7 +82,7 @@ AI 收到匹配的请求时，会先 `cat ~/skills/翻译.txt` 读取技能内�
 ```
 用户: 我喜欢用中文回复
 AI → save_memory("用户偏好", "喜欢用中文回复")
-→ 写入文件 data/memory/114514/用户偏好.md
+→ 写入当前 sessionKey 对应的数据库记录
 
 [下一次对话]
 system prompt: ## 已记忆的信息
@@ -145,13 +137,13 @@ AI 会分析聊天记录中的梗和热点，自动提取目录并生成包含�
 # 插件开发
 1. 一个插件应当放在`plugins`项目的一个文件中
 2. 应当继承于`Plugin`抽象类
-3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数，可通过依赖注入接收其他插件实例
-4. 在类前面使用属性`PluginTag(string id, string name, string description, [bool isIgnore=false], [int priority=0], [PluginType type=PluginType.Interactive])`
+3. 有且只有一个构造函数，存在类型为 `PluginInterop`的参数；插件之间不再依赖消息记录器或存储管理器
+4. 在类前面使用属性`PluginTag(string id, string name, string description, [bool isIgnore=false], [PluginType type=PluginType.Interactive])`
 
 主程序会通过反射加载`plugins`项目下的所有插件类，因此需要满足上述条件。
 
 ## 示例
-插件通过构造函数接收 `PluginInterop` 和其他插件实例，主程序会自动解析依赖顺序（确保能够拓扑排序）并初始化：
+插件通过构造函数接收 `PluginInterop`；消息、资源和历史记录均由 Core 提供：
 ```csharp
 [PluginTag("about", "About", "使用 /about 来查看关于")]
 public class About : Plugin
@@ -167,19 +159,21 @@ Merry Bot
 访问Github仓库 https://github.com/57UU/MerryBot 以获取更多信息
 """;
 
-    private readonly StorageManagerPlugin _storage;
-
-    public About(PluginInterop interop, StorageManagerPlugin storage) : base(interop)
+    public About(PluginInterop interop) : base(interop)
     {
-        _storage = storage;
         Logger.Info("about plugin start");
     }
-    public override void OnGroupMessageMentioned(long groupId, MessageChain chain, ReceivedGroupMessage data)
+    public override Task OnMessageAsync(
+        bool isMentioned,
+        Command? command,
+        IReadOnlyList<TypedMessage> messageChain,
+        MessageContext context)
     {
-        if (IsStartsWith(chain, "/about"))
+        if (isMentioned && command?.Name == "about")
         {
-            Actions.SendGroupMessage(groupId, aboutMessage);
+            _ = Channel.SendMessage(context.Session, aboutMessage);
         }
+        return Task.CompletedTask;
     }
 }
 ```
@@ -189,33 +183,26 @@ Merry Bot
 ## 事件
 | 函数 | 描述 |
 | --- | --- |
-| `OnGroupMessage` 函数 | 当收到新消息时，此函数会被调用 |
-|`OnGroupMessageMentioned`|当收到新消息时bot被@，此函数会被调用|
-|`OnGroupMessageNotMentioned`|当收到新消息时bot未被@，此函数会被调用|
+| `OnMessageAsync` 函数 | 当收到新消息时，此函数会被调用 |
 | `OnLoaded` 函数 | 当插件全部被加载完后会执行的函数，可以放一些互操作性的初始化代码。 |
 
-### 原始消息事件
-`OnRawGroupMessageReceived` 事件允许插件在消息被其他插件处理之前访问原始消息数据。
+### 消息处理链
+插件通过异步回调获得处理后的消息链和轻量的消息上下文（平台无关）：
 
-**注册方式**：
 ```csharp
-
-public MyPlugin(PluginInterop interop) : base(interop)
+public override Task OnMessageAsync(
+    bool isMentioned,
+    Command? command,
+    IReadOnlyList<TypedMessage> messageChain,
+    MessageContext context)
 {
-    interop.OnRawGroupMessageReceivedRegister(OnRawGroupMessageReceived);
+    // messageChain 中的 Reply、Forward、图片、文件等均为 merrybot:// 本地引用。
+    // context 提供会话定位（Session）与发送者/机器人身份（SenderId/SelfId）。
+    return Task.CompletedTask;
 }
-
-private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
-{
-    // 在这里处理原始消息
-    // 此回调在其他插件的 OnGroupMessage 等方法之前被调用
-}
-
 ```
 
-**使用场景**：
-- 需要在消息被其他插件修改或拦截前记录原始数据
-- 需要获取未经插件系统处理的消息
+使用 `Interop.MessageService` 可按本地引用读取 Reply、Forward 或媒体资源；Core 会复用正在进行的请求并负责持久化。
 
 
 
@@ -225,6 +212,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |API|Description|Note
 |:---:|:---|:---
 |Actions Actions{get;}|获取`Actions`，用于发送消息
+|MessageChannel Channel {get;}|发送消息（来自 Interop），内含日志，失败不抛出|
 |bool IsEnable {set;protected get;}|是否启用|无论是否启用，插件都会被加载，当为假时OnMessageReceived函数不会被调用
 |string? StartsWith {set;get;}|该项是属性，若设置，那么只有以`StartsWith`开头的消息会触发`OnMessageReceived`函数
 |ISimpleLogger logger {get;}|获取`logger`，用于记录日志
@@ -238,6 +226,9 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 |T? FindPlugin\<T\>()|查找类型为T的插件，用于插件互操作性(其实笔者更推荐直接在构造函数中直接注入其他插件实例)|
 |IEnumerable<PluginInfo> PluginInfoGetter()|获取所有插件的PluginInfo|
 |PluginStorage PluginStorage {get;}|获取插件存储|
+|PluginDatabaseScope PluginDatabase {get;}|获取当前插件的 scoped LiteDB 数据库|
+|ClockService ClockService {get;}|core 拥有的定时任务调度器（生命周期归宿主，插件不负责创建/释放）|
+|DelegatingClockExecutor ClockExecutor {get;}|定时任务执行器注册口：core 先以空转发器建调度器，Agent 插件初始化时设置 `Inner` 注册自己的执行器|
 |T? GetVariable<T>(string key)|获取当前插件命名空间下`Variable`中的配置项|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
 |Action<int> Shutdown|关闭程序，参数为退出码|
@@ -246,7 +237,7 @@ private void OnRawGroupMessageReceived(ReceivedGroupMessage data)
 ### 拦截器-Interceptors
 方法签名：
 ```csharp
-public delegate bool MessageInterceptor(ReceivedGroupMessage data)
+public delegate bool MessageInterceptor(MessageContext context)
 ```
 返回true拦截，false不拦截。
 
@@ -258,6 +249,25 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 |:---:|:---|
 |Task\<T\> Load\<T\>(T defaultValue)|异步加载对象，如果不存在则返回默认值|
 |Task Save\<T\>(T data)|异步存储对象|
+
+### Scoped 数据库-PluginDatabase
+
+`PluginStorage` 适合保存一个简单的插件对象或群级对象。需要多个表、索引或复杂查询时，可使用 `Interop.PluginDatabase`；每个插件只会访问以自身 `PluginTag.Id` 为 scope 的 collection。
+
+```csharp
+public sealed class Todo
+{
+    public int Id { get; set; }
+    public long GroupId { get; set; }
+    public string Content { get; set; } = "";
+}
+
+var todos = Interop.PluginDatabase.GetCollection<Todo>("todos");
+await todos.EnsureIndexAsync(x => x.GroupId);
+await todos.UpsertAsync(new Todo { Id = 1, GroupId = 123, Content = "example" });
+```
+
+`GetCollection<T>(name)` 会按需创建当前插件的表；`DropCollectionAsync(name)` 只能删除当前插件 scope 内的表。底层数据库由 Core 管理，插件不需要、也不能自行释放连接。
 
 ### 工具类-`MessageUtils`
 |API|Description|
@@ -278,7 +288,7 @@ public delegate bool MessageInterceptor(ReceivedGroupMessage data)
 
 ### PluginTag类属性标签
 
-构造函数为`(string id, string name, string description, bool isIgnore=false, int priority=0, PluginType type=PluginType.Interactive)`
+构造函数为`(string id, string name, string description, bool isIgnore=false, PluginType type=PluginType.Interactive)`
 
 参数说明：
 - `id` - 插件标识符（英文），用于配置文件命名空间隔离

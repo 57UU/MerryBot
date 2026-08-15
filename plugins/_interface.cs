@@ -1,7 +1,10 @@
-global using MessageChain = System.ReadOnlySpan<NapcatClient.MessageType.TypedMessage>;
+using Agent.Session;
 using CommonLib;
+using DataProvider;
 using NapcatClient;
+using NapcatClient.Action;
 using NapcatClient.MessageType;
+using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 
 namespace BotPlugin;
@@ -27,19 +30,16 @@ public record PluginInfo(
 public class PluginStorage
 {
     public PluginStorage(
-        ObjectSaver pluginSaver, ObjectGetter pluginGetter,
-        ObjectGroupSaver groupSaver, ObjectGroupGetter groupGetter)
+        ObjectSaver pluginSaver, ObjectGetter pluginGetter, PluginDatabaseScope pluginDatabaseScope)
     {
         _pluginSaver = pluginSaver;
         _pluginGetter = pluginGetter;
-        _groupSaver = groupSaver;
-        _groupGetter = groupGetter;
+        PluginDatabaseScope = pluginDatabaseScope;
     }
 
     private readonly ObjectSaver _pluginSaver;
     private readonly ObjectGetter _pluginGetter;
-    private readonly ObjectGroupSaver _groupSaver;
-    private readonly ObjectGroupGetter _groupGetter;
+    public PluginDatabaseScope PluginDatabaseScope { get; private set; }
 
     public async Task<T?> Load<T>() where T : class
     {
@@ -58,15 +58,6 @@ public class PluginStorage
     public async Task Save<T>(T data) where T : class
         => await _pluginSaver(data);
 
-    public async Task<T?> LoadGroup<T>(long groupId) where T : class
-    {
-        var data = await _groupGetter(groupId);
-        if (data is null) return null;
-        return (T)data;
-    }
-
-    public async Task SaveGroup<T>(long groupId, T data) where T : class
-        => await _groupSaver(groupId, data);
 }
 
 public delegate Task ObjectSaver(object data);
@@ -77,9 +68,9 @@ public delegate IEnumerable<PluginInfo> PluginInfoGetter();
 /// <summary>
 /// 拦截指定消息
 /// </summary>
-/// <param name="data"></param>
+/// <param name="context"></param>
 /// <returns>返回true拦截</returns>
-public delegate bool MessageInterceptor(ReceivedGroupMessage data);
+public delegate bool MessageInterceptor(MessageContext context);
 
 /// <summary>
 /// 用于实现互操作性
@@ -89,18 +80,17 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
-    BotClient BotClient,
-    IDictionary<string, object> Variables,
     Action<int> Shutdown,
     long AuthorizedUser,
-    string[] CommandLineArguments,
-    Func<Task> ConfigSaver,
     string PathPrefix,
-    Action<Action<ReceivedGroupMessage>> OnRawGroupMessageReceivedRegister
+    EventRegister EventRegister,
+    IMessageService MessageService,
+    MessageChannel Channel,
+    ClockService ClockService
     )
 {
     /// <summary>
-    /// 注册拦截器
+    /// 注册拦截器，拦截器只会拦截当前插件的消息，不会拦截其他插件的消息
     /// </summary>
     public List<MessageInterceptor> Interceptors { get; } = new();
     /// <summary>
@@ -111,88 +101,6 @@ public record PluginInterop(
     internal T? FindPlugin<T>() where T : Plugin
     {
         return this.PluginInfoGetter().FirstOrDefault(i => i.Instance is T)?.Instance as T;
-    }
-    /// <summary>
-    /// 尝试在配置文件的变量中查找，如果没有找到，那就存储并返回默认值。出于性能考量，保存会异步执行。
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="key"></param>
-    /// <param name="defaultValue"></param>
-    /// <returns></returns>
-    internal T GetVariableOrSetDefault<T>(string key, T defaultValue)
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            //save it
-            SetVariable(key, defaultValue);
-            _ = SaveConfig();
-            return defaultValue;
-        }
-        return (T)value;
-    }
-    internal int GetIntVariableOrSetDefault(string key, int defaultValue)
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            //save it
-            SetVariable(key, defaultValue);
-            _ = SaveConfig();
-            return defaultValue;
-        }
-        return Convert.ToInt32(value);
-    }
-    /// <summary>
-    /// try get config value
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="key"></param>
-    /// <param name="value"></param>
-    /// <returns></returns>
-    internal bool TryGetVariable<T>(string key, out T? value)
-    {
-        if (!Variables.TryGetValue(key, out var rawValue) || rawValue == null)
-        {
-            value = default(T?);
-            return false;
-        }
-        value = (T?)rawValue;
-        return true;
-    }
-    internal T? GetStructVariable<T>(string key) where T : struct
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            return default;
-        }
-        return (T)Convert.ChangeType(value, typeof(T));
-    }
-    internal T GetStructVariableOrSetDefault<T>(string key, T defaultValue) where T : struct
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            //save it
-            SetVariable(key, defaultValue);
-            _ = SaveConfig();
-            return defaultValue;
-        }
-        return (T)Convert.ChangeType(value, typeof(T));
-    }
-    internal T? GetClassVariable<T>(string key) where T : class
-    {
-        if (!Variables.TryGetValue(key, out var value))
-        {
-            return default;
-        }
-        return (T)value;
-    }
-
-    internal void SetVariable<T>(string key, T value)
-    {
-        Variables[key] = value!;
-    }
-    internal async Task SaveConfig()
-    {
-        await ConfigSaver.Invoke();
     }
 }
 public enum PluginType
@@ -209,10 +117,6 @@ public class PluginTag : Attribute
     /// 当为真时，加载插件时将会忽略这个插件。
     /// </summary>
     public readonly bool IsIgnore;
-    /// <summary>
-    /// 插件的优先级，决定加载顺序。值越小，优先级越高
-    /// </summary>
-    public readonly int Priority;
     public readonly PluginType Type;
     /// <summary>
     /// 插件的tag，用于标记插件
@@ -221,13 +125,12 @@ public class PluginTag : Attribute
     /// <param name="name">名称</param>
     /// <param name="description">描述</param>
     /// <param name="isIgnore">加载插件时是否忽略这个插件</param>
-    public PluginTag(string id, string name, string description, bool isIgnore = false, int priority = 0, PluginType type = PluginType.Interactive)
+    public PluginTag(string id, string name, string description, bool isIgnore = false, PluginType type = PluginType.Interactive)
     {
         Id = id;
         Name = name;
         Description = description;
         IsIgnore = isIgnore;
-        Priority = priority;
         Type = type;
     }
 }
@@ -242,19 +145,17 @@ public static class MessageUtils
     /// <param name="a"></param>
     /// <param name="b"></param>
     /// <returns></returns>
-    public static bool IsEqual(MessageChain a, MessageChain b)
+    public static bool IsEqual(IReadOnlyList<TypedMessage>? a, IReadOnlyList<TypedMessage>? b)
     {
-        if (a.IsEmpty || b.IsEmpty) { return false; }
-        var a1 = a.ToArray();
-        var b1 = b.ToArray();
-        if (a1.Length != b1.Length)
+        if (a == null || b == null || a.Count == 0 || b.Count == 0) { return false; }
+        if (a.Count != b.Count)
         {
             return false;
         }
-        for (var i = 0; i < a1.Length; i++)
+        for (var i = 0; i < a.Count; i++)
         {
-            var o1 = a1[i];
-            var o2 = b1[i];
+            var o1 = a[i];
+            var o2 = b[i];
             if (o1 == null || o2 == null)
             {
                 return false;
@@ -270,13 +171,6 @@ public static class MessageUtils
         }
         return true;
     }
-    public static bool IsEqual(List<TypedMessage>? a, List<TypedMessage>? b)
-    {
-        return IsEqual(
-            CollectionsMarshal.AsSpan(a),
-            CollectionsMarshal.AsSpan(b)
-            );
-    }
 }
 
 
@@ -286,3 +180,9 @@ public class PluginNotUsableException : Exception
     {
     }
 }
+
+
+public record Command(string Name, ImmutableArray<string> Args);
+
+
+public interface IPluginConfig { };

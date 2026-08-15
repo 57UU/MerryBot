@@ -42,17 +42,17 @@ start_time=$(date +%s)
 
 # Restore all projects (per-project to avoid sln platform parsing issue with .NET 10)
 echo "[build] Restoring for $runtime..."
-dotnet restore HistoryWebFrontend/HistoryWebFrontend.csproj -r $runtime
+dotnet restore MerryBot.WebUI/MerryBot.WebUI.csproj -r $runtime
 dotnet restore MerryBot/MerryBot.csproj -r $runtime
 
 # Clean and prepare target directory
 rm -rf "$target_dir"
 mkdir -p "$target_dir"
 
-# Publish HistoryWebFrontend to temp dir, then copy wwwroot to target
+# Publish MerryBot.WebUI to temp dir, then copy wwwroot to target
 wwwroot_tmp="$target_dir/.wwwroot_tmp"
-echo "[build] Publishing HistoryWebFrontend..."
-dotnet publish HistoryWebFrontend/HistoryWebFrontend.csproj -c Release \
+echo "[build] Publishing MerryBot.WebUI..."
+dotnet publish MerryBot.WebUI/MerryBot.WebUI.csproj -c Release \
     -r $runtime \
     --self-contained false \
     --no-restore \

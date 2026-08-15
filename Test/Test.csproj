@@ -8,8 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Browser\Browser.csproj" />
     <ProjectReference Include="..\DataProvider\DataProvider.csproj" />
-    <ProjectReference Include="..\HistoryWebFrontend\HistoryWebFrontend.csproj" />
+    <ProjectReference Include="..\MerryBot.WebUI\MerryBot.WebUI.csproj" />
     <ProjectReference Include="..\MerryBot\MerryBot.csproj" />
     <ProjectReference Include="..\plugins\plugins.csproj" />
   </ItemGroup>

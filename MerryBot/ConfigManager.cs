@@ -1,12 +1,11 @@
-using Tomlyn;
-using Tomlyn.Model;
-using Tomlyn.Serialization;
+using CommonLib;
+using DataProvider;
 
 namespace MerryBot;
 
 public static class ConfigManager
 {
-    public static string SettingFile = "setting.toml";
+    private static PluginStorageDatabase _db = null!;
     public static Config Instance
     {
         get
@@ -19,49 +18,122 @@ public static class ConfigManager
         }
         private set { field = value; }
     }
-    public async static Task Initialize()
+    /// <summary>保护 QqGroups 列表的并发读写（WS 消息线程与 WebUI 线程）。</summary>
+    private static readonly object _groupsLock = new();
+    private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+    /// <summary>从插件存储数据库加载核心配置；不存在时落库默认配置，类型不匹配时仅使用内存默认值。</summary>
+    public async static Task Initialize(PluginStorageDatabase db)
     {
+        _db = db;
         try
         {
-            await Load();
-            await Save();
+            var loaded = await _db.GetPluginConfig("config", prefix: "core");
+            if (loaded == null)
+            {
+                Instance = new Config();
+                await Save();
+            }
+            else if (loaded is Config config)
+            {
+                Instance = config;
+            }
+            else
+            {
+                logger.Warn("配置类型不匹配（{0}），使用内存默认值", loaded.GetType().Name);
+                Instance = new Config();
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            logger.Error(ex, "加载配置失败，使用默认配置");
             Instance = new Config();
-            Save().Wait();
+            try
+            {
+                await Save();
+            }
+            catch (Exception saveEx)
+            {
+                logger.Error(saveEx, "保存默认配置失败");
+            }
         }
     }
-    private static TomlMetadataStore configTomlMetadata = new TomlMetadataStore();
-    private static TomlSerializerOptions _tomlModelOptions = new()
-    {
-        MetadataStore = configTomlMetadata
-    };
     public async static Task Save()
     {
-
-        var toml = TomlSerializer.Serialize(Instance, options: _tomlModelOptions);
-        await Utils.write(SettingFile, toml);
+        await _db.SetPluginConfig("config", Instance, prefix: "core");
     }
-    public async static Task Load()
+
+    /// <summary>返回启用群列表的线程安全快照。</summary>
+    public static IReadOnlyList<long> GetGroupIdsSnapshot()
     {
+        lock (_groupsLock)
+        {
+            return Instance.QqGroups.ToArray();
+        }
+    }
 
-        var json = await Utils.read(SettingFile);
-        Config i = TomlSerializer.Deserialize<Config>(json!, options: _tomlModelOptions)!;
-        Instance = i;
+    /// <summary>线程安全地判断群组是否已启用。</summary>
+    public static bool ContainsGroup(long groupId)
+    {
+        lock (_groupsLock)
+        {
+            return Instance.QqGroups.Contains(groupId);
+        }
+    }
 
+    /// <summary>线程安全地添加群组并持久化（与配置保存共用同一序列化路径）。</summary>
+    public static async Task AddGroupAsync(long groupId)
+    {
+        bool changed = false;
+        lock (_groupsLock)
+        {
+            var groups = Instance.QqGroups;
+            if (!groups.Contains(groupId))
+            {
+                groups.Add(groupId);
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            await Save();
+        }
+    }
+
+    /// <summary>线程安全地移除群组并持久化（与配置保存共用同一序列化路径）。</summary>
+    public static async Task RemoveGroupAsync(long groupId)
+    {
+        bool changed = false;
+        lock (_groupsLock)
+        {
+            changed = Instance.QqGroups.Remove(groupId);
+        }
+        if (changed)
+        {
+            await Save();
+        }
     }
 }
+[ConfigDescription("核心配置", "MerryBot 的连接、群组、运行编号和 WebUI 监听设置。")]
 public class Config
 {
-    [TomlPropertyName("napcat-server")]
-    public string NapcatServer { set; get; } = "ws://<host>:<port>/";
-    [TomlPropertyName("napcat-token")]
+    [ConfigDescription("Napcat 服务地址", "Napcat WebSocket 服务的地址，例如 ws://localhost:3001/")]
+    public string NapcatServer { set; get; } = "ws://localhost:3001/";
+    [ConfigDescription("Napcat Token", "连接 Napcat WebSocket 服务时使用的认证 Token。")]
     public string NapcatToken { set; get; } = "napcat";
-    [TomlPropertyName("qq-groups")]
+    [ConfigDescription("监听群组", "需要接收和处理消息的 QQ 群号列表。")]
     public List<long> QqGroups { set; get; } = [];
-    [TomlPropertyName("authorized-user")]
+    [ConfigDescription("授权用户", "拥有管理权限的 QQ 号。")]
     public long AuthorizedUser { set; get; } = -1;
-    [TomlPropertyName("variables")]
-    public Dictionary<string, TomlTable> Variables { set; get; } = new();
+
+    [ConfigDescription("机器编号", "历史记录使用的机器编号；小于 0 时首次启动自动生成 0 到 31 的编号。")]
+    public int MachineCode { set; get; } = -1;
+
+    [ConfigDescription("WebUI 地址", "WebUI 监听的 HTTP 或 HTTPS 地址。")]
+    public string WebAddress { set; get; } = "http://localhost:5000";
+
+    [ConfigDescription("资源大小限制", "下载并保存的图片/文件大小上限（MB）。")]
+    public int ResourceSizeLimitMb { set; get; } = 20;
+
+    [ConfigDescription("重连间隔", "消息适配器断开后重试连接的间隔（秒）。")]
+    public int ReconnectIntervalSeconds { set; get; } = 15;
 }

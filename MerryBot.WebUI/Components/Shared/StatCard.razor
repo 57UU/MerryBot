@@ -1,0 +1,26 @@
+<div class="stat-card">
+    <div class="stat-icon" style="background:@(IconBg); color:@(IconColor);">
+        @Icon
+    </div>
+    <div class="stat-card-body">
+        <p class="stat-card-value">@Value</p>
+        <h5 class="stat-card-title">@Title</h5>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public object Value { get; set; } = 0;
+
+    [Parameter]
+    public string? Icon { get; set; } = "📊";
+
+    [Parameter]
+    public string IconBg { get; set; } = "rgba(107,114,128,0.10)";
+
+    [Parameter]
+    public string IconColor { get; set; } = "#6b7280";
+}

@@ -15,6 +15,7 @@ public class HistoryRecorder : IDisposable
     ILiteCollectionAsync<ForwardMessageEntry> forwardMessagesCollection;
     ILiteCollectionAsync<GroupNameEntry> groupNameCollection;
     ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
+    ILiteCollectionAsync<ResourceReference> resourceReferencesCollection;
     private IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     private readonly IObjectStorage _objectStorage;
@@ -33,21 +34,60 @@ public class HistoryRecorder : IDisposable
         forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
         groupNameCollection = database.GetCollection<GroupNameEntry>("group_names");
         aiMessagesCollection = database.GetCollection<AiMessageEntry>("ai_messages");
+        resourceReferencesCollection = database.GetCollection<ResourceReference>("resource_references");
 
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
 
-        _ = messagesCollection.EnsureIndexAsync(x => x.GroupId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.SenderId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.MessageId);
-        _ = messagesCollection.EnsureIndexAsync(x => x.Time);
-        _ = imageBedCollection.EnsureIndexAsync(x => x.Hash);
-        _ = fileBedCollection.EnsureIndexAsync(x => x.Hash);
-        _ = eventsCollection.EnsureIndexAsync(x => x.GroupId);
-        _ = eventsCollection.EnsureIndexAsync(x => x.EventType);
-        _ = eventsCollection.EnsureIndexAsync(x => x.Time);
-        _ = forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId);
-        _ = groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime);
-        _ = aiMessagesCollection.EnsureIndexAsync(x => x.GroupId);
+        // 同步等待索引创建完成：避免 fire-and-forget 产生未观察异常，也保证首个查询即命中索引
+        EnsureIndexesAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// 创建全部索引（含图片/文件 hash 唯一索引）；失败只记日志不抛出，避免历史数据问题导致启动失败。
+    /// </summary>
+    private async Task EnsureIndexesAsync()
+    {
+        var tasks = new Task[]
+        {
+            messagesCollection.EnsureIndexAsync(x => x.GroupId),
+            messagesCollection.EnsureIndexAsync(x => x.SenderId),
+            messagesCollection.EnsureIndexAsync(x => x.MessageId),
+            messagesCollection.EnsureIndexAsync(x => x.Time),
+            eventsCollection.EnsureIndexAsync(x => x.GroupId),
+            eventsCollection.EnsureIndexAsync(x => x.EventType),
+            eventsCollection.EnsureIndexAsync(x => x.Time),
+            forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId),
+            groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime),
+            aiMessagesCollection.EnsureIndexAsync(x => x.SessionKey),
+            resourceReferencesCollection.EnsureIndexAsync(x => x.Kind),
+        };
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] 部分索引创建失败（查询性能可能下降）: {ex.GetBaseException().Message}");
+        }
+
+        // hash 唯一索引：已有历史重复数据时创建会失败，只记日志；
+        // 唯一索引缺失期间由 RecordImageAsync/RecordFileAsync 的幂等兜底处理并发写入。
+        try
+        {
+            await imageBedCollection.EnsureIndexAsync(x => x.Hash, true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] images.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+        }
+        try
+        {
+            await fileBedCollection.EnsureIndexAsync(x => x.Hash, true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+        }
     }
 
     private long GenerateId()
@@ -74,8 +114,10 @@ public class HistoryRecorder : IDisposable
     /// 数据库 schema 版本。每次新增迁移步骤时递增。
     /// - 0: 初始版本（未迁移）
     /// - 1: 修正 ForwardData.Content 旧格式（JsonElement? → List&lt;GroupMessage&gt;?）
+    /// - 2: 补齐消息业务键并增加本地资源引用集合
+    /// - 3: ai_messages 主键从 GroupId 改为 SessionKey（统一会话标识）
     /// </summary>
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 3;
 
     /// <summary>
     /// 单个迁移步骤：从 <paramref name="FromVersion"/> 迁移到 FromVersion+1。
@@ -91,6 +133,10 @@ public class HistoryRecorder : IDisposable
     {
         new(0, "ForwardData.Content: JsonElement? → List<GroupMessage>?",
             static self => self.MigrateForwardDataContentV1Async()),
+        new(1, "MessageKey and resource references",
+            static self => self.MigrateMessageKeysV2Async()),
+        new(2, "ai_messages: GroupId → SessionKey",
+            static self => self.MigrateAiMessageSessionKeysV3Async()),
     };
 
     /// <summary>
@@ -166,15 +212,63 @@ public class HistoryRecorder : IDisposable
         return changed;
     }
 
+    private async Task MigrateMessageKeysV2Async()
+    {
+        var collection = database.GetCollection("messages");
+        var documents = await collection.FindAllAsync();
+        foreach (var document in documents)
+        {
+            if (document.TryGetValue("MessageKey", out var key) && key.IsString && !string.IsNullOrEmpty(key.AsString))
+            {
+                continue;
+            }
+
+            if (!document.TryGetValue("GroupId", out var groupId) || !document.TryGetValue("MessageId", out var messageId))
+            {
+                continue;
+            }
+
+            document["MessageKey"] = GroupMessage.CreateMessageKey(groupId.AsInt64, messageId.AsInt64);
+            await collection.UpdateAsync(document);
+        }
+
+        await messagesCollection.EnsureIndexAsync(x => x.MessageKey, true);
+        await forwardMessagesCollection.EnsureIndexAsync(x => x.ForwardId, true);
+        await resourceReferencesCollection.EnsureIndexAsync(x => x.LocalUri, true);
+    }
+
     public async Task<bool> RecordMessageAsync(GroupMessage message)
     {
-        if (await messagesCollection.ExistsAsync(x => x.MessageId == message.MessageId))
+        return await UpsertMessageAsync(message);
+    }
+
+    /// <summary>按群号 + 消息 ID 幂等保存消息；返回 true 表示新增。</summary>
+    public async Task<bool> UpsertMessageAsync(GroupMessage message)
+    {
+        message.MessageKey = GroupMessage.CreateMessageKey(message.GroupId, message.MessageId);
+        var existing = await messagesCollection.FindOneAsync(x => x.MessageKey == message.MessageKey);
+        if (existing != null)
         {
+            message.Id = existing.Id;
+            await messagesCollection.UpdateAsync(message);
             return false;
         }
 
-        await messagesCollection.InsertAsync(message);
-        return true;
+        try
+        {
+            await messagesCollection.InsertAsync(message);
+            return true;
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            // 唯一索引与另一条并发写入竞争时，读取并覆盖现有记录。
+            // LiteDB.Async 会将 LiteException 包装成 LiteAsyncException。
+            existing = await messagesCollection.FindOneAsync(x => x.MessageKey == message.MessageKey);
+            if (existing == null) throw;
+            message.Id = existing.Id;
+            await messagesCollection.UpdateAsync(message);
+            return false;
+        }
     }
 
     public async Task<bool> MessageExistsAsync(long messageId)
@@ -182,9 +276,19 @@ public class HistoryRecorder : IDisposable
         return await messagesCollection.ExistsAsync(x => x.MessageId == messageId);
     }
 
-    public async Task<bool> MarkMessageAsDeletedAsync(long messageId)
+    /// <summary>
+    /// 按消息 ID 与群号查找单条消息（用于读取"回复"引用的原始消息）
+    /// </summary>
+    public async Task<GroupMessage?> GetMessageByIdAsync(long messageId, long groupId)
     {
-        var message = await messagesCollection.FindOneAsync(x => x.MessageId == messageId);
+        return await messagesCollection.FindOneAsync(x => x.MessageId == messageId && x.GroupId == groupId);
+    }
+
+    public async Task<bool> MarkMessageAsDeletedAsync(long messageId, long? groupId = null)
+    {
+        var message = groupId.HasValue
+            ? await messagesCollection.FindOneAsync(x => x.MessageId == messageId && x.GroupId == groupId.Value)
+            : await messagesCollection.FindOneAsync(x => x.MessageId == messageId);
         if (message == null)
         {
             return false;
@@ -205,6 +309,7 @@ public class HistoryRecorder : IDisposable
 
     public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int page, int pageSize)
     {
+        page = Math.Max(1, page);
         var skip = (page - 1) * pageSize;
         return await messagesCollection.Query()
             .Where(x => x.GroupId == groupId)
@@ -262,7 +367,27 @@ public class HistoryRecorder : IDisposable
         var id = GenerateId();
         await _objectStorage.StoreAsync(ImageBucket, hash, data);
         var imageEntry = new ImageEntry(id, originalUrl, hash);
-        await imageBedCollection.InsertAsync(imageEntry);
+        try
+        {
+            await imageBedCollection.InsertAsync(imageEntry);
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            // 唯一索引竞争：并发写入已插入同 hash 条目；删除刚落盘文件并返回已有条目，避免孤儿文件
+            existingImage = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
+            if (existingImage != null)
+            {
+                await _objectStorage.DeleteAsync(ImageBucket, hash);
+                return existingImage;
+            }
+            throw;
+        }
+        catch
+        {
+            // 数据库插入失败：删除已落盘文件，保持文件与数据库一致
+            try { await _objectStorage.DeleteAsync(ImageBucket, hash); } catch { }
+            throw;
+        }
         return imageEntry;
     }
 
@@ -290,7 +415,27 @@ public class HistoryRecorder : IDisposable
         var id = GenerateId();
         await _objectStorage.StoreAsync(FileBucket, hash, data);
         var fileEntry = new FileEntry(id, originalUrl, hash);
-        await fileBedCollection.InsertAsync(fileEntry);
+        try
+        {
+            await fileBedCollection.InsertAsync(fileEntry);
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            // 唯一索引竞争：并发写入已插入同 hash 条目；删除刚落盘文件并返回已有条目，避免孤儿文件
+            existingFile = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
+            if (existingFile != null)
+            {
+                await _objectStorage.DeleteAsync(FileBucket, hash);
+                return existingFile;
+            }
+            throw;
+        }
+        catch
+        {
+            // 数据库插入失败：删除已落盘文件，保持文件与数据库一致
+            try { await _objectStorage.DeleteAsync(FileBucket, hash); } catch { }
+            throw;
+        }
         return fileEntry;
     }
 
@@ -315,6 +460,9 @@ public class HistoryRecorder : IDisposable
     }
 
     private readonly RequestCaching requestCaching = new(TimeSpan.FromHours(24));
+    // 命中与未命中分开过期：查无结果 1 小时后重试，避免长时间缓存“不存在”
+    private static readonly TimeSpan CacheHitExpiration = TimeSpan.FromHours(24);
+    private static readonly TimeSpan CacheMissExpiration = TimeSpan.FromHours(1);
 
     public async Task<ImageEntry?> GetImageByHashAsync(string hash)
     {
@@ -324,7 +472,7 @@ public class HistoryRecorder : IDisposable
             return cachedImage;
         }
         var image = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
-        requestCaching.SetCache(cacheKey, image);
+        requestCaching.SetCache(cacheKey, image, image == null ? CacheMissExpiration : CacheHitExpiration);
         return image;
     }
 
@@ -336,7 +484,7 @@ public class HistoryRecorder : IDisposable
             return cachedFile;
         }
         var file = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
-        requestCaching.SetCache(cacheKey, file);
+        requestCaching.SetCache(cacheKey, file, file == null ? CacheMissExpiration : CacheHitExpiration);
         return file;
     }
 
@@ -384,18 +532,85 @@ public class HistoryRecorder : IDisposable
 
     public async Task<bool> RecordForwardMessageAsync(ForwardMessageEntry forwardEntry)
     {
-        if (await forwardMessagesCollection.ExistsAsync(x => x.ForwardId == forwardEntry.ForwardId))
+        var existing = await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardEntry.ForwardId);
+        if (existing != null)
         {
+            forwardEntry.Id = existing.Id;
+            await forwardMessagesCollection.UpdateAsync(forwardEntry);
             return false;
         }
-
-        await forwardMessagesCollection.InsertAsync(forwardEntry);
-        return true;
+        try
+        {
+            await forwardMessagesCollection.InsertAsync(forwardEntry);
+            return true;
+        }
+        catch (Exception exception) when (IsLiteDatabaseException(exception))
+        {
+            existing = await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardEntry.ForwardId);
+            if (existing == null) throw;
+            forwardEntry.Id = existing.Id;
+            await forwardMessagesCollection.UpdateAsync(forwardEntry);
+            return false;
+        }
     }
+
+    public async Task<ResourceReference?> GetResourceReferenceAsync(string localUri)
+        => await resourceReferencesCollection.FindOneAsync(x => x.LocalUri == localUri);
+
+    public async Task<ResourceReference> UpsertResourceReferenceAsync(ResourceReference reference)
+    {
+        var existing = await resourceReferencesCollection.FindOneAsync(x => x.LocalUri == reference.LocalUri);
+        if (existing == null)
+        {
+            try
+            {
+                await resourceReferencesCollection.InsertAsync(reference);
+                return reference;
+            }
+            catch (Exception exception) when (IsLiteDatabaseException(exception))
+            {
+                existing = await resourceReferencesCollection.FindOneAsync(x => x.LocalUri == reference.LocalUri);
+                if (existing == null) throw;
+            }
+        }
+
+        existing.Kind = reference.Kind;
+        existing.Source = reference.Source;
+        existing.OriginalName ??= reference.OriginalName;
+        existing.StoredObjectId = reference.StoredObjectId ?? existing.StoredObjectId;
+        existing.IsImage = reference.IsImage;
+        existing.UpdatedTime = reference.UpdatedTime;
+        await resourceReferencesCollection.UpdateAsync(existing);
+        return existing;
+    }
+
+    /// <summary>
+    /// LiteDB.Async 将底层 LiteDB 异常包在 <see cref="LiteAsyncException"/> 中；
+    /// 并发插入时两种异常都应走“重新读取后更新”的幂等分支。
+    /// </summary>
+    private static bool IsLiteDatabaseException(Exception exception) =>
+        exception is LiteException ||
+        exception is LiteAsyncException { InnerException: LiteException };
 
     public async Task<ForwardMessageEntry?> GetForwardMessageByIdAsync(string forwardId)
     {
+        forwardId = NormalizeForwardId(forwardId);
         return await forwardMessagesCollection.FindOneAsync(x => x.ForwardId == forwardId);
+    }
+
+    private static string NormalizeForwardId(string forwardId)
+    {
+        const string prefix = "merrybot://forward/";
+        if (!forwardId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return forwardId;
+        var encoded = forwardId[prefix.Length..];
+        try
+        {
+            return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded.Replace('-', '+').Replace('_', '/') + new string('=', (4 - encoded.Length % 4) % 4)));
+        }
+        catch (FormatException)
+        {
+            return forwardId;
+        }
     }
 
     public async Task<bool> ForwardMessageExistsAsync(string forwardId)
@@ -504,27 +719,52 @@ public class HistoryRecorder : IDisposable
         }
     }
 
-    public async Task<bool> RecordAiMessageAsync(long groupId, string messageType, string content)
+    /// <summary>
+    /// 迁移 v2 → v3：ai_messages 的 GroupId 改为统一会话标识 SessionKey。
+    /// 旧文档按「qq/group/{群号}」补齐 SessionKey 并移除 GroupId。
+    /// </summary>
+    private async Task MigrateAiMessageSessionKeysV3Async()
     {
-        var entry = new AiMessageEntry(GenerateId(), groupId, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var collection = database.GetCollection("ai_messages");
+        var documents = await collection.FindAllAsync();
+        foreach (var document in documents)
+        {
+            if (document.TryGetValue("SessionKey", out var sessionKey) && sessionKey.IsString && !string.IsNullOrEmpty(sessionKey.AsString))
+            {
+                continue;
+            }
+            if (!document.TryGetValue("GroupId", out var groupId) || !groupId.IsInt64)
+            {
+                continue;
+            }
+            document["SessionKey"] = $"qq/group/{groupId.AsInt64}";
+            document.Remove("GroupId");
+            await collection.UpdateAsync(document);
+        }
+    }
+
+    public async Task<bool> RecordAiMessageAsync(string sessionKey, string messageType, string content, int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
+    {
+        var entry = new AiMessageEntry(GenerateId(), sessionKey, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), inputTokens, outputTokens, totalTokens);
         await aiMessagesCollection.InsertAsync(entry);
         return true;
     }
 
-    public async Task<List<AiMessageEntry>> GetAiMessagesByGroupIdAsync(long groupId, int page = 1, int pageSize = 50)
+    public async Task<List<AiMessageEntry>> GetAiMessagesBySessionKeyAsync(string sessionKey, int page = 1, int pageSize = 50)
     {
+        page = Math.Max(1, page);
         var skip = (page - 1) * pageSize;
         return await aiMessagesCollection.Query()
-            .Where(x => x.GroupId == groupId)
+            .Where(x => x.SessionKey == sessionKey)
             .OrderByDescending(x => x.Id)
             .Skip(skip)
             .Limit(pageSize)
             .ToListAsync();
     }
 
-    public async Task<int> GetAiMessageCountByGroupIdAsync(long groupId)
+    public async Task<int> GetAiMessageCountBySessionKeyAsync(string sessionKey)
     {
-        return await aiMessagesCollection.CountAsync(x => x.GroupId == groupId);
+        return await aiMessagesCollection.CountAsync(x => x.SessionKey == sessionKey);
     }
 
     public async Task<int> GetMessageCountByGroupIdAsync(long groupId)

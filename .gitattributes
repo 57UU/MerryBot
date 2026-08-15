@@ -1,7 +1,8 @@
 ###############################################################################
 # Set default behavior to automatically normalize line endings.
+# eol=lf 强制检出 LF，避免混合行尾（.editorconfig 亦声明 end_of_line = lf）。
 ###############################################################################
-* text=auto
+* text=auto eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

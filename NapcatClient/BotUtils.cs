@@ -73,7 +73,8 @@ public static class BotUtils
             }
         }
         var tail = sb.ToString();
-        if (!string.IsNullOrWhiteSpace(tail))
+        // 与中间段落使用相同的 sb.Length > 0 判断，保证全空格段落在任何位置行为一致
+        if (sb.Length > 0)
         {
             result.Add(TextData.FromText(tail));
         }

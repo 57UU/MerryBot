@@ -1,0 +1,290 @@
+using System.ComponentModel;
+using Agent;
+using BrowserService;
+using CommonLib;
+using LlmBackend;
+using NapcatClient.Action;
+using NapcatClient.MessageType;
+
+namespace BotPlugin;
+
+/// <summary>
+/// 消息工具集：读取引用消息，或在用户明确要求时将 Markdown 渲染为图片发送到当前群。
+/// </summary>
+public class MessageTool : ToolSet
+{
+    /// <summary>工具输出最大长度（字符），避免撑爆上下文</summary>
+    private const int MaxOutputLength = 6000;
+    private const int MaxMarkdownLength = 30_000;
+    private static readonly HttpClient ImageHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+    };
+
+    private readonly IMessageService messageService;
+    private readonly MessageChannel channel;
+    private readonly Browser browser;
+    private readonly SessionKey session;
+    private readonly long groupId;
+    private readonly VisionRouter visionRouter;
+    /// <summary>图片下载大小上限（字节），防止超大图片撑爆上下文</summary>
+    private readonly int maxImageBytes;
+    private readonly ToolSetBridge bridge;
+
+    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes)
+    {
+        this.messageService = messageService;
+        this.channel = channel;
+        this.browser = browser;
+        this.session = session;
+        this.groupId = long.Parse(session.Id);
+        this.visionRouter = visionRouter;
+        this.maxImageBytes = maxImageBytes;
+
+        var builder = new ToolSetBridge.Builder();
+        builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
+        builder.AddFunction<MessageArgs>("get_reply", "获取被回复消息的完整内容", args => GetReplyMessage(args.messageId));
+        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按时间倒序，第 1 页为最近的消息", args => GetGroupContextAsync(args));
+        // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
+        if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
+        {
+            builder.AddFunction<GetMessageImageArgs>("load_image", "获取对话中的图片并查看。", GetMessageImageAsync);
+        }
+        builder.AddFunction<MarkdownMessageArgs>("send_markdown", "以MD格式发送文本", args => SendMarkdownMessage(args.markdown));
+        bridge = builder.Build();
+    }
+
+    /// <summary>工具参数：消息 ID</summary>
+    private sealed class MessageArgs
+    {
+        [Description("消息ID")]
+        public string messageId { get; set; } = string.Empty;
+    }
+
+    private sealed class GetMessageImageArgs
+    {
+        [Description("图片引用地址")]
+        public string image { get; set; } = string.Empty;
+    }
+
+    /// <summary>群聊上下文分页参数：按时间倒序，第 1 页为最近的消息。</summary>
+    private sealed class GetGroupContextArgs
+    {
+        [Description("页码，从 1 开始，第 1 页为最近的消息")]
+        public int page { get; set; } = 1;
+
+        [Description("每页消息条数，默认 20，范围 1-50")]
+        public int pageSize { get; set; } = 20;
+    }
+
+    private sealed class MarkdownMessageArgs
+    {
+        [Description("markdown内容")]
+        public string markdown { get; set; } = string.Empty;
+    }
+
+    public override IList<ToolDef> Tools() => bridge.Tools();
+    public override Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd)
+        => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
+    public override string? Prompt() => bridge.Prompt();
+
+    /// <summary>
+    /// 读取合并转发消息的完整内容。数据来自本地历史库（消息进入时已随资源一起落库）。
+    /// </summary>
+    private async Task<string> GetForwardMessage(string messageId)
+    {
+        var entry = await messageService.GetForwardAsync(messageId, groupId);
+        if (entry == null || entry.Messages.Count == 0)
+        {
+            return $"未找到转发消息: {messageId}";
+        }
+        return Cap(string.Join("\n", entry.Messages.Select(FormatMessage)));
+    }
+
+    /// <summary>
+    /// 读取被回复消息的完整内容。支持消息 ID 或处理链提供的本地 URI。
+    /// </summary>
+    private async Task<string> GetReplyMessage(string messageId)
+    {
+        var message = await messageService.GetReplyAsync(groupId, messageId);
+        if (message == null)
+        {
+            return $"未找到消息: {messageId}（可能已被撤回、未记录或不在当前群）";
+        }
+        return FormatMessage(message);
+    }
+
+    /// <summary>
+    /// 分页获取群聊历史消息上下文：按时间倒序，第 1 页为最近的消息。
+    /// 附带总条数与页码信息，便于模型逐页翻看早期对话。
+    /// </summary>
+    private async Task<string> GetGroupContextAsync(GetGroupContextArgs args)
+    {
+        var page = Math.Max(1, args.page);
+        var pageSize = Math.Clamp(args.pageSize, 1, 50);
+        var messages = await messageService.GetGroupMessagesAsync(groupId, page, pageSize);
+        var total = await messageService.GetGroupMessageCountAsync(groupId);
+        if (messages.Count == 0)
+        {
+            return total == 0
+                ? "当前群暂无历史消息。"
+                : $"没有更多历史消息了（共 {total} 条，当前第 {page} 页）。";
+        }
+
+        var totalPages = Math.Max(1, (total + pageSize - 1) / pageSize);
+        var body = string.Join("\n", messages.Select(FormatMessage));
+        return Cap($"群聊历史消息（共 {total} 条，第 {page}/{totalPages} 页，每页 {pageSize} 条）：\n{body}");
+    }
+
+    /// <summary>按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，</summary>
+    /// 否则调用辅助视觉模型生成文字描述。引用来自消息文本中显示的 image 标识
+    /// （pipeline 已把图片 Url/File 改写为 merrybot://resource/image/{hash} 本地引用）。
+    /// </summary>
+    private async Task<string> GetMessageImageAsync(GetMessageImageArgs args, CancellationToken cancellationToken, Action<Message> onIterationAdd)
+    {
+        var reference = args.image?.Trim() ?? string.Empty;
+        if (reference.Length == 0)
+        {
+            return "image 参数不能为空：请传入消息文本中显示的图片引用（如 merrybot://resource/image/xxx 或 http(s):// 图片地址）。";
+        }
+
+        var (data, contentType) = await LoadImageByReferenceAsync(reference, cancellationToken);
+        if (data == null || data.Length == 0)
+        {
+            return $"无法读取图片: {reference}（引用无效或资源不存在）";
+        }
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            contentType = MimeTypes.GuessImageContentType(reference) ?? "image/png";
+        }
+
+        var caption = $"对话图片: {reference}";
+        if (visionRouter.MainHasVision)
+        {
+            onIterationAdd(VisionRouter.BuildImageMessage(data, contentType, caption));
+            return $"已加载图片 {reference} 并注入对话，请直接查看图片内容。";
+        }
+
+        if (!visionRouter.HasVisionFallback)
+        {
+            return "主模型不具备视觉能力，且未配置辅助视觉模型（vision-llm），无法查看图片。";
+        }
+        var description = await visionRouter.DescribeImageAsync(data, contentType, reference, cancellationToken);
+        return $"图片描述（{reference}）：{description}";
+    }
+
+    /// <summary>按引用解析图片数据：本地资源 → 本地库；http(s) → 下载（预检+限流）；base64:// → 解码。</summary>
+    private async Task<(byte[]? Data, string? ContentType)> LoadImageByReferenceAsync(string reference, CancellationToken cancellationToken)
+    {
+        if (LocalMessageReference.IsResource(reference))
+        {
+            var resource = await messageService.GetResourceAsync(reference);
+            return resource == null ? (null, null) : (resource.Data, resource.ContentType);
+        }
+
+        if (reference.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || reference.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                return await DownloadImageAsync(reference, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // 取消继续传播（会话取消/工具超时），不当作下载失败吞掉
+            }
+            catch (Exception e)
+            {
+                ConsoleLogger.Instance.Warn($"下载图片失败: {reference}: {e.Message}");
+                return (null, null);
+            }
+        }
+
+        if (reference.StartsWith("base64://", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(reference["base64://".Length..]);
+                return (bytes, "image/png");
+            }
+            catch (FormatException)
+            {
+                return (null, null);
+            }
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    /// 下载图片：Content-Length 预检 + 流式读取累计上限，超限立即中断。
+    /// </summary>
+    private async Task<(byte[]? Data, string? ContentType)> DownloadImageAsync(string url, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = await ImageHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: HTTP {(int)response.StatusCode}");
+            return (null, null);
+        }
+
+        // Content-Length 预检：声明超限直接拒绝，不下载
+        if (response.Content.Headers.ContentLength is { } declaredLength && declaredLength > maxImageBytes)
+        {
+            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: Content-Length {declaredLength} 超过上限 {maxImageBytes}");
+            return (null, null);
+        }
+
+        // 流式读取累计上限：实际大小超限立即中断，防止压缩炸弹/无 Content-Length 的超大响应
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int total = 0;
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+            total += read;
+            if (total > maxImageBytes)
+            {
+                ConsoleLogger.Instance.Warn($"下载图片失败: {url}: 实际大小超过上限 {maxImageBytes}，已中断");
+                return (null, null);
+            }
+            buffer.Write(chunk, 0, read);
+        }
+        return (buffer.ToArray(), response.Content.Headers.ContentType?.MediaType);
+    }
+
+    /// <summary>与群历史上下文相同的消息渲染格式：[时间] 昵称: 内容</summary>
+    private static string FormatMessage(ProcessedMessage m)
+    {
+        var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
+        var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
+        var content = string.Join("", m.MessageChain.Select(tm => tm.ToString()));
+        return $"[{timeStr}] {name}: {content}";
+    }
+    private async Task<string> SendMarkdownMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            throw new ArgumentException("Markdown 内容不能为空。", nameof(message));
+        }
+        if (message.Length > MaxMarkdownLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(message), $"Markdown 内容不能超过 {MaxMarkdownLength} 个字符。");
+        }
+
+        var image = await browser.TakeMarkdownScreenshot(message);
+        await channel.SendMessage(session, [ImageData.FromBinary(image)]);
+        return "Markdown 已渲染为图片并发送到当前群。";
+    }
+
+    private static string Cap(string text) =>
+        text.Length <= MaxOutputLength
+            ? text
+            : text[..MaxOutputLength] + $"\n…（内容过长已截断，全文共 {text.Length} 字符）";
+}

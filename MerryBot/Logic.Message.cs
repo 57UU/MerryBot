@@ -1,5 +1,6 @@
 
 
+using BotPlugin;
 using NapcatClient;
 using NapcatClient.MessageType;
 
@@ -7,7 +8,7 @@ namespace MerryBot;
 
 internal partial class Logic
 {
-    private void OnGroupMessageMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
+    private void OnMessage(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         foreach (var i in plugins)
         {
@@ -15,54 +16,46 @@ internal partial class Logic
             {
                 //if the plugin is not enable, skip it
                 continue;
-            }
-            try
-            {
-                i.Instance.OnGroupMessageMentioned(groupId, chain, data);
-            }
-            catch (Exception e)
-            {
-                logger.Warn(e);
             }
 
-        }
-    }
-    private void OnGroupMessageNotMentioned(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
-    {
-        foreach (var i in plugins)
-        {
-            if (!i.Instance.IsEnable)
+            if (IsInterceptorActive(i, context))
             {
-                //if the plugin is not enable, skip it
                 continue;
             }
-            try
-            {
-                i.Instance.OnGroupMessageNotMentioned(groupId, chain, data);
-            }
-            catch (Exception e)
-            {
-                logger.Warn(e);
-            }
+            var pluginChain = messageChain.Select(message => message.Clone()).ToList();
+            _ = InvokePluginAsync(i, isMentioned, command, pluginChain, context);
         }
     }
-    private void OnGroupMessage(long groupId, ReadOnlySpan<TypedMessage> chain, ReceivedGroupMessage data)
+
+    /// <summary>逐个执行插件的拦截器；单个拦截器抛异常时记录日志并继续，不中断整条拦截链与消息分发。</summary>
+    private bool IsInterceptorActive(PluginInfo plugin, MessageContext context)
     {
-        foreach (var i in plugins)
+        foreach (var interceptor in plugin.Interop.Interceptors)
         {
-            if (!i.Instance.IsEnable)
-            {
-                //if the plugin is not enable, skip it
-                continue;
-            }
             try
             {
-                i.Instance.OnGroupMessage(groupId, chain, data);
+                if (interceptor(context))
+                {
+                    return true;
+                }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                logger.Warn(e);
+                logger.Warn(ex, "插件拦截器执行失败: {0}", plugin.PluginTag.Id);
             }
+        }
+        return false;
+    }
+
+    private async Task InvokePluginAsync(PluginInfo plugin, bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
+    {
+        try
+        {
+            await plugin.Instance.OnMessageAsync(isMentioned, command, messageChain, context);
+        }
+        catch (Exception exception)
+        {
+            logger.Warn(exception, "插件消息处理失败: {0}", plugin.PluginTag.Id);
         }
     }
 }

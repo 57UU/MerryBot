@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,11 +9,16 @@
 
   <ItemGroup>
     <PackageReference Include="NLog" Version="6.1.3" />
-    <PackageReference Include="Tomlyn.Signed" Version="2.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MerryBot.Test" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DataProvider\DataProvider.csproj" />
+    <ProjectReference Include="..\DataService\DataService.csproj" />
+    <ProjectReference Include="..\MerryBot.WebUI\MerryBot.WebUI.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
     <ProjectReference Include="..\plugins\plugins.csproj" />
   </ItemGroup>

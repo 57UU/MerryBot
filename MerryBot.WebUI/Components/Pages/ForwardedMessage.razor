@@ -1,0 +1,133 @@
+@page "/forwardedmessage"
+@using DataService
+@using Microsoft.Extensions.Logging
+@rendermode InteractiveServer
+@inject HistoryRecorder HistoryRecorder
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject ILogger<ForwardedMessage> Logger
+
+<PageTitle>转发消息</PageTitle>
+
+<div class="container-custom" style="height: 100%;">
+    <div class="card-full-height">
+        <div class="card-header-custom">
+            @if (IsEmbed)
+            {
+                <button type="button" class="modal-close-btn-embed" aria-label="关闭" @onclick="CloseModal">×</button>
+            }
+            else
+            {
+                <button type="button" class="btn-link-custom back-link-custom" @onclick="NavigateBack">← 返回</button>
+            }
+            @(ForwardEntry != null ? $"转发消息详情 ({ForwardEntry.Messages.Count} 条)" : "转发消息")
+        </div>
+        <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+            @if (string.IsNullOrEmpty(Id))
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    未指定转发消息ID
+                </div>
+            }
+            else if (IsLoading)
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    加载中...
+                </div>
+            }
+            else if (ForwardEntry == null)
+            {
+                <div class="text-center-custom text-muted-custom mt-5-custom">
+                    未找到转发消息
+                </div>
+            }
+            else
+            {
+                <div class="message-container-custom">
+                    @foreach (var message in SortedMessages)
+                    {
+                        <div class="message-item-custom mb-3-custom">
+                            <div class="message-header-custom">
+                                <p>
+                                    <strong>@message.SenderNickname</strong>
+                                    @message.SenderId
+                                    @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
+                                </p>
+                                <span class="text-muted-custom float-end-custom">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="message-content-custom">
+                                @foreach (var msg in message.Messages)
+                                {
+                                    <MessageRenderer Msg="msg" Mode="MessageRenderMode.Link" />
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Id { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? Embed { get; set; }
+
+    private bool IsEmbed => Embed == "1";
+    private ForwardMessageEntry? ForwardEntry { get; set; }
+    private IReadOnlyList<GroupMessage> SortedMessages { get; set; } = Array.Empty<GroupMessage>();
+    private bool IsLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadForwardMessage();
+    }
+
+    private async Task LoadForwardMessage()
+    {
+        IsLoading = true;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(Id))
+            {
+                ForwardEntry = await HistoryRecorder.GetForwardMessageByIdAsync(Id);
+                // 排序仅做一次，避免每次渲染重排
+                SortedMessages = ForwardEntry != null
+                    ? ForwardEntry.Messages.OrderBy(m => m.Time).ToList()
+                    : Array.Empty<GroupMessage>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载转发消息失败: id={Id}", Id);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("parent.closeForwardModal");
+        }
+        catch (JSDisconnectedException)
+        {
+            // 电路已断开，忽略
+        }
+    }
+
+    private void NavigateBack()
+    {
+        // 优先回退历史栈，无历史则回首页
+        NavigationManager.NavigateTo("/");
+    }
+}

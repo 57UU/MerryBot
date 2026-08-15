@@ -1,5 +1,6 @@
 
 
+using DataProvider;
 using MerryBot;
 using NapcatClient;
 using NLog;
@@ -9,7 +10,6 @@ string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
 string logFileDir = "log";
 string dbPath = "plugin_data.db";
 
-ConfigManager.SettingFile = Path.Combine(dataPath, "setting.toml");
 logFileDir = Path.Combine(dataPath, logFileDir);
 dbPath = Path.Combine(dataPath, dbPath);
 
@@ -23,13 +23,24 @@ if (Utils.CreateDirectory(logFileDir))
 }
 var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
-ConfigManager.Initialize().Wait();
+var pluginDb = new PluginStorageDatabase(dbPath);
+ConfigManager.Initialize(pluginDb).Wait();
 //init logger
-NLog.LogManager.Setup().LoadConfiguration(builder =>
+var nlogConfig = new NLog.Config.LoggingConfiguration();
+var coloredConsole = new NLog.Targets.ColoredConsoleTarget("console")
 {
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToConsole();
-    builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: $"{logFilePath}.log");
-});
+    Layout = "${time:format=HH\\:mm\\:ss} ${level:uppercase=true:padding=-5} ${message}${onexception: ${exception:format=tostring}}",
+    UseDefaultRowHighlightingRules = true,
+};
+nlogConfig.AddTarget(coloredConsole);
+nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, coloredConsole);
+var fileTarget = new NLog.Targets.FileTarget("file")
+{
+    FileName = $"{logFilePath}.log",
+};
+nlogConfig.AddTarget(fileTarget);
+nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, fileTarget);
+NLog.LogManager.Configuration = nlogConfig;
 var currentLogger = LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
 
@@ -40,10 +51,10 @@ if (config.AuthorizedUser < 0)
 }
 
 var logger = new NLogAdapter();
+// 构造不再同步等待登录信息（账号信息由 BotClient 后台异步获取），Napcat 未启动也能正常启动进程
 var botClient = new BotClient(config.NapcatServer, config.NapcatToken, logger, dataPath);
 
-
-Logic logic = new Logic(botClient, dbPath);
+Logic logic = new Logic(botClient, pluginDb);
 
 // 使用 CancellationTokenSource 来控制程序生命周期
 using var cts = new CancellationTokenSource();
@@ -60,3 +71,4 @@ await Utils.WaitForShutdownAsync(cts.Token);
 
 currentLogger.Info("Application is shutting down...");
 logic.Shutdown();
+return 0;
