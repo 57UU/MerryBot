@@ -11,7 +11,7 @@ using System.Text;
 namespace BotPlugin;
 
 [PluginTag("agent", "Agent", "强大的Agent机器人")]
-public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManagementService
+public partial class AgentPlugin : Plugin
 {
     private readonly ILlmProviderRegistry llmProvider;
     private readonly AgentSessionManager sessionManager;
@@ -35,17 +35,19 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
     /// <summary>控制命令类型：None 为普通聊天消息，New/Compact 为会话控制命令。</summary>
     private enum ControlKind { None, New, Compact }
 
-    private sealed record PendingGroupMessage(long SenderId, string Content, ControlKind Kind = ControlKind.None, string? Topic = null);
+    private sealed record PendingGroupMessage(long SenderId, string? SenderNickname, string Content, ControlKind Kind = ControlKind.None, string? Topic = null);
     private readonly AgentConfig agentConfig;
 
-    public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider, AgentConfig agentConfig) : base(interop)
+    public AgentPlugin(PluginInterop interop, ILlmProviderRegistry llmProvider, AgentConfig agentConfig, AgentServicePlugin servicePlugin) : base(interop)
     {
         this.llmProvider = llmProvider;
         this.agentConfig = agentConfig;
         Logger.Info("agent plugin start");
 
-        skillService = new FileSkillManagementService(Path.Combine(Interop.PathPrefix, "skills"));
-        memoryService = new MemoryManagementService(Interop.PluginStorage.PluginDatabaseScope);
+        // Skill/记忆服务由 AgentServicePlugin 持有（同一程序集，internal 属性可见）；
+        // 依赖注入保证 servicePlugin 先于本插件构造完成
+        skillService = servicePlugin.SkillService;
+        memoryService = servicePlugin.MemoryService;
         browser = new Browser(new BrowserOptions
         {
             BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
@@ -124,13 +126,12 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                 return Task.CompletedTask;
             }
             var args = string.Join(' ', command.Args);
-            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, kind,
+            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, string.Empty, kind,
                 Topic: kind == ControlKind.Compact ? args : null));
             // /new 带参数时，参数作为新对话第一条消息（与 #新对话 后接内容语义一致）
             if (kind == ControlKind.New && args.Length > 0)
             {
-                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
-                    $"[id:{context.SenderId},nickname:{context.SenderNickname}]{args}"));
+                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, args));
             }
             return Task.CompletedTask;
         }
@@ -138,12 +139,11 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         // 关键字触发：#新对话 → 清空上下文；若关键字后还有内容，作为新对话第一条消息
         if (rawText.Contains("#新对话"))
         {
-            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, string.Empty, ControlKind.New));
+            Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, string.Empty, ControlKind.New));
             var rest = rawText.Replace("#新对话", string.Empty).Trim();
             if (rest.Length > 0)
             {
-                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
-                    $"[id:{context.SenderId},nickname:{context.SenderNickname}]{rest}"));
+                Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, rest));
             }
             return Task.CompletedTask;
         }
@@ -153,8 +153,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             return Task.CompletedTask;
         }
 
-        Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId,
-            $"[id:{context.SenderId},nickname:{context.SenderNickname}]{rawText}"));
+        Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, rawText));
         return Task.CompletedTask;
     }
 
@@ -281,10 +280,10 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         {
             // 单条消息也标注发送者，与批量格式一致：模型据此识别"当前用户"身份
             //（记忆写入授权等场景需要 user_id）
-            return $"[用户 {batch[0].SenderId}] {batch[0].Content}";
+            return $"[用户 {batch[0].SenderId}(昵称:{batch[0].SenderNickname})] {batch[0].Content}";
         }
 
-        var messages = batch.Select(item => $"[用户 {item.SenderId}] {item.Content}");
+        var messages = batch.Select(item => $"[用户 {item.SenderId}(昵称:{item.SenderNickname})] {item.Content}");
         return $"在处理上一轮请求期间，你收到了以下消息。请按消息顺序综合回复：\n{string.Join("\n", messages)}";
     }
 
@@ -331,32 +330,4 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         rateLimiter.Dispose();
         browser.Dispose();
     }
-
-    Task<IReadOnlyList<ManagedSkill>> ISkillManagementService.ListSkillsAsync(CancellationToken cancellationToken)
-        => skillService.ListSkillsAsync(cancellationToken);
-    Task<string> ISkillManagementService.ReadSkillAsync(string name, bool includeDisabled, CancellationToken cancellationToken)
-        => skillService.ReadSkillAsync(name, includeDisabled, cancellationToken);
-    Task ISkillManagementService.UploadSkillAsync(SkillUpload upload, CancellationToken cancellationToken)
-        => skillService.UploadSkillAsync(upload, cancellationToken);
-    Task ISkillManagementService.SetSkillEnabledAsync(string name, bool enabled, CancellationToken cancellationToken)
-        => skillService.SetSkillEnabledAsync(name, enabled, cancellationToken);
-    Task ISkillManagementService.DeleteSkillAsync(string name, CancellationToken cancellationToken)
-        => skillService.DeleteSkillAsync(name, cancellationToken);
-
-    Task<IReadOnlyList<ManagedMemorySession>> IMemoryManagementService.ListMemorySessionsAsync(CancellationToken cancellationToken)
-        => memoryService.ListMemorySessionsAsync(cancellationToken);
-    Task<string> IMemoryManagementService.GetMemoryIndexAsync(string sessionKey, CancellationToken cancellationToken)
-        => memoryService.GetMemoryIndexAsync(sessionKey, cancellationToken);
-    Task IMemoryManagementService.SaveMemoryIndexAsync(string sessionKey, string content, CancellationToken cancellationToken)
-        => memoryService.SaveMemoryIndexAsync(sessionKey, content, cancellationToken);
-    Task<IReadOnlyList<ManagedMemory>> IMemoryManagementService.ListMemoriesAsync(string sessionKey, CancellationToken cancellationToken)
-        => memoryService.ListMemoriesAsync(sessionKey, cancellationToken);
-    Task<ManagedMemory?> IMemoryManagementService.GetMemoryAsync(string sessionKey, string key, CancellationToken cancellationToken)
-        => memoryService.GetMemoryAsync(sessionKey, key, cancellationToken);
-    Task IMemoryManagementService.SaveMemoryAsync(string sessionKey, string key, string content, CancellationToken cancellationToken)
-        => memoryService.SaveMemoryAsync(sessionKey, key, content, cancellationToken);
-    Task<bool> IMemoryManagementService.DeleteMemoryAsync(string sessionKey, string key, CancellationToken cancellationToken)
-        => memoryService.DeleteMemoryAsync(sessionKey, key, cancellationToken);
-    Task<string?> IMemoryManagementService.GetPromptInjectionAsync(string sessionKey, CancellationToken cancellationToken)
-        => memoryService.GetPromptInjectionAsync(sessionKey, cancellationToken);
 }

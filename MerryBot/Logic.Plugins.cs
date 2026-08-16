@@ -46,7 +46,9 @@ internal partial class Logic
                 var pluginStorage = new PluginStorage(
                             (s) => PluginStorageDatabase.StorePluginData(attribute.Id, s),
                             () => PluginStorageDatabase.GetPluginData(attribute.Id),
-                            PluginStorageDatabase.CreateScope(attribute.Id)
+                            // agent-service 是 Agent 的对外服务面（Skill/记忆管理），
+                            // 必须与 agent 共享同一数据库命名空间，否则存量记忆/历史数据会因集合名变化而“消失”
+                            PluginStorageDatabase.CreateScope(attribute.Id == "agent-service" ? "agent" : attribute.Id)
                             );
                 var interop = new PluginInterop(
                 new PluginLogger(attribute.Id),
