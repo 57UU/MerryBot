@@ -34,7 +34,7 @@ public record BrowserOptions
     /// </summary>
     public double FontScale { get; init; } = 1.2;
     public double ActualPixelScaleFactor { get; private set; } = 1;
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
     public string? BinaryPath { get; init; } = null;
     public string? ChromeDriverPath { get; init; } = null;
     public void AdaptSystem(){
@@ -75,9 +75,7 @@ public partial class Browser : IDisposable
     readonly BrowserOptions browserOptions;
 
     private static Task<string> LoadScript(string fileName)
-    {
-        return File.ReadAllTextAsync("./javascript/" + fileName, Encoding.UTF8);
-    }
+        => File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "javascript", fileName), Encoding.UTF8);
     private Task? scriptsLoadTask;
     private readonly object scriptsLoadLock = new();
     /// <summary>
@@ -303,6 +301,23 @@ public partial class Browser : IDisposable
                 mutex.Release();
             }
         });
+
+        // 整体超时看门狗：Timeout 语义为"整体操作时限"。
+        // 各子阶段（PageLoad/等待/脚本执行）超时之和可能远超配置值，且 WebDriver 同步调用
+        // 卡死时无兜底会永久挂起；超时后强制关闭浏览器中断卡住的调用，下一次请求会重建。
+        var completed = await Task.WhenAny(task, Task.Delay(browserOptions.Timeout));
+        if (completed != task)
+        {
+            try
+            {
+                CloseBrowser();
+            }
+            catch
+            {
+                // 清理失败不掩盖超时结果
+            }
+            return $"页面加载失败: 页面加载超时（{browserOptions.Timeout.TotalSeconds:F0} 秒）";
+        }
 
         try
         {

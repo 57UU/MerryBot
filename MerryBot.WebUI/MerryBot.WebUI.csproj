@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Tomlyn.Signed" Version="2.4.1" />
+    <PackageReference Include="Tomlyn.Signed" Version="2.10.1" />
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\DataService\DataService.csproj" />
     <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
