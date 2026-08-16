@@ -587,7 +587,7 @@
     {
         try
         {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}/delete");
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/delete?id={Uri.EscapeDataString(modelId)}");
             await LoadConfigAsync();
         }
         catch (Exception ex)

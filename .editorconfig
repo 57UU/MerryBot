@@ -1,6 +1,11 @@
 # 如果要从更高级别的目录继承 .editorconfig 设置，请删除以下行
 root = true
 
+# xUnit v3 分析器建议规则：xUnit1051 建议测试使用 TestContext.Current.CancellationToken
+# （建议性，不影响测试正确性；保持项目 0 警告约定，抑制之）
+[*.cs]
+dotnet_diagnostic.xUnit1051.severity = none
+
 # c# 文件
 [*.cs]
 

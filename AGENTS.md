@@ -24,7 +24,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 | 定时任务 | Cronos 0.13.0（Linux 五字段 cron，含 `@daily` 等别名） |
 | LLM | 自研抽象 `LlmBackend`/`LlmClient`，支持 OpenAI Chat Completions / Responses / Anthropic Messages 三种格式 |
 | 其他 | IdGen 3.0.7（雪花 ID）、Microsoft.AspNetCore.DataProtection（API Key 加密）、Terminal.Gui（Agent.Tui）、YamlDotNet（TUI 配置）、ConsoleTables |
-| 测试 | xunit 2.9.3 + Microsoft.NET.Test.Sdk + coverlet + Microsoft.Extensions.TimeProvider.Testing（`FakeTimeProvider`） |
+| 测试 | xunit.v3 4.0.0（`xunit.v3` 包，禁用 MTP、走 VSTest 适配器）+ Microsoft.NET.Test.Sdk + coverlet + Microsoft.Extensions.TimeProvider.Testing（`FakeTimeProvider`） |
 
 ## 项目结构（解决方案 `MerryBot.sln`）
 

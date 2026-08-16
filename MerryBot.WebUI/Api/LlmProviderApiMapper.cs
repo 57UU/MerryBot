@@ -59,9 +59,10 @@ public static class LlmProviderApiMapper
                 request.EnablePromptCache), cancellationToken);
             return Results.NoContent();
         });
-        routes.MapPost("/models/{**id}/delete", async (string id, CancellationToken cancellationToken) =>
+        // 模型 ID 可能含 "/"（catch-all 不支持后跟字面量），删除走 query 参数（服务端自动解码）
+        routes.MapPost("/models/delete", async (string id, CancellationToken cancellationToken) =>
         {
-            await manager.DeleteModelAsync(Uri.UnescapeDataString(id), cancellationToken);
+            await manager.DeleteModelAsync(id, cancellationToken);
             return Results.NoContent();
         });
         routes.MapPost("/keys", async (LlmSaveKeyRequest request, CancellationToken cancellationToken) =>
