@@ -1,10 +1,5 @@
-using System.Collections.ObjectModel;
 using System.Text;
-using Terminal.Gui.Drawing;
-using Terminal.Gui.Text;
-using Terminal.Gui.ViewBase;
-using Terminal.Gui.Views;
-using Attribute = Terminal.Gui.Drawing.Attribute;
+using Agent.Tui.Core;
 
 namespace Agent.Tui;
 
@@ -12,98 +7,58 @@ public sealed partial class ChatApp
 {
     // ---------- UI helpers ----------
 
-    private void Invoke(Action action)
-    {
-        if (Environment.CurrentManagedThreadId == _mainThreadId)
-        {
-            action();
-        }
-        else
-        {
-            _app.Invoke(action);
-        }
-    }
-
     private void AppendChat(string role, string text)
     {
-        Invoke(() =>
+        var chatRole = RoleOf(role);
+        var lines = (text ?? string.Empty).Replace("\r", string.Empty).Split('\n');
+        // 只有首行带 emoji 前缀,续行按前缀显示宽度对齐缩进
+        var prefix = RolePrefix(role);
+        var indent = new string(' ', TextWidth.Measure(prefix));
+        for (int i = 0; i < lines.Length; i++)
         {
-            var chatRole = RoleOf(role);
-            var lines = (text ?? string.Empty).Replace("\r", string.Empty).Split('\n');
-            // 只有首行带 emoji 前缀，续行按前缀显示宽度对齐缩进
-            var prefix = RolePrefix(role);
-            var indent = new string(' ', TextWidth(prefix));
-            for (int i = 0; i < lines.Length; i++)
-            {
-                _chatSource.Add(i == 0 ? prefix + lines[i] : indent + lines[i]);
-                _chatRoles.Add(chatRole);
-            }
-            if (_chatSource.Count > 0)
-            {
-                _chat!.SelectedItem = _chatSource.Count - 1;
-            }
-        });
+            AppendRoleLine(chatRole, i == 0 ? prefix + lines[i] : indent + lines[i]);
+        }
+        Invalidate();
     }
 
-    /// <summary>追加一行无前缀的原始文本（带角色颜色），用于工具结果摘要等。</summary>
+    /// <summary>追加一行无前缀的原始文本(带角色颜色),用于工具结果摘要等。</summary>
     private void AppendLine(ChatRole role, string text)
     {
-        Invoke(() =>
-        {
-            _chatSource.Add(text);
-            _chatRoles.Add(role);
-            if (_chatSource.Count > 0)
-            {
-                _chat!.SelectedItem = _chatSource.Count - 1;
-            }
-        });
+        AppendRoleLine(role, text);
+        Invalidate();
     }
 
     private void AppendDebug(string line)
     {
-        if (!_debug)
-        {
-            return;
-        }
-        Invoke(() =>
-        {
-            _chatSource.Add(line);
-            _chatRoles.Add(ChatRole.Debug);
-            if (_chatSource.Count > 0)
-            {
-                _chat!.SelectedItem = _chatSource.Count - 1;
-            }
-        });
+        if (!_debug) return;
+        AppendRoleLine(ChatRole.Debug, line);
+        Invalidate();
     }
 
-    private void RefreshStatus()
+    private void AppendRoleLine(ChatRole role, string text)
     {
-        Invoke(() =>
-        {
-            var (p, m) = _cfg.ResolveActive();
-            var usage = _session?.SessionUsage;
-            var tokens = usage?.totalUsage ?? 0;
-            var cache = usage is { promptUsage: > 0 }
-                ? $" | cache: {usage.cachedUsage * 100.0 / usage.promptUsage:0}%"
-                : string.Empty;
-            var queue = Volatile.Read(ref _pendingCount) > 0 ? $" | queue: {_pendingCount}" : string.Empty;
-            _status!.Text = $"model: {m ?? "-"} | provider: {p?.Name ?? "-"} | debug: {(_debug ? "on" : "off")} | tokens: {tokens}{cache}{queue}";
-        });
+        var colored = RoleColorApply(role, text);
+        _chat.Append(colored);
     }
 
-    private void SetInputEnabled(bool enabled)
+    /// <summary>按角色给行上色,返回带 ANSI 的行。输入文本先剥离 ESC 序列(防终端注入)。</summary>
+    private static string RoleColorApply(ChatRole role, string text)
     {
-        Invoke(() =>
+        // 安全:聊天区/思考面板的文本来自 LLM/工具/用户,属不可信数据。
+        // 自研渲染直接输出 ANSI,若不过滤,内容里的 ESC 序列会直通终端(可伪造 UI/注入按键)。
+        // 只允许本层 Ansi.* 包装注入样式,内容本身剥掉全部转义序列。
+        var safe = Ansi.StripAnsi(text ?? string.Empty).ToString();
+        return role switch
         {
-            _input!.Enabled = enabled;
-            if (enabled)
-            {
-                _input.SetFocus();
-            }
-        });
+            ChatRole.User => Ansi.Wrap(Ansi.Fg(3), safe),    // 黄色
+            ChatRole.Assistant => Ansi.Wrap(Ansi.Fg(7), safe), // 白色
+            ChatRole.Error => Ansi.Wrap(Ansi.Fg(1), safe),   // 红色
+            ChatRole.Cron => Ansi.Wrap(Ansi.Fg(3), safe),
+            ChatRole.Tool => Ansi.Wrap(Ansi.Fg(2), safe),    // 绿色
+            _ => Ansi.Wrap(Ansi.Dim, safe),                 // 系统灰
+        };
     }
 
-    /// <summary>把展示用的角色名映射为行角色，用于着色。</summary>
     private static ChatRole RoleOf(string role) => role switch
     {
         "You" => ChatRole.User,
@@ -114,7 +69,6 @@ public sealed partial class ChatApp
         _ => ChatRole.System,
     };
 
-    /// <summary>角色对应的 emoji 前缀。</summary>
     private static string RolePrefix(string role) => role switch
     {
         "You" => "⭐ ",
@@ -122,50 +76,22 @@ public sealed partial class ChatApp
         "tool" => "● ",
         "error" => "✗ ",
         "Cron" => "⏰ ",
-        _ => "· ", // sys 等
+        _ => "· ",
     };
 
-    private static Color RoleColor(ChatRole role) => role switch
+    /// <summary>单行思考面板:覆盖为最近一段内容(原有滚动展示劣化为单行,节奏更快)。</summary>
+    private void SetPaneLine(string text)
     {
-        ChatRole.User => Color.Yellow, // 金黄色
-        ChatRole.Assistant => Color.White,
-        ChatRole.Error => Color.Red,
-        ChatRole.Cron => Color.Yellow,
-        ChatRole.Tool => Color.Green,
-        _ => Color.DarkGray,
-    };
-
-    /// <summary>按终端显示宽度计算（emoji/全角=2 列，ASCII=1 列）。</summary>
-    private static int TextWidth(string text)
-    {
-        var width = 0;
-        foreach (var rune in text.EnumerateRunes())
+        // 安全:思考面板内容来自 LLM 中间输出,剥离 ESC 防终端注入
+        var clean = Ansi.StripAnsi(text ?? string.Empty).ToString()
+            .Replace("\r", string.Empty).Replace("\n", " ");
+        _paneLine = clean;
+        if (_paneLine.Length > Console.WindowWidth - 4)
         {
-            width += rune.GetColumns();
+            _paneLine = TextWidth.Truncate(_paneLine, Math.Max(10, Console.WindowWidth - 7), "…");
         }
-        return width;
+        Invalidate();
     }
-    /// <summary>
-    /// 单一前景色、终端默认背景（Color.None）的 Scheme，用于状态栏/提示符等弱化或强调元素。
-    /// 关键点：显式设置所有视觉角色（Focus / Editable / Active 等）为同一个 Attribute，
-    /// 禁用 Terminal.Gui 的派生算法——否则 Focus 会交换 fg/bg、Editable 会把背景设为前景的 dim 50%，
-    /// 导致 TextField 聚焦时出现灰色/反色底色，破坏"仅外边框"的扁平视觉。
-    /// </summary>
-    private static Scheme SingleColorScheme(Color foreground)
-    {
-        var attr = new Attribute(foreground, Color.None);
-        return new Scheme
-        {
-            Normal = attr,
-            HotNormal = attr,
-            Focus = attr,
-            HotFocus = attr,
-            Active = attr,
-            HotActive = attr,
-            Highlight = attr,
-            Editable = attr,
-            ReadOnly = attr,
-            Disabled = attr,
-        };
-    }
+
+    private void RefreshStatus() => Invalidate();
 }
