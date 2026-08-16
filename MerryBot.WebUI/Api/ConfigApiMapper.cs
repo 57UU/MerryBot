@@ -15,7 +15,7 @@ public static class ConfigApiMapper
 
         var group = app.MapGroup("/api/config");
         group.MapGet("/", () => Results.Ok(new ConfigPanelDto(registry.GetSnapshot())));
-        group.MapPut("/{id}", async (string id, ConfigUpdateRequest body) =>
+        group.MapPost("/{id}", async (string id, ConfigUpdateRequest body) =>
         {
             try
             {

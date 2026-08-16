@@ -94,7 +94,7 @@
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", "/api/skills/enabled", new SkillEnabledRequest(skill.Name, !skill.Enabled));
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/skills/enabled", new SkillEnabledRequest(skill.Name, !skill.Enabled));
             await LoadAsync();
         }
         catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
@@ -108,7 +108,7 @@
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", $"/api/skills/?name={Uri.EscapeDataString(skill.Name)}");
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/skills/delete?name={Uri.EscapeDataString(skill.Name)}");
             await LoadAsync();
         }
         catch (Exception exception) { Error = $"删除失败: {exception.Message}"; }

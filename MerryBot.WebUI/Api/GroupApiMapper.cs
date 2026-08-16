@@ -103,14 +103,14 @@ public static class GroupApiMapper
             }
         });
 
-        group.MapPut("/{groupId:long}", async (long groupId) =>
+        group.MapPost("/{groupId:long}", async (long groupId) =>
         {
             if (groupId <= 0) return Results.BadRequest("群号无效。");
             await manager.AddGroupAsync(groupId);
             return Results.NoContent();
         });
 
-        group.MapDelete("/{groupId:long}", async (long groupId) =>
+        group.MapPost("/{groupId:long}/delete", async (long groupId) =>
         {
             if (groupId <= 0) return Results.BadRequest("群号无效。");
             await manager.RemoveGroupAsync(groupId);

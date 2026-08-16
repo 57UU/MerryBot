@@ -155,7 +155,7 @@
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", $"/api/memories/entries?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}&key={Uri.EscapeDataString(memory.Key)}");
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/memories/entries/delete?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}&key={Uri.EscapeDataString(memory.Key)}");
             await SelectSessionAsync(SelectedSessionKey);
             await LoadSessionsAsync();
         }
@@ -169,7 +169,7 @@
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", url, payload);
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", url, payload);
             if (reload && SelectedSessionKey is not null) await SelectSessionAsync(SelectedSessionKey);
             await LoadSessionsAsync();
         }

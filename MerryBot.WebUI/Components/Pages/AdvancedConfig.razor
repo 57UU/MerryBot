@@ -119,9 +119,9 @@
         }
         try
         {
-            string api = isConfig ? "/api/advanced/config/" : "/api/advanced/data/";
-            // _id 含 "/"（如 plugin/agent），URL 编码后由 catch-all 路由还原
-            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", api + Uri.EscapeDataString(entry.Id));
+            string api = isConfig ? "/api/advanced/config/delete" : "/api/advanced/data/delete";
+            // id 含 "/"（如 plugin/agent），经 query 传递（服务端会正确解码）
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"{api}?id={Uri.EscapeDataString(entry.Id)}");
             await LoadAsync();
         }
         catch (Exception ex)

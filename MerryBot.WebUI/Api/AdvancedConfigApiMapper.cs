@@ -24,16 +24,23 @@ public static class AdvancedConfigApiMapper
         group.MapGet("/config", async () =>
             Results.Ok((await database.GetRawConfigEntriesAsync()).Select(ToDto)));
 
-        // _id 形如 "plugin/agent"（含斜杠），使用 catch-all 参数承载
-        group.MapDelete("/data/{**id}", async (string id) =>
-            await database.DeleteRawDataEntryAsync(id) ? Results.NoContent() : Results.NotFound());
-        group.MapDelete("/config/{**id}", async (string id) =>
-            await database.DeleteRawConfigEntryAsync(id) ? Results.NoContent() : Results.NotFound());
+        // id 走 query 参数：catch-all 路径参数对 %2F 不做 URL 解码（_id 形如 "plugin/agent" 含斜杠），
+        // 且 404 会被 UseStatusCodePagesWithReExecute 以原方法重执行到 /not-found 产生 405；
+        // 删除统一返回 204（记录不存在视为已删除），不触发 404。
+        group.MapPost("/data/delete", (string id) => DeleteRawEntry(database.DeleteRawDataEntryAsync, id));
+        group.MapPost("/config/delete", (string id) => DeleteRawEntry(database.DeleteRawConfigEntryAsync, id));
     }
 
     /// <summary>把原始 BsonDocument 序列化为 pretty JSON 字符串，供页面直接展示。</summary>
     private static RawEntryDto ToDto(BsonDocument doc)
         => new(doc["_id"].AsString, JsonSerializer.Serialize(doc, true));
+
+    /// <summary>执行删除；删除成功或记录不存在均返回 204（幂等），避免 404 触发状态码重执行。</summary>
+    private static async Task<IResult> DeleteRawEntry(Func<string, Task<bool>> delete, string id)
+    {
+        await delete(id);
+        return Results.NoContent();
+    }
 }
 
 /// <summary>一条原始数据：Id 为 LiteDB _id（删除用），Bson 为文档的 pretty JSON。</summary>

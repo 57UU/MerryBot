@@ -529,7 +529,7 @@
     {
         try
         {
-            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}");
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}/delete");
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -543,7 +543,7 @@
         try
         {
             Error = null;
-            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
                 new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, EditApiFormat, true));
             KeyProviderId = EditProviderId;
             await LoadConfigAsync();
@@ -559,7 +559,7 @@
         try
         {
             Error = null;
-            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
                     EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort, EditModelEnablePromptCache));
             await LoadConfigAsync();
@@ -574,7 +574,7 @@
     {
         try
         {
-            await RequestAsync<object>("PUT", $"/api/plugins/llm-provider/default/{Uri.EscapeDataString(modelId)}");
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/default/{Uri.EscapeDataString(modelId)}");
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -587,7 +587,7 @@
     {
         try
         {
-            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}");
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}/delete");
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -600,7 +600,7 @@
     {
         try
         {
-            await RequestAsync<object>("DELETE", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(providerId)}");
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(providerId)}/delete");
             await LoadConfigAsync();
         }
         catch (Exception ex)

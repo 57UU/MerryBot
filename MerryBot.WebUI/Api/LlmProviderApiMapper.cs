@@ -33,17 +33,17 @@ public static class LlmProviderApiMapper
         routes.MapPost("/import", async (LlmCatalogImportRequest request, CancellationToken cancellationToken) =>
             Results.Ok(ToDto(await manager.ImportCatalogModelAsync(
                 await catalog.CreateImportCommandAsync(request, cancellationToken), cancellationToken))));
-        routes.MapPut("/providers/{id}", async (string id, LlmSaveProviderRequest request, CancellationToken cancellationToken) =>
+        routes.MapPost("/providers/{id}", async (string id, LlmSaveProviderRequest request, CancellationToken cancellationToken) =>
         {
             await manager.SaveProviderAsync(id, new LlmProviderSaveCommand(request.Name, request.BaseUrl, request.ApiFormat, request.Enabled), cancellationToken);
             return Results.NoContent();
         });
-        routes.MapDelete("/providers/{id}", async (string id, CancellationToken cancellationToken) =>
+        routes.MapPost("/providers/{id}/delete", async (string id, CancellationToken cancellationToken) =>
         {
             await manager.DeleteProviderAsync(id, cancellationToken);
             return Results.NoContent();
         });
-        routes.MapPut("/models/{**id}", async (string id, LlmSaveModelRequest request, CancellationToken cancellationToken) =>
+        routes.MapPost("/models/{**id}", async (string id, LlmSaveModelRequest request, CancellationToken cancellationToken) =>
         {
             // catch-all 参数不解码百分号编码，手动还原 %2F → /（否则含 / 的模型 ID 会以字面 %2F 落库）
             var modelId = Uri.UnescapeDataString(id);
@@ -59,7 +59,7 @@ public static class LlmProviderApiMapper
                 request.EnablePromptCache), cancellationToken);
             return Results.NoContent();
         });
-        routes.MapDelete("/models/{**id}", async (string id, CancellationToken cancellationToken) =>
+        routes.MapPost("/models/{**id}/delete", async (string id, CancellationToken cancellationToken) =>
         {
             await manager.DeleteModelAsync(Uri.UnescapeDataString(id), cancellationToken);
             return Results.NoContent();
@@ -68,12 +68,12 @@ public static class LlmProviderApiMapper
             Results.Ok(ToDto(await manager.SaveKeyAsync(
                 new LlmProviderKeySaveCommand(request.ProviderId, request.Name, request.Secret, request.Priority, request.Enabled),
                 cancellationToken))));
-        routes.MapDelete("/keys/{id}", async (string id, CancellationToken cancellationToken) =>
+        routes.MapPost("/keys/{id}/delete", async (string id, CancellationToken cancellationToken) =>
         {
             await manager.DeleteKeyAsync(id, cancellationToken);
             return Results.NoContent();
         });
-        routes.MapPut("/default/{**modelId}", async (string modelId, CancellationToken cancellationToken) =>
+        routes.MapPost("/default/{**modelId}", async (string modelId, CancellationToken cancellationToken) =>
         {
             await manager.SetDefaultModelAsync(Uri.UnescapeDataString(modelId), cancellationToken);
             return Results.NoContent();

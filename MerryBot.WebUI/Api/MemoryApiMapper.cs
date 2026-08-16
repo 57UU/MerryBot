@@ -31,7 +31,7 @@ public static class MemoryApiMapper
             try { return Results.Ok(await manager.GetMemoryIndexAsync(sessionKey, cancellationToken)); }
             catch (Exception exception) { return ToError(exception); }
         });
-        routes.MapPut("/index", async (MemoryIndexUpdateRequest request, CancellationToken cancellationToken) =>
+        routes.MapPost("/index", async (MemoryIndexUpdateRequest request, CancellationToken cancellationToken) =>
         {
             try
             {
@@ -45,7 +45,7 @@ public static class MemoryApiMapper
             try { return Results.Ok(await manager.ListMemoriesAsync(sessionKey, cancellationToken)); }
             catch (Exception exception) { return ToError(exception); }
         });
-        routes.MapPut("/entries", async (MemoryEntryUpdateRequest request, CancellationToken cancellationToken) =>
+        routes.MapPost("/entries", async (MemoryEntryUpdateRequest request, CancellationToken cancellationToken) =>
         {
             try
             {
@@ -54,9 +54,14 @@ public static class MemoryApiMapper
             }
             catch (Exception exception) { return ToError(exception); }
         });
-        routes.MapDelete("/entries", async (string sessionKey, string key, CancellationToken cancellationToken) =>
+        // 删除统一幂等 204：404 会被 UseStatusCodePagesWithReExecute 以原方法重执行到 /not-found 产生 405
+        routes.MapPost("/entries/delete", async (string sessionKey, string key, CancellationToken cancellationToken) =>
         {
-            try { return (await manager.DeleteMemoryAsync(sessionKey, key, cancellationToken)) ? Results.NoContent() : Results.NotFound(); }
+            try
+            {
+                await manager.DeleteMemoryAsync(sessionKey, key, cancellationToken);
+                return Results.NoContent();
+            }
             catch (Exception exception) { return ToError(exception); }
         });
     }

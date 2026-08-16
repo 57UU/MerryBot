@@ -133,7 +133,7 @@ else
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "PUT", $"/api/groups/{groupId}");
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/groups/{groupId}");
             NewGroupText = "";
             await LoadAsync();
         }
@@ -153,7 +153,8 @@ else
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", enable ? "PUT" : "DELETE", $"/api/groups/{groupId}");
+            var url = enable ? $"/api/groups/{groupId}" : $"/api/groups/{groupId}/delete";
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", url);
             await LoadAsync();
         }
         catch (Exception ex)

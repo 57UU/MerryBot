@@ -38,7 +38,7 @@ public static class SkillApiMapper
             }
             catch (Exception exception) { return ToError(exception); }
         });
-        routes.MapPut("/enabled", async (SkillEnabledRequest request, CancellationToken cancellationToken) =>
+        routes.MapPost("/enabled", async (SkillEnabledRequest request, CancellationToken cancellationToken) =>
         {
             try
             {
@@ -47,7 +47,7 @@ public static class SkillApiMapper
             }
             catch (Exception exception) { return ToError(exception); }
         });
-        routes.MapDelete("/", async (string name, CancellationToken cancellationToken) =>
+        routes.MapPost("/delete", async (string name, CancellationToken cancellationToken) =>
         {
             try
             {

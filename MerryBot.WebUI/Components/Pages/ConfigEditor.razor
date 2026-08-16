@@ -323,7 +323,7 @@
             SaveStatus.Remove(section.Id);
             await JSRuntime.InvokeAsync<object>(
                 "configApi.request",
-                "PUT",
+                "POST",
                 $"/api/config/{Uri.EscapeDataString(section.Id)}",
                 new ConfigUpdateDto(Edits[section.Id]));
             SaveStatus[section.Id] = "已保存。";
