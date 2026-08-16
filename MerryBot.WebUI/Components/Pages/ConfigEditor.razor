@@ -64,6 +64,10 @@
                                                    @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)" />
                                             <div class="config-field-description">可从已保存的模型中选择，也可以直接输入模型 ID。</div>
                                             break;
+                                        case "string" when IsPromptField(field):
+                                            <textarea id="@InputElementId(section.Id, field.Key)" class="form-control" rows="8"
+                                                      @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)">@GetText(section.Id, field.Key)</textarea>
+                                            break;
                                         case "string":
                                             <input id="@InputElementId(section.Id, field.Key)" class="form-control" value="@GetText(section.Id, field.Key)"
                                                    @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)" />
@@ -301,6 +305,11 @@
     private static bool IsLlmModelField(ConfigFieldDto field)
         => field.Type == "string"
             && field.Key.Contains("LlmModel", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>prompt 类字段内容较长，单行输入框写不下，使用多行 textarea 渲染。</summary>
+    private static bool IsPromptField(ConfigFieldDto field)
+        => field.Type == "string"
+            && field.Key.Contains("Prompt", StringComparison.OrdinalIgnoreCase);
 
     private async Task ScrollToAsync(string sectionId)
         => await JSRuntime.InvokeVoidAsync("configApi.scrollTo", SectionElementId(sectionId));
