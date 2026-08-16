@@ -1,11 +1,10 @@
 using LlmBackend;
 using LlmClient;
-using System.Collections.Concurrent;
 using System.Text;
 
 namespace Agent;
 
-public class Agent
+public partial class Agent
 {
     private ContextManager contextManager;
     private Client llmClient;
@@ -85,11 +84,14 @@ public class Agent
         var forkedContext = context.Fork();
         // 指定 topic 时要求模型围绕该主题压缩
         var instruction = string.IsNullOrWhiteSpace(topic)
-            ? "请将上文压缩为一个段落，无需保留system prompt"
-            : $"请将上文压缩为一个段落，无需保留system prompt，重点保留与主题「{topic}」相关的内容";
+            ? "请将上文对话信息压缩为一个段落，无需保留system prompt"
+            : $"请将上文对话信息压缩为一个段落，无需保留system prompt，重点保留与主题「{topic}」相关的内容";
         forkedContext.Messages.Add(Message.User(instruction));
         Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
-        var (result, tokenUsage) = await llmClient.Generate(cancellationToken, forkedContext.Messages, SystemPrompt, new LlmOptions());
+        // 压缩为纯文本摘要任务，显式禁用工具（Tools 保持 null）：
+        // 开启工具时模型可能返回 tool_calls 而摘要为空，导致 ContextManager 判定压缩失败、
+        // 保留原上下文；同时避免压缩过程产生额外的工具执行消耗。
+        var (result, tokenUsage) = await llmClient.Generate(cancellationToken, forkedContext.Messages, SystemPrompt, new LlmOptions(Tools: null));
         Log(new AgentLogEvent(
             AgentLogEventKind.ModelResponse,
             DateTimeOffset.UtcNow,
@@ -123,12 +125,13 @@ public class Agent
             };
 
             TokenUsage totalUsage = TokenUsage.Zero;
+            // 最后一次调用 LLM 的用量：其 prompt 数即当前上下文真实大小（见下方压缩判断注释）
+            TokenUsage lastUsage = TokenUsage.Zero;
             string? result = null;
-            bool compacted = false;
-            // 当前上下文累计用量，用于触发自动压缩；压缩后上下文只剩摘要，重置为 0
-            int contextUsage = 0;
 
-            // 对话循环：直到模型不再请求工具调用或达到最大迭代次数
+            // 对话循环：直到模型不再请求工具调用或达到最大迭代次数。
+            // 循环内不做上下文压缩：工具调用轮次刚把 tool 结果回填进消息列表，模型还需
+            // 基于精确消息继续推理，此时压缩会把工具链替换成摘要，打断后续工具调用。
             for (int iteration = 0; iteration < options.MaxIterations; iteration++)
             {
                 // 最后一次迭代不提供工具，强迫模型直接返回文本输出，避免收尾失败；
@@ -146,29 +149,33 @@ public class Agent
                     iterationOptions,
                     iteration + 1);
                 totalUsage += usage;
-                contextUsage += usage.totalUsage;
+                lastUsage = usage;
 
                 if (iterationResult != null)
                 {
                     result = iterationResult;
                     break;
                 }
-
-                // 上下文占用达到阈值时自动压缩；压缩会替换消息列表并重置用量，需重新获取
-                contextManager.context.TokenUsed = contextUsage;
-                if (contextManager.ContextRatio >= options.ContextCompactRatio)
-                {
-                    await Compact(cancellationToken, iteration + 1, null);
-                    messages = contextManager.context.Messages;
-                    compacted = true;
-                    contextUsage = 0;
-                }
             }
 
+            // 工具调用循环已结束（拿到最终回复或达到最大迭代次数）：统一评估压缩，
+            // 为下一条用户消息腾出上下文。
+            // 上下文占用 = 最后一次请求的 输入+输出（覆盖而非多轮累加）：
+            // 工具多轮迭代中每一轮输入都包含完整上下文（重复计数），累加 totalUsage
+            // 会虚高 N 倍，导致 ContextRatio 提前触达阈值而过度触发有损压缩；
+            // 以最后一次请求的 total（prompt+completion）衡量：输出即将作为 assistant
+            // 消息在下一轮重新计入输入，提前计入可让压缩略早触发——宁可压缩提前，
+            // 不冒工具链上下文超出模型上限的风险。
+            bool compacted = false;
+            contextManager.context.TokenUsed = lastUsage.promptUsage + lastUsage.completionUsage;
+            if (contextManager.ContextRatio >= options.ContextCompactRatio)
+            {
+                await Compact(cancellationToken, 0, null);
+                compacted = true;
+            }
             // 压缩后历史已由 Compact 替换、TokenUsed 已重置，无需重复写入
             if (!compacted && contextManager.contextHistory != null)
             {
-                contextManager.context.TokenUsed = contextUsage;
                 await contextManager.contextHistory.Append(messages);
             }
             // 模型未返回内容（空 content 且无工具调用）时给调用方一个明确的占位提示，
@@ -192,195 +199,8 @@ public class Agent
     }
 
     /// <summary>
-    /// 单次对话迭代：生成回复并回填工具调用结果。
-    /// 返回本次用量与最终回复；result 为 null 表示模型请求了工具调用，还需继续迭代
-    /// </summary>
-    private async Task<(TokenUsage usage, string? result)> RunIteration(
-        CancellationToken cancellationToken,
-        IList<Message> messages,
-        LlmOptions llmOptions,
-        int iteration)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
-
-        // 流式生成：正文增量以 ModelTextDelta 事件实时上报（供 UI 逐字渲染），
-        // 完整响应（正文/推理/工具调用/thinking 块）由终结事件承载，消息组装与原来一致
-        GenerateResponse? response = null;
-        TokenUsage usage = TokenUsage.Zero;
-        await foreach (var streamEvent in llmClient.GenerateStream(messages, SystemPrompt, llmOptions).WithCancellation(cancellationToken))
-        {
-            switch (streamEvent)
-            {
-                case TextDelta { Delta.Length: > 0 } textDelta:
-                    Log(new AgentLogEvent(
-                        AgentLogEventKind.ModelTextDelta,
-                        DateTimeOffset.UtcNow,
-                        iteration,
-                        Result: textDelta.Delta));
-                    break;
-                case StreamCompleted completed:
-                    response = completed.Response;
-                    usage = completed.Usage;
-                    break;
-            }
-        }
-        if (response is null)
-        {
-            // 流被取消/中断且未收到终结事件，无法组装助手消息；取消已由
-            // OperationCanceledException 传播，走到这里说明是异常中断
-            throw new InvalidResponseException("模型流式响应中断，未收到完整结果");
-        }
-
-        // 记录 assistant 回复（含工具调用与 reasoning）
-        string? assistantContent = response.Content;
-        var assistantMessage = new Message
-        {
-            role = Role.Assistant,
-            content = string.IsNullOrEmpty(assistantContent) ? [] : [new MessagePartText { text = assistantContent }],
-            toolCalls = response.ToolCalls ?? [],
-            reasoningContent = response.ReasoningContent ?? string.Empty,
-            thinkingBlocks = response.ThinkingBlocks ?? string.Empty,
-        };
-        messages.Add(assistantMessage);
-        RecordMessage(assistantMessage, usage);
-
-        // 无工具调用说明回复完成
-        if (response.ToolCalls is not { Length: > 0 })
-        {
-            return (usage, response.Content);
-        }
-
-        // 工具执行期间通过回调追加的内容（如图片用户消息）；
-        // 工具并发执行，故用并发队列收集。
-        var iterationAdds = new ConcurrentQueue<Message>();
-        // 并发执行所有工具调用，结果按调用顺序作为 tool 消息回填
-        string[] toolResults;
-        try
-        {
-            toolResults = await Task.WhenAll(
-                response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue)));
-        }
-        catch (OperationCanceledException)
-        {
-            // 会话取消：为全部未完成的工具调用回填"已取消"结果，避免消息列表留下
-            // 悬空 tool_calls 导致后续请求被 API 拒绝（400），随后继续传播取消
-            foreach (var toolCall in response.ToolCalls)
-            {
-                var cancelledTool = new Message
-                {
-                    role = Role.Tool,
-                    toolCallId = toolCall.Id,
-                    content = [new MessagePartText { text = $"{{\"error\": \"工具 {toolCall.Name} 已取消\"}}" }],
-                };
-                messages.Add(cancelledTool);
-                RecordMessage(cancelledTool, TokenUsage.Zero);
-            }
-            throw;
-        }
-        for (int i = 0; i < response.ToolCalls.Length; i++)
-        {
-            var toolMessage = new Message
-            {
-                role = Role.Tool,
-                toolCallId = response.ToolCalls[i].Id,
-                content = [new MessagePartText { text = toolResults[i] }],
-            };
-            messages.Add(toolMessage);
-            RecordMessage(toolMessage, TokenUsage.Zero);
-        }
-
-        // 工具追加的内容排在 tool 结果消息之后，下一轮生成时即可见
-        while (iterationAdds.TryDequeue(out var added))
-        {
-            messages.Add(added);
-            RecordMessage(added, TokenUsage.Zero);
-        }
-        return (usage, null);
-    }
-
-    /// <summary>工具结果最大长度（字符），超出截断防止长文本/超大图片 base64 撑爆上下文</summary>
-    private const int MaxToolResultLength = 8000;
-
-    /// <summary>
-    /// 按工具名在已注册的 ToolSet 中查找并执行，未注册的工具返回错误信息供模型纠正。
-    /// 工具执行异常不回抛——转为 error JSON 回填（与 ToolSetBridge 策略统一），模型可自纠；
-    /// 仅会话取消（OperationCanceledException）继续向上传播，由 RunIteration 统一回填取消结果。
-    /// </summary>
-    private async Task<string> InvokeToolAsync(
-        CancellationToken cancellationToken,
-        ToolCall toolCall,
-        int iteration,
-        Action<Message> onIterationAdd)
-    {
-        Log(new AgentLogEvent(
-            AgentLogEventKind.ToolCallStarted,
-            DateTimeOffset.UtcNow,
-            iteration,
-            toolCall.Name,
-            toolCall.Id,
-            toolCall.Arguments));
-        try
-        {
-            foreach (var toolSet in toolSets!)
-            {
-                if (toolSet.Tools().Any(t => t.function?.name == toolCall.Name))
-                {
-                    var result = await toolSet.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
-                    result = TruncateToolResult(result);
-                    Log(new AgentLogEvent(
-                        AgentLogEventKind.ToolCallCompleted,
-                        DateTimeOffset.UtcNow,
-                        iteration,
-                        toolCall.Name,
-                        toolCall.Id,
-                        toolCall.Arguments,
-                        result));
-                    return result;
-                }
-            }
-            var missingTool = $"{{\"error\": \"未找到工具: {toolCall.Name}\"}}";
-            Log(new AgentLogEvent(
-                AgentLogEventKind.ToolCallFailed,
-                DateTimeOffset.UtcNow,
-                iteration,
-                toolCall.Name,
-                toolCall.Id,
-                toolCall.Arguments,
-                missingTool));
-            return missingTool;
-        }
-        catch (OperationCanceledException)
-        {
-            // 会话取消：继续传播（不转 error JSON），由 RunIteration 统一回填取消结果
-            throw;
-        }
-        catch (Exception exception)
-        {
-            // 工具执行异常不回抛：转为截断/消毒后的 error JSON 回填，模型可自纠后重试；
-            // OperationCanceledException 已被上方两个分支处理，不会到这里
-            var errorResult = $"{{\"error\": {System.Text.Json.JsonSerializer.Serialize(exception.Message)}}}";
-            Log(new AgentLogEvent(
-                AgentLogEventKind.ToolCallFailed,
-                DateTimeOffset.UtcNow,
-                iteration,
-                toolCall.Name,
-                toolCall.Id,
-                toolCall.Arguments,
-                Exception: exception));
-            return errorResult;
-        }
-    }
-
-    private static string TruncateToolResult(string result)
-    {
-        if (string.IsNullOrEmpty(result) || result.Length <= MaxToolResultLength)
-        {
-            return result;
-        }
-        return result[..MaxToolResultLength] + "\n...[已截断]";
-    }
+    /// 单次对话迭代与工具执行链路（RunIteration / InvokeToolAsync / TruncateToolResult）
+    /// 已拆分至 Agent.RunIteration.cs 部分类。
 
     private void Log(AgentLogEvent logEvent)
     {

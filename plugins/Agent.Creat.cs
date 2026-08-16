@@ -85,7 +85,7 @@ public partial class AgentPlugin : Plugin
             resolved.Client,
             Math.Max(resolved.Model.ContextLength, 1024),
             agentOptions,
-            tools,
+            [.. tools],// 不包含自身，不允许嵌套派生子任务
             async msg =>
             {
                 var session = await sessionManager.GetSessionAsync(sessionId);

@@ -51,7 +51,7 @@ public class ContextManager
         // 而非整段旧上下文重新发送的消耗（total），避免压缩后比例仍然虚高反复触发压缩。
         // 部分 Provider 不报告 completion 用量时按字符估算摘要 tokens（中英混排约 2 字符/token）。
         // 注意：此处未计入 system prompt 的 tokens，压缩后比例可能略低于真实占用，
-        // 下一次 Chat 循环会用实际累计用量（contextManager.context.TokenUsed = contextUsage）校正。
+        // 下一次 Chat 循环会以最后一次请求的 输入+输出 用量覆盖校正（TokenUsed = 最新 promptUsage + completionUsage）。
         var summaryTokens = tokenUsage.completionUsage > 0
             ? tokenUsage.completionUsage
             : compactedText.Length / 2;
