@@ -32,16 +32,34 @@ public partial class PluginStorageDatabase : IDisposable
     }
 
     // Plugin-level
-    public async Task StorePluginData(string pluginName, object data)
+    /// <summary>
+    /// 按前缀写入插件数据。<paramref name="prefix"/> 控制物理键的命名空间
+    /// （如 "plugin" 或 "core"），默认 "plugin" 与既有插件数据保持一致。
+    /// </summary>
+    public async Task StorePluginData(string pluginName, object data, string prefix = "plugin")
     {
-        var pluginData = new PluginData { Id = pluginName, Value = data };
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        var pluginData = new PluginData { Id = $"{prefix}/{pluginName}", Value = data };
         await _pluginDataCollection.UpsertAsync(pluginData);
     }
 
-    public async Task<object?> GetPluginData(string pluginName)
+    /// <summary>
+    /// 按前缀读取插件数据；带前缀键不存在时回退到无前缀旧键，兼容此前写入的存量数据。
+    /// </summary>
+    public async Task<object?> GetPluginData(string pluginName, string prefix = "plugin")
     {
-        var pluginData = await _pluginDataCollection.FindByIdAsync(pluginName);
-        return pluginData?.Value;
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        var pluginData = await _pluginDataCollection.FindByIdAsync($"{prefix}/{pluginName}");
+        if (pluginData != null)
+        {
+            return pluginData.Value;
+        }
+
+        // 兼容此前 StorePluginData 写入的无前缀记录；下次保存时会迁移到带前缀键。
+        var legacyData = await _pluginDataCollection.FindByIdAsync(pluginName);
+        return legacyData?.Value;
     }
 
 

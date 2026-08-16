@@ -7,11 +7,10 @@ internal partial class Logic
 
     private IPluginConfig GetConfig(string pluginId, Type configType)
     {
-        var config = PluginStorageDatabase
+        if (PluginStorageDatabase
             .GetPluginConfig(pluginId)
             .GetAwaiter()
-            .GetResult() as IPluginConfig;
-        if (config is null)
+            .GetResult() is not IPluginConfig config)
         {
             // 无已存配置：生成默认配置并落盘
             config = (IPluginConfig)Activator.CreateInstance(configType)!;

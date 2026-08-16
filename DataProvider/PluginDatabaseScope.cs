@@ -52,9 +52,15 @@ public sealed class PluginDatabaseScope
         return $"{_prefix}_{encodedPluginId.Length}_{encodedPluginId}_{encodedName}";
     }
 
+    /// <summary>
+    /// 把任意 UTF-8 字符串编码为 LiteDB 集合名合法字符集。
+    /// LiteDB 5 集合名只允许字母/数字/_/$（实测，写入时校验），拒绝 - . / + = 空格等；
+    /// 故 base64 后把 + 与 / 统一映射为 _、去掉 = 填充。本编码仅用于命名隔离，不需可逆。
+    /// 注意：+ 不能映射为 URL-safe 常见的 -（- 同样被 LiteDB 拒绝）。
+    /// </summary>
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value))
             .TrimEnd('=')
-            .Replace('+', '-')
+            .Replace('+', '_')
             .Replace('/', '_');
 }

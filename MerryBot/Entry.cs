@@ -24,6 +24,8 @@ if (Utils.CreateDirectory(logFileDir))
 var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
 var pluginDb = new PluginStorageDatabase(dbPath);
+// 打开数据库后先做 schema 迁移（幂等），再初始化配置，保证新旧键格式一致
+await pluginDb.MigrateAsync();
 ConfigManager.Initialize(pluginDb).Wait();
 //init logger
 var nlogConfig = new NLog.Config.LoggingConfiguration();

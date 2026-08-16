@@ -75,7 +75,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
     public async Task RequestUpdateAsync(
         bool force,
         Func<string, Task>? notifier = null,
-        string? notifyTarget = null,
+        string? session = null,
         CancellationToken cancellationToken = default)
     {
         if (!updateLock.Wait(0))
@@ -158,9 +158,9 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             File.Move(tempFile, activeSlotFile, overwrite: true);
             logger.Info($"Build succeeded, switching to slot {targetSlot}");
             await NotifyAsync(notifier, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
-            if (notifyTarget is { } target)
+            if (session is { } notifySession)
             {
-                await SetNotifyFlagAsync(updateTarget: target);
+                await SetNotifyFlagAsync(updateSession: notifySession);
             }
             shutdown(CommonLib.ExitCode.PREBUILT);
         }
@@ -181,11 +181,11 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         return Task.CompletedTask;
     }
 
-    public async Task RequestReloadAsync(string? notifyTarget = null)
+    public async Task RequestReloadAsync(string? session = null)
     {
-        if (notifyTarget is { } target)
+        if (session is { } notifySession)
         {
-            await SetNotifyFlagAsync(reloadTarget: target);
+            await SetNotifyFlagAsync(reloadSession: notifySession);
         }
         shutdown(CommonLib.ExitCode.RELOAD);
     }
@@ -201,29 +201,29 @@ internal sealed partial class HostLifecycle : IHostLifecycle
     {
         cancellationToken.ThrowIfCancellationRequested();
         var flag = await GetNotifyAsync();
-        await database.StorePluginData(NotifyKey, new CoreLifecycleNotify());
-        return new LifecycleNotifyTargets(flag.UpdateNotifyTarget, flag.ReloadNotifyTarget);
+        await database.StorePluginData(NotifyKey, new CoreLifecycleNotify(), "core");
+        return new LifecycleNotifyTargets(flag.UpdateSession, flag.ReloadSession);
     }
 
-    /// <summary>更新/重载完成后补发的通知标志（重启后由插件消费并发送结果）。</summary>
+    /// <summary>更新/重载完成后补发的会话目标（SessionKey 序列化字符串，重启后由插件消费并发送结果）。</summary>
     private sealed class CoreLifecycleNotify
     {
-        public string? UpdateNotifyTarget { get; set; }
-        public string? ReloadNotifyTarget { get; set; }
+        public string? UpdateSession { get; set; }
+        public string? ReloadSession { get; set; }
     }
 
     private async Task<CoreLifecycleNotify> GetNotifyAsync()
     {
-        var data = await database.GetPluginData(NotifyKey);
+        var data = await database.GetPluginData(NotifyKey, "core");
         return data as CoreLifecycleNotify ?? new CoreLifecycleNotify();
     }
 
-    private async Task SetNotifyFlagAsync(string? updateTarget = null, string? reloadTarget = null)
+    private async Task SetNotifyFlagAsync(string? updateSession = null, string? reloadSession = null)
     {
         var flag = await GetNotifyAsync();
-        if (updateTarget is { } ut) flag.UpdateNotifyTarget = ut;
-        if (reloadTarget is { } rt) flag.ReloadNotifyTarget = rt;
-        await database.StorePluginData(NotifyKey, flag);
+        if (updateSession is { } us) flag.UpdateSession = us;
+        if (reloadSession is { } rs) flag.ReloadSession = rs;
+        await database.StorePluginData(NotifyKey, flag, "core");
     }
 
     /// <summary>把进度消息交给调用方提供的 notifier；发送失败只记日志，不中断更新流程。</summary>

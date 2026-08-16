@@ -8,11 +8,12 @@ public sealed record UpdateCheckResult(
 
 /// <summary>
 /// 重启后待补发的通知目标（core 在更新/重载流程成功时写入，消费后清除）。
-/// 目标为不透明字符串，语义由调用方与消费方（插件）自行约定，core 仅负责存取。
+/// 目标为 SessionKey 序列化字符串（"平台/会话类型/Id"，如 "qq/group/123"），
+/// 语义由调用方与消费方（插件）自行解析，core 仅负责存取，不绑定单一平台。
 /// </summary>
 public sealed record LifecycleNotifyTargets(
-    string? UpdateNotifyTarget,
-    string? ReloadNotifyTarget);
+    string? UpdateSession,
+    string? ReloadSession);
 
 /// <summary>
 /// core 拥有的进程生命周期能力（版本查看 / 检测更新 / 更新 / 重启 / 重载 / 退出）。
@@ -29,20 +30,20 @@ public interface IHostLifecycle
     /// <summary>
     /// 请求执行完整更新：fetch+merge → 编译到备用槽 → 切槽 → 重启（PREBUILT）。
     /// 更新过程中的进度反馈通过 <paramref name="notifier"/> 回调下发（由调用方决定发到哪，
-    /// 如群消息或日志）；<paramref name="notifyTarget"/> 非空时作为重启后补发结果的目标
-    /// （不透明字符串，重启后由插件经 <see cref="TakeNotifyTargetsAsync"/> 消费）。
+    /// 如群消息或日志）；<paramref name="session"/> 非空时作为重启后补发结果的目标
+    /// （SessionKey 序列化字符串，重启后由插件经 <see cref="TakeNotifyTargetsAsync"/> 消费）。
     /// </summary>
     Task RequestUpdateAsync(
         bool force,
         Func<string, Task>? notifier = null,
-        string? notifyTarget = null,
+        string? session = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>请求重启（重新编译当前槽）。</summary>
     Task RequestRestartAsync();
 
-    /// <summary>请求重载（不编译直接重启）。<paramref name="notifyTarget"/> 非空时重启后补发结果通知。</summary>
-    Task RequestReloadAsync(string? notifyTarget = null);
+    /// <summary>请求重载（不编译直接重启）。<paramref name="session"/> 非空时重启后补发结果通知。</summary>
+    Task RequestReloadAsync(string? session = null);
 
     /// <summary>
     /// 消费重启后待补发的通知目标：core 在更新/重载流程成功时写入待通知群号，

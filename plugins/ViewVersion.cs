@@ -29,18 +29,18 @@ public partial class ViewVersion : Plugin
         try
         {
             var targets = await Interop.Lifecycle.TakeNotifyTargetsAsync();
-            if (targets.UpdateNotifyTarget == null && targets.ReloadNotifyTarget == null)
+            if (targets.UpdateSession == null && targets.ReloadSession == null)
             {
                 return;
             }
             var gitInfo = await Interop.Lifecycle.GetVersionInfoAsync();
-            if (targets.UpdateNotifyTarget is { } updateTarget)
+            if (targets.UpdateSession is { } updateSession)
             {
-                await Channel.SendMessage(GroupSession(long.Parse(updateTarget)), $"update successful\n{gitInfo}");
+                await Channel.SendMessage(SessionKey.Parse(updateSession), $"update successful\n{gitInfo}");
             }
-            if (targets.ReloadNotifyTarget is { } reloadTarget)
+            if (targets.ReloadSession is { } reloadSession)
             {
-                await Channel.SendMessage(GroupSession(long.Parse(reloadTarget)), $"reload successful\n{gitInfo}");
+                await Channel.SendMessage(SessionKey.Parse(reloadSession), $"reload successful\n{gitInfo}");
             }
         }
         catch (Exception ex)
@@ -62,10 +62,10 @@ public partial class ViewVersion : Plugin
                 if (authorized == context.SenderId)
                 {
                     bool force = command.Args.Contains("-f");
-                    // 进度通知回调把消息发到本群；groupId 作为重启后补发结果的目标
+                    // 进度通知回调把消息发到本群；session 完整标识作为重启后补发结果的目标
                     _ = Interop.Lifecycle.RequestUpdateAsync(force,
                         async message => await Channel.SendMessage(GroupSession(groupId), message),
-                        groupId.ToString());
+                        GroupSession(groupId).ToString());
                 }
                 else
                 {
@@ -75,7 +75,7 @@ public partial class ViewVersion : Plugin
             case "reload":
                 if (authorized == context.SenderId)
                 {
-                    _ = Interop.Lifecycle.RequestReloadAsync(groupId.ToString());
+                    _ = Interop.Lifecycle.RequestReloadAsync(GroupSession(groupId).ToString());
                 }
                 else
                 {
