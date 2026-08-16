@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -237,16 +236,18 @@ public class AnthropicBackend : Backend
     }
 
     /// <summary>
-    /// 流式生成（SSE，event: 行 + data: 行）。text_delta → TextDelta、
-    /// thinking_delta → ReasoningDelta；thinking 块在 content_block_stop 收尾时
+    /// 流式生成（SSE，event: 行 + data: 行）。text_delta → OnTextDelta、
+    /// thinking_delta → OnReasoningDelta；thinking 块在 content_block_stop 收尾时
     /// 组装完整块（完整 signature 只在最后一个 thinking_delta 携带）；tool_use 的
     /// id/name 在 content_block_start 到达，参数经 input_json_delta 累积。
+    /// 中途的网络/超时/解析异常归一化为 LlmException。
     /// </summary>
-    public async IAsyncEnumerable<StreamEvent> GenerateStream(
+    public async Task GenerateStream(
+        IStreamSink sink,
         IList<Message> messages,
         string systemPrompt,
         LlmOptions options,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
@@ -264,162 +265,186 @@ public class AnthropicBackend : Backend
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
         using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
         ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
-        request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
-        request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
-        request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
-        if (response.StatusCode != HttpStatusCode.OK)
+        try
         {
-            var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
-            throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
-        }
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
+            request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
+            request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
+            request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+                throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
+            }
 
-        await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
-        using var reader = new StreamReader(responseStream, Encoding.UTF8);
-        var textBuilder = new StringBuilder();
-        var reasoningBuilder = new StringBuilder();
-        // thinking 块累积（含签名，须原样回传）；redacted_thinking 在 start 事件即完整
-        var thinkingBlocks = new List<ThinkingBlock>();
-        var pendingThinking = new Dictionary<int, PendingThinking>();
-        var pendingToolCalls = new Dictionary<int, (string Id, string Name, StringBuilder Arguments)>();
-        AnthropicUsage? usage = null;
-        string? line;
-        while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
-        {
-            if (line.Length == 0)
+            await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
+            using var reader = new StreamReader(responseStream, Encoding.UTF8);
+            var textBuilder = new StringBuilder();
+            var reasoningBuilder = new StringBuilder();
+            // thinking 块累积（含签名，须原样回传）；redacted_thinking 在 start 事件即完整
+            var thinkingBlocks = new List<ThinkingBlock>();
+            var pendingThinking = new Dictionary<int, PendingThinking>();
+            var pendingToolCalls = new Dictionary<int, (string Id, string Name, StringBuilder Arguments)>();
+            AnthropicUsage? usage = null;
+            string? line;
+            while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
             {
-                continue; // SSE 帧分隔空行
-            }
-            if (line.StartsWith("event:", StringComparison.Ordinal))
-            {
-                continue; // 事件名已由 data 内的 type 字段表达，无需单独跟踪
-            }
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-            var data = line["data:".Length..].Trim();
-            if (data.Length == 0)
-            {
-                continue;
-            }
-            var streamEvent = JsonSerializer.Deserialize<AnthropicStreamEvent>(data);
-            if (streamEvent is null)
-            {
-                continue;
-            }
-            switch (streamEvent.Type)
-            {
-                case "message_start":
-                    if (streamEvent.Message?.Usage != null)
-                    {
-                        usage = streamEvent.Message.Usage;
-                    }
-                    break;
-                case "content_block_start":
-                    if (streamEvent.ContentBlock != null)
-                    {
-                        switch (streamEvent.ContentBlock.Type)
+                if (line.Length == 0)
+                {
+                    continue; // SSE 帧分隔空行
+                }
+                if (line.StartsWith("event:", StringComparison.Ordinal))
+                {
+                    continue; // 事件名已由 data 内的 type 字段表达，无需单独跟踪
+                }
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var data = line["data:".Length..].Trim();
+                if (data.Length == 0)
+                {
+                    continue;
+                }
+                var streamEvent = JsonSerializer.Deserialize<AnthropicStreamEvent>(data);
+                if (streamEvent is null)
+                {
+                    continue;
+                }
+                switch (streamEvent.Type)
+                {
+                    case "message_start":
+                        if (streamEvent.Message?.Usage != null)
                         {
-                            case "thinking":
-                                pendingThinking[streamEvent.Index] = new PendingThinking(streamEvent.ContentBlock.Thinking ?? string.Empty);
-                                break;
-                            case "redacted_thinking":
-                                thinkingBlocks.Add(new ThinkingBlock
-                                {
-                                    Type = "redacted_thinking",
-                                    Data = streamEvent.ContentBlock.Data ?? string.Empty,
-                                });
-                                break;
-                            case "tool_use":
-                                pendingToolCalls[streamEvent.Index] = (
-                                    streamEvent.ContentBlock.Id ?? string.Empty,
-                                    streamEvent.ContentBlock.Name ?? string.Empty,
-                                    new StringBuilder());
-                                break;
+                            usage = streamEvent.Message.Usage;
                         }
-                    }
-                    break;
-                case "content_block_delta":
-                    if (streamEvent.Delta != null)
-                    {
-                        switch (streamEvent.Delta.Type)
+                        break;
+                    case "content_block_start":
+                        if (streamEvent.ContentBlock != null)
                         {
-                            case "text_delta":
-                                if (streamEvent.Delta.Text is { Length: > 0 } text)
-                                {
-                                    textBuilder.Append(text);
-                                    yield return new TextDelta(text);
-                                }
-                                break;
-                            case "thinking_delta":
-                                if (streamEvent.Delta.Thinking is { Length: > 0 } thinking)
-                                {
-                                    reasoningBuilder.Append(thinking);
-                                    yield return new ReasoningDelta(thinking);
-                                    if (pendingThinking.TryGetValue(streamEvent.Index, out var pending))
+                            switch (streamEvent.ContentBlock.Type)
+                            {
+                                case "thinking":
+                                    pendingThinking[streamEvent.Index] = new PendingThinking(streamEvent.ContentBlock.Thinking ?? string.Empty);
+                                    break;
+                                case "redacted_thinking":
+                                    thinkingBlocks.Add(new ThinkingBlock
                                     {
-                                        pending.Text.Append(thinking);
-                                    }
-                                }
-                                // 完整 signature 只在最后一个 thinking_delta 携带
-                                if (streamEvent.Delta.Signature is { Length: > 0 }
-                                    && pendingThinking.TryGetValue(streamEvent.Index, out var sigPending))
-                                {
-                                    sigPending.Signature = streamEvent.Delta.Signature;
-                                }
-                                break;
-                            case "input_json_delta":
-                                if (streamEvent.Delta.PartialJson is { Length: > 0 }
-                                    && pendingToolCalls.TryGetValue(streamEvent.Index, out var toolCall))
-                                {
-                                    toolCall.Arguments.Append(streamEvent.Delta.PartialJson);
-                                }
-                                break;
+                                        Type = "redacted_thinking",
+                                        Data = streamEvent.ContentBlock.Data ?? string.Empty,
+                                    });
+                                    break;
+                                case "tool_use":
+                                    pendingToolCalls[streamEvent.Index] = (
+                                        streamEvent.ContentBlock.Id ?? string.Empty,
+                                        streamEvent.ContentBlock.Name ?? string.Empty,
+                                        new StringBuilder());
+                                    break;
+                            }
                         }
-                    }
-                    break;
-                case "content_block_stop":
-                    // thinking 块收尾：累积文字 + 最终 signature
-                    if (pendingThinking.Remove(streamEvent.Index, out var finishedThinking))
-                    {
-                        thinkingBlocks.Add(new ThinkingBlock
+                        break;
+                    case "content_block_delta":
+                        if (streamEvent.Delta != null)
                         {
-                            Type = "thinking",
-                            Thinking = finishedThinking.Text.ToString(),
-                            Signature = finishedThinking.Signature,
-                        });
-                    }
-                    break;
-                case "message_delta":
-                    // message_start 带 input/cache 用量，message_delta 带 output 用量
-                    if (streamEvent.Usage != null)
-                    {
-                        usage ??= new AnthropicUsage();
-                        usage.OutputTokens = streamEvent.Usage.OutputTokens;
-                    }
-                    break;
-                case "message_stop":
-                    break; // 流自然结束，跳出循环后统一组装终结事件
-                case "error":
-                    throw MapStreamError(streamEvent.Error);
+                            switch (streamEvent.Delta.Type)
+                            {
+                                case "text_delta":
+                                    if (streamEvent.Delta.Text is { Length: > 0 } text)
+                                    {
+                                        textBuilder.Append(text);
+                                        sink.OnTextDelta(text);
+                                    }
+                                    break;
+                                case "thinking_delta":
+                                    if (streamEvent.Delta.Thinking is { Length: > 0 } thinking)
+                                    {
+                                        reasoningBuilder.Append(thinking);
+                                        sink.OnReasoningDelta(thinking);
+                                        if (pendingThinking.TryGetValue(streamEvent.Index, out var pending))
+                                        {
+                                            pending.Text.Append(thinking);
+                                        }
+                                    }
+                                    // 完整 signature 只在最后一个 thinking_delta 携带
+                                    if (streamEvent.Delta.Signature is { Length: > 0 }
+                                        && pendingThinking.TryGetValue(streamEvent.Index, out var sigPending))
+                                    {
+                                        sigPending.Signature = streamEvent.Delta.Signature;
+                                    }
+                                    break;
+                                case "input_json_delta":
+                                    if (streamEvent.Delta.PartialJson is { Length: > 0 }
+                                        && pendingToolCalls.TryGetValue(streamEvent.Index, out var toolCall))
+                                    {
+                                        toolCall.Arguments.Append(streamEvent.Delta.PartialJson);
+                                    }
+                                    break;
+                            }
+                        }
+                        break;
+                    case "content_block_stop":
+                        // thinking 块收尾：累积文字 + 最终 signature
+                        if (pendingThinking.Remove(streamEvent.Index, out var finishedThinking))
+                        {
+                            thinkingBlocks.Add(new ThinkingBlock
+                            {
+                                Type = "thinking",
+                                Thinking = finishedThinking.Text.ToString(),
+                                Signature = finishedThinking.Signature,
+                            });
+                        }
+                        break;
+                    case "message_delta":
+                        // message_start 带 input/cache 用量，message_delta 带 output 用量
+                        if (streamEvent.Usage != null)
+                        {
+                            usage ??= new AnthropicUsage();
+                            usage.OutputTokens = streamEvent.Usage.OutputTokens;
+                        }
+                        break;
+                    case "message_stop":
+                        break; // 流自然结束，跳出循环后统一组装终结事件
+                    case "error":
+                        throw MapStreamError(streamEvent.Error);
+                }
             }
-        }
 
-        var toolCalls = pendingToolCalls
-            .OrderBy(pair => pair.Key)
-            .Select(pair => new ToolCall(pair.Value.Id, pair.Value.Name, pair.Value.Arguments.ToString()))
-            .ToArray();
-        var result = new GenerateResponse(
-            textBuilder.Length > 0 ? textBuilder.ToString() : null,
-            toolCalls.Length > 0 ? toolCalls : null,
-            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
-            thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
-        var tokenUsage = usage is null
-            ? TokenUsage.Zero
-            : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
-        yield return new StreamCompleted(result, tokenUsage);
+            var toolCalls = pendingToolCalls
+                .OrderBy(pair => pair.Key)
+                .Select(pair => new ToolCall(pair.Value.Id, pair.Value.Name, pair.Value.Arguments.ToString()))
+                .ToArray();
+            var result = new GenerateResponse(
+                textBuilder.Length > 0 ? textBuilder.ToString() : null,
+                toolCalls.Length > 0 ? toolCalls : null,
+                reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
+                thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
+            var tokenUsage = usage is null
+                ? TokenUsage.Zero
+                : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
+            sink.OnCompleted(result, tokenUsage);
+        }
+        catch (LlmException)
+        {
+            // 含 sink 回调抛出的 LlmException（如重试层检出正文标记）：不得包装，原样穿透
+            throw;
+        }
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new RequestTimeoutException("Anthropic 流式请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"Anthropic 网络错误: {e.Message}", e);
+        }
+        catch (IOException e)
+        {
+            throw new NetworkException($"Anthropic 流读取中断: {e.Message}", e);
+        }
+        catch (JsonException e)
+        {
+            throw new InvalidResponseException($"Anthropic 流式响应解析失败: {e.Message}", e);
+        }
     }
 
     /// <summary>流中 error 事件映射为 LlmException：overloaded/rate_limit 可重试，其余不可重试。</summary>

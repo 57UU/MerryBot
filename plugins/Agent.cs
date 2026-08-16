@@ -270,6 +270,13 @@ public partial class AgentPlugin : Plugin
         catch (Exception exception)
         {
             Logger.Error($"Agent 消息处理失败: {groupId}\n{exception}");
+            // 断流/重试耗尽等终态失败：给群里一条回执，避免用户完全无感知
+            var detail = exception.Message.Replace('\r', ' ').Replace('\n', ' ');
+            if (detail.Length > 100)
+            {
+                detail = detail[..100] + "…";
+            }
+            SendGroupReply(groupId, [], $"处理失败：{detail}");
             lock (pending.SyncRoot)
             {
                 pending.IsDispatching = false;

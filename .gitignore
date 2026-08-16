@@ -367,3 +367,4 @@ FodyWeavers.xsd
 build/
 
 .tools/
+.workbuddy/

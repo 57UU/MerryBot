@@ -96,6 +96,17 @@ public sealed class RequestTimeoutException : LlmException
     }
 }
 
+/// <summary>模型把工具调用以文本标记形式输出到正文（如 DSML/XML 标签或 JSON 结构），
+/// 而非使用原生 tool_calls 通道。可重试：由客户端在污染文本尚未到达消费者时
+/// 透明重试（仅限流式前缀扣留窗口内或非流式终检时抛出）。</summary>
+public sealed class StrayToolCallMarkupException : LlmException
+{
+    public StrayToolCallMarkupException(string message, Exception? innerException = null)
+        : base(message, statusCode: null, retryable: true, innerException)
+    {
+    }
+}
+
 /// <summary>服务端返回了无法解析/结构异常的响应（HTTP 200 但 JSON 不符合预期），不可重试。</summary>
 public sealed class InvalidResponseException : LlmException
 {

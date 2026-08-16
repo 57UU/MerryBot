@@ -51,14 +51,14 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - **`Agent.Session/`** — 会话层：`AgentSession`（串行消息队列）、`AgentSessionManager`（空闲淘汰）、`AgentSessionClockExecutor`（把定时任务投给会话）、`ClockService`（core 拥有的 cron 调度器，持久化、misfire 跳过、超时、会话隔离）、`ClockModels`/`ClockAbstractions`/`InMemoryClockStore`、`Cron.cs`（定时任务 LLM 工具集）、`Terminal.cs`（常驻 bash 进程封装）/`TerminalToolSet.cs`（shell 工具）
 - **`Agent.Tools/`** — LLM 工具集：`WebTools`（web_search/web_fetch，Bing）、`SkillToolSet`/`FileSkillManagementService`、`SubAgentToolSet`、`TimeToolSet`、`TodoListToolSet`
 - **`Agent.Tui/`** — 独立的终端聊天客户端（Terminal.Gui），复用 Agent/Agent.Session/Agent.Tools，直接连 OpenAI 兼容 API
-- **`LlmClient/`** — LLM 客户端：`Client`（重试：限速避让/指数退避；流式仅重试首元素前；后端可运行时替换 `UpdateBackend`）、`ClientConfig`
-- **`LlmBackend/`** — LLM 后端抽象：`Backend` 接口、`ChatCompletionBackend`（OpenAI 兼容 `/chat/completions`）、`AnthropicBackend`、`ResponsesBackend`、`LlmOptions`（含 `WithoutTools()`）、`Message`/`ToolCall`/`TokenUsage`/`StreamEvent`、`LlmDefaults`（超时默认值）、`Errors`/`BackendErrors`
+- **`LlmClient/`** — LLM 客户端：`Client`（重试：限速避让/指数退避；流式基于 reset 语义——任何可重试失败含中途断流，预算内回调 `IResettableStreamSink.OnReset` 后重建流，消费者丢弃该段增量；正文检出工具调用标记走同一 reset 重试；后端可运行时替换 `UpdateBackend`）、`ClientConfig`、`IResettableStreamSink`/`StreamResetReason`、`StrayToolCallDetector`（正文开头/结尾窗口的结构化检测：DSML 特殊 token / XML 工具标签 / JSON 工具调用结构，仅携带工具的请求启用）
+- **`LlmBackend/`** — LLM 后端抽象：`Backend` 接口（流式为推送式 `IStreamSink` 回调：OnTextDelta/OnReasoningDelta/OnCompleted，中途异常归一化为 LlmException）、`ChatCompletionBackend`（OpenAI 兼容 `/chat/completions`）、`AnthropicBackend`、`ResponsesBackend`、`LlmOptions`（含 `WithoutTools()`）、`Message`/`ToolCall`/`TokenUsage`、`LlmDefaults`（超时默认值）、`Errors`/`BackendErrors`
 - **`ModelsDev.Sdk/`** — 独立的 models.dev 模型目录 SDK（`net8.0`），含 `ModelsDevClient`、`ModelQueryBuilder` 与模型/Provider 元数据类型
 - **`CommonLib/`** — 公共契约库：`ISimpleLogger`/`ConsoleLogger`/`LogLevel`、`ExitCode`（101/102/103）、`HostLifecycleContracts`（`IHostLifecycle`/`UpdateCheckResult`）、`ContextSnapshotContracts`/`MemoryManagementContracts`/`SkillManagementContracts`、`ConfigDescriptionAttribute`、`RequestCaching`、`Format`
 
 ### 测试项目
 
-- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`ConfigRegistryTests`、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`RequestCachingTests`、`VisionRouterTests`；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
+- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`ConfigRegistryTests`、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
 - **`ModelsDev.Sdk.Test/`** — xunit 测试（SDK 序列化/查询）
 - **`Test/`** — 手工测试台（Exe，非自动化测试，通常不需要维护）
 

@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -162,16 +161,17 @@ public class ResponsesBackend : Backend
     }
 
     /// <summary>
-    /// 流式生成（SSE）。output_text.delta → TextDelta、reasoning_text/summary 摘要
-    /// delta → ReasoningDelta；function_call 的 id/name 在 output_item.added 到达，
+    /// 流式生成（SSE）。output_text.delta → OnTextDelta、reasoning_text/summary 摘要
+    /// delta → OnReasoningDelta；function_call 的 id/name 在 output_item.added 到达，
     /// 参数经 function_call_arguments.delta 按 item_id 累积；response.completed 携带
-    /// 完整 usage。
+    /// 完整 usage。中途的网络/超时/解析异常归一化为 LlmException。
     /// </summary>
-    public async IAsyncEnumerable<StreamEvent> GenerateStream(
+    public async Task GenerateStream(
+        IStreamSink sink,
         IList<Message> messages,
         string systemPrompt,
         LlmOptions options,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
@@ -183,99 +183,123 @@ public class ResponsesBackend : Backend
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
         using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
         ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
-        request.Headers.Authorization = new("Bearer", _apiKey);
-        request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
-        if (response.StatusCode != HttpStatusCode.OK)
+        try
         {
-            var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
-            throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
-        }
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
+            request.Headers.Authorization = new("Bearer", _apiKey);
+            request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+                throw BackendErrors.Map(errorBody, response.StatusCode, response.Headers.RetryAfter?.Delta);
+            }
 
-        await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
-        using var reader = new StreamReader(responseStream, Encoding.UTF8);
-        var textBuilder = new StringBuilder();
-        var reasoningBuilder = new StringBuilder();
-        // function_call 条目：item_id → (output_index, call_id, name)；参数分片按 item_id 累积
-        var toolCallItems = new Dictionary<string, (int OutputIndex, string CallId, string Name, StringBuilder Arguments)>();
-        ResponsesUsage? usage = null;
-        string? line;
-        while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
+            await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
+            using var reader = new StreamReader(responseStream, Encoding.UTF8);
+            var textBuilder = new StringBuilder();
+            var reasoningBuilder = new StringBuilder();
+            // function_call 条目：item_id → (output_index, call_id, name)；参数分片按 item_id 累积
+            var toolCallItems = new Dictionary<string, (int OutputIndex, string CallId, string Name, StringBuilder Arguments)>();
+            ResponsesUsage? usage = null;
+            string? line;
+            while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
+            {
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var data = line["data:".Length..].Trim();
+                if (data.Length == 0)
+                {
+                    continue;
+                }
+                var streamEvent = JsonSerializer.Deserialize<ResponsesStreamEvent>(data);
+                if (streamEvent is null)
+                {
+                    continue;
+                }
+                switch (streamEvent.Type)
+                {
+                    case "response.output_text.delta":
+                        if (streamEvent.Delta is { Length: > 0 } text)
+                        {
+                            textBuilder.Append(text);
+                            sink.OnTextDelta(text);
+                        }
+                        break;
+                    case "response.reasoning_text.delta":
+                    case "response.reasoning_summary_text.delta":
+                        if (streamEvent.Delta is { Length: > 0 } reasoning)
+                        {
+                            reasoningBuilder.Append(reasoning);
+                            sink.OnReasoningDelta(reasoning);
+                        }
+                        break;
+                    case "response.output_item.added":
+                        if (streamEvent.Item is { Type: "function_call" } item)
+                        {
+                            toolCallItems[streamEvent.ItemId ?? string.Empty] = (
+                                streamEvent.OutputIndex,
+                                item.CallId ?? string.Empty,
+                                item.Name ?? string.Empty,
+                                new StringBuilder());
+                        }
+                        break;
+                    case "response.function_call_arguments.delta":
+                        if (streamEvent.ItemId is { Length: > 0 }
+                            && streamEvent.Delta is { Length: > 0 } args
+                            && toolCallItems.TryGetValue(streamEvent.ItemId, out var toolCall))
+                        {
+                            toolCall.Arguments.Append(args);
+                            toolCallItems[streamEvent.ItemId] = toolCall;
+                        }
+                        break;
+                    case "response.completed":
+                        usage = streamEvent.Response?.Usage ?? usage;
+                        break;
+                    case "response.failed":
+                        throw new InvalidResponseException(
+                            $"Responses 流式失败: {streamEvent.Response?.Error?.Message ?? streamEvent.Message ?? "未知错误"}");
+                    case "error":
+                        throw new InvalidResponseException($"Responses 流式错误: {streamEvent.Message ?? "未知错误"}");
+                }
+            }
+
+            var toolCalls = toolCallItems.Values
+                .OrderBy(item => item.OutputIndex)
+                .Select(item => new ToolCall(item.CallId, item.Name, item.Arguments.ToString()))
+                .ToArray();
+            var result = new GenerateResponse(
+                textBuilder.Length > 0 ? textBuilder.ToString() : null,
+                toolCalls.Length > 0 ? toolCalls : null,
+                reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
+            var tokenUsage = usage is null
+                ? TokenUsage.Zero
+                : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
+            sink.OnCompleted(result, tokenUsage);
+        }
+        catch (LlmException)
         {
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-            var data = line["data:".Length..].Trim();
-            if (data.Length == 0)
-            {
-                continue;
-            }
-            var streamEvent = JsonSerializer.Deserialize<ResponsesStreamEvent>(data);
-            if (streamEvent is null)
-            {
-                continue;
-            }
-            switch (streamEvent.Type)
-            {
-                case "response.output_text.delta":
-                    if (streamEvent.Delta is { Length: > 0 } text)
-                    {
-                        textBuilder.Append(text);
-                        yield return new TextDelta(text);
-                    }
-                    break;
-                case "response.reasoning_text.delta":
-                case "response.reasoning_summary_text.delta":
-                    if (streamEvent.Delta is { Length: > 0 } reasoning)
-                    {
-                        reasoningBuilder.Append(reasoning);
-                        yield return new ReasoningDelta(reasoning);
-                    }
-                    break;
-                case "response.output_item.added":
-                    if (streamEvent.Item is { Type: "function_call" } item)
-                    {
-                        toolCallItems[streamEvent.ItemId ?? string.Empty] = (
-                            streamEvent.OutputIndex,
-                            item.CallId ?? string.Empty,
-                            item.Name ?? string.Empty,
-                            new StringBuilder());
-                    }
-                    break;
-                case "response.function_call_arguments.delta":
-                    if (streamEvent.ItemId is { Length: > 0 }
-                        && streamEvent.Delta is { Length: > 0 } args
-                        && toolCallItems.TryGetValue(streamEvent.ItemId, out var toolCall))
-                    {
-                        toolCall.Arguments.Append(args);
-                        toolCallItems[streamEvent.ItemId] = toolCall;
-                    }
-                    break;
-                case "response.completed":
-                    usage = streamEvent.Response?.Usage ?? usage;
-                    break;
-                case "response.failed":
-                    throw new InvalidResponseException(
-                        $"Responses 流式失败: {streamEvent.Response?.Error?.Message ?? streamEvent.Message ?? "未知错误"}");
-                case "error":
-                    throw new InvalidResponseException($"Responses 流式错误: {streamEvent.Message ?? "未知错误"}");
-            }
+            // 含 sink 回调抛出的 LlmException（如重试层检出正文标记）：不得包装，原样穿透
+            throw;
         }
-
-        var toolCalls = toolCallItems.Values
-            .OrderBy(item => item.OutputIndex)
-            .Select(item => new ToolCall(item.CallId, item.Name, item.Arguments.ToString()))
-            .ToArray();
-        var result = new GenerateResponse(
-            textBuilder.Length > 0 ? textBuilder.ToString() : null,
-            toolCalls.Length > 0 ? toolCalls : null,
-            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
-        var tokenUsage = usage is null
-            ? TokenUsage.Zero
-            : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
-        yield return new StreamCompleted(result, tokenUsage);
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new RequestTimeoutException("Responses 流式请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"Responses 网络错误: {e.Message}", e);
+        }
+        catch (IOException e)
+        {
+            throw new NetworkException($"Responses 流读取中断: {e.Message}", e);
+        }
+        catch (JsonException e)
+        {
+            throw new InvalidResponseException($"Responses 流式响应解析失败: {e.Message}", e);
+        }
     }
 
     /// <summary>构造 input 数组：user/assistant 消息 + function_call_output 工具结果条目。</summary>

@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -91,16 +90,19 @@ public class ChatCompletionBackend : Backend
     }
 
     /// <summary>
-    /// 流式生成：按序产出 <see cref="TextDelta"/> / <see cref="ReasoningDelta"/>，
-    /// 工具调用按 index 累积，流结束产出 <see cref="StreamCompleted"/>（携带完整响应与用量）。
-    /// 请求在首次 MoveNextAsync 时发出（枚举器惰性），两段超时与非流式一致：
-    /// 首字节由 ttfbCts 控制（仅用于 SendAsync），整个流读取受 totalCts 总时长约束。
+    /// 流式生成：SSE 读循环逐帧推送 <see cref="IStreamSink.OnTextDelta"/> /
+    /// <see cref="IStreamSink.OnReasoningDelta"/>，工具调用按 index 累积，流读完
+    /// 回调 <see cref="IStreamSink.OnCompleted"/>（携带完整响应与用量）。
+    /// 两段超时与非流式一致：首字节由 ttfbCts 控制（仅用于 SendAsync），
+    /// 整个流读取受 totalCts 总时长约束。中途的网络/超时/解析异常归一化为
+    /// LlmException（NetworkException / RequestTimeoutException / InvalidResponseException）。
     /// </summary>
-    public async IAsyncEnumerable<StreamEvent> GenerateStream(
+    public async Task GenerateStream(
+        IStreamSink sink,
         IList<Message> messages,
         string systemPrompt,
         LlmOptions options,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
@@ -112,86 +114,106 @@ public class ChatCompletionBackend : Backend
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
         using var ttfbCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
         ttfbCts.CancelAfter(options.TimeToFirstByte ?? LlmDefaults.TimeToFirstByte);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
-        request.Headers.Authorization = new("Bearer", _apiKey);
-        request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
-        if (response.StatusCode != HttpStatusCode.OK)
+        try
         {
-            var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
-            throw BuildLlmException(response.StatusCode, errorBody, response.Headers.RetryAfter?.Delta);
-        }
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
+            request.Headers.Authorization = new("Bearer", _apiKey);
+            request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(totalCts.Token);
+                throw BuildLlmException(response.StatusCode, errorBody, response.Headers.RetryAfter?.Delta);
+            }
 
-        await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
-        using var reader = new StreamReader(responseStream, Encoding.UTF8);
-        var textBuilder = new StringBuilder();
-        var reasoningBuilder = new StringBuilder();
-        // 工具调用按 delta 携带的 index 累积（id/name/arguments 分片到达）
-        var toolCalls = new List<(string Id, string Name, StringBuilder Arguments)>();
-        Usage? usage = null;
-        string? line;
-        while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
-        {
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            await using var responseStream = await response.Content.ReadAsStreamAsync(totalCts.Token);
+            using var reader = new StreamReader(responseStream, Encoding.UTF8);
+            var textBuilder = new StringBuilder();
+            var reasoningBuilder = new StringBuilder();
+            // 工具调用按 delta 携带的 index 累积（id/name/arguments 分片到达）
+            var toolCalls = new List<(string Id, string Name, StringBuilder Arguments)>();
+            Usage? usage = null;
+            string? line;
+            while ((line = await reader.ReadLineAsync(totalCts.Token)) != null)
             {
-                continue;
-            }
-            var data = line["data:".Length..].Trim();
-            if (data.Length == 0)
-            {
-                continue;
-            }
-            var chunk = ParseChunk(data);
-            if (chunk.Error != null)
-            {
-                throw new InvalidResponseException($"ChatCompletion 流式错误: {BackendErrors.Shorten(chunk.Error)}");
-            }
-            if (chunk.Done)
-            {
-                break;
-            }
-            if (chunk.Text is { Length: > 0 })
-            {
-                textBuilder.Append(chunk.Text);
-                yield return new TextDelta(chunk.Text);
-            }
-            if (chunk.Reasoning is { Length: > 0 })
-            {
-                reasoningBuilder.Append(chunk.Reasoning);
-                yield return new ReasoningDelta(chunk.Reasoning);
-            }
-            if (chunk.ToolCallParts is { Count: > 0 })
-            {
-                foreach (var (index, id, name, arguments) in chunk.ToolCallParts)
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
                 {
-                    while (toolCalls.Count <= index)
+                    continue;
+                }
+                var data = line["data:".Length..].Trim();
+                if (data.Length == 0)
+                {
+                    continue;
+                }
+                var chunk = ParseChunk(data);
+                if (chunk.Error != null)
+                {
+                    throw new InvalidResponseException($"ChatCompletion 流式错误: {BackendErrors.Shorten(chunk.Error)}");
+                }
+                if (chunk.Done)
+                {
+                    break;
+                }
+                if (chunk.Text is { Length: > 0 })
+                {
+                    textBuilder.Append(chunk.Text);
+                    sink.OnTextDelta(chunk.Text);
+                }
+                if (chunk.Reasoning is { Length: > 0 })
+                {
+                    reasoningBuilder.Append(chunk.Reasoning);
+                    sink.OnReasoningDelta(chunk.Reasoning);
+                }
+                if (chunk.ToolCallParts is { Count: > 0 })
+                {
+                    foreach (var (index, id, name, arguments) in chunk.ToolCallParts)
                     {
-                        toolCalls.Add(("", "", new StringBuilder()));
+                        while (toolCalls.Count <= index)
+                        {
+                            toolCalls.Add(("", "", new StringBuilder()));
+                        }
+                        var call = toolCalls[index];
+                        if (!string.IsNullOrEmpty(id)) call.Id = id;
+                        if (!string.IsNullOrEmpty(name)) call.Name = name;
+                        if (!string.IsNullOrEmpty(arguments)) call.Arguments.Append(arguments);
+                        toolCalls[index] = call;
                     }
-                    var call = toolCalls[index];
-                    if (!string.IsNullOrEmpty(id)) call.Id = id;
-                    if (!string.IsNullOrEmpty(name)) call.Name = name;
-                    if (!string.IsNullOrEmpty(arguments)) call.Arguments.Append(arguments);
-                    toolCalls[index] = call;
+                }
+                if (chunk.Usage != null)
+                {
+                    usage = chunk.Usage;
                 }
             }
-            if (chunk.Usage != null)
-            {
-                usage = chunk.Usage;
-            }
-        }
 
-        var resultToolCalls = toolCalls.Count > 0
-            ? toolCalls.Select(call => new ToolCall(call.Id, call.Name, call.Arguments.ToString())).ToArray()
-            : null;
-        var result = new GenerateResponse(
-            textBuilder.Length > 0 ? textBuilder.ToString() : null,
-            resultToolCalls,
-            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
-        var tokenUsage = usage is null
-            ? TokenUsage.Zero
-            : new TokenUsage(usage.TotalTokens, usage.PromptTokens, usage.CompletionTokens, usage.CachedTokens);
-        yield return new StreamCompleted(result, tokenUsage);
+            var resultToolCalls = toolCalls.Count > 0
+                ? toolCalls.Select(call => new ToolCall(call.Id, call.Name, call.Arguments.ToString())).ToArray()
+                : null;
+            var result = new GenerateResponse(
+                textBuilder.Length > 0 ? textBuilder.ToString() : null,
+                resultToolCalls,
+                reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null);
+            var tokenUsage = usage is null
+                ? TokenUsage.Zero
+                : new TokenUsage(usage.TotalTokens, usage.PromptTokens, usage.CompletionTokens, usage.CachedTokens);
+            sink.OnCompleted(result, tokenUsage);
+        }
+        catch (LlmException)
+        {
+            // 含 sink 回调抛出的 LlmException（如重试层检出正文标记）：不得包装，原样穿透
+            throw;
+        }
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new RequestTimeoutException("ChatCompletion 流式请求超时", e);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new NetworkException($"ChatCompletion 网络错误: {e.Message}", e);
+        }
+        catch (IOException e)
+        {
+            throw new NetworkException($"ChatCompletion 流读取中断: {e.Message}", e);
+        }
     }
 
     /// <summary>

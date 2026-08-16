@@ -27,6 +27,15 @@ public sealed partial class ChatApp
             case AgentLogEventKind.ModelTextDelta:
                 AppendStreamingDelta(eventInfo);
                 return;
+            case AgentLogEventKind.ModelReasoningDelta:
+                return; // 推理增量默认不渲染，也不进 debug（高频事件）
+            case AgentLogEventKind.ModelStreamSegmentStart:
+                break; // 仅 debug 可见（reset 已清场，无需视觉处理）
+            case AgentLogEventKind.ModelStreamSegmentReset:
+                // segment 作废（Client 重建流重试）：撤下已渲染的半成品行并丢弃缓冲，
+                // 新 segment 的增量随后从头渲染
+                DiscardStreamingRows();
+                break;
             case AgentLogEventKind.ChatStarted:
                 ShowThinking(); // 响应期间显示 Agent is Thinking
                 break;
@@ -301,6 +310,37 @@ public sealed partial class ChatApp
         _streamingRefreshQueued = false;
     }
 
+    /// <summary>
+    /// 流式 segment 作废（模型重连重试）：撤下已渲染进聊天列表的半成品行并丢弃缓冲，
+    /// 内容不进思考面板（与 FlushStreamingToPane 的差异）；随后新 segment 从头渲染。
+    /// </summary>
+    private void DiscardStreamingRows()
+    {
+        int lineStart;
+        lock (_streamSync)
+        {
+            _streamingBuffer = null;
+            lineStart = _streamLineStart;
+        }
+        _streamLineStart = -1;
+        _streamingRefreshQueued = false;
+        if (lineStart < 0)
+        {
+            return;
+        }
+        Invoke(() =>
+        {
+            if (lineStart < _chatSource.Count)
+            {
+                while (_chatSource.Count > lineStart)
+                {
+                    _chatSource.RemoveAt(_chatSource.Count - 1);
+                    _chatRoles.RemoveAt(_chatRoles.Count - 1);
+                }
+            }
+        });
+    }
+
     private static string FormatLogEvent(AgentLogEvent eventInfo)
     {
         var time = eventInfo.TimestampUtc.ToString("HH:mm:ss.fff'Z'");
@@ -315,6 +355,10 @@ public sealed partial class ChatApp
                 $"[{time}] [tool.error]{iteration} {ToolLabel(eventInfo)} {Truncate(eventInfo.Exception?.Message ?? eventInfo.Result)}",
             AgentLogEventKind.ModelRequest =>
                 $"[{time}] [agent.model.request]{iteration}",
+            AgentLogEventKind.ModelStreamSegmentStart =>
+                $"[{time}] [agent.model.segment]{iteration} start attempt={eventInfo.Result}",
+            AgentLogEventKind.ModelStreamSegmentReset =>
+                $"[{time}] [agent.model.segment]{iteration} reset reason={eventInfo.Result} {Truncate(eventInfo.Exception?.Message)}",
             AgentLogEventKind.ModelResponse =>
                 $"[{time}] [agent.model.response]{iteration} {FormatUsage(eventInfo.Usage)} content={Truncate(eventInfo.Result)}",
             AgentLogEventKind.ContextCompaction =>

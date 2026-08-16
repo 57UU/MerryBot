@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using LlmBackend;
+using LlmClient;
 
 namespace Agent;
 
@@ -23,33 +24,16 @@ public partial class Agent
 
         Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
 
-        // 流式生成：正文增量以 ModelTextDelta 事件实时上报（供 UI 逐字渲染），
-        // 完整响应（正文/推理/工具调用/thinking 块）由终结事件承载，消息组装与原来一致
-        GenerateResponse? response = null;
-        TokenUsage usage = TokenUsage.Zero;
-        await foreach (var streamEvent in llmClient.GenerateStream(messages, SystemPrompt, llmOptions).WithCancellation(cancellationToken))
-        {
-            switch (streamEvent)
-            {
-                case TextDelta { Delta.Length: > 0 } textDelta:
-                    Log(new AgentLogEvent(
-                        AgentLogEventKind.ModelTextDelta,
-                        DateTimeOffset.UtcNow,
-                        iteration,
-                        Result: textDelta.Delta));
-                    break;
-                case StreamCompleted completed:
-                    response = completed.Response;
-                    usage = completed.Usage;
-                    break;
-            }
-        }
-        if (response is null)
-        {
-            // 流被取消/中断且未收到终结事件，无法组装助手消息；取消已由
+        // 流式生成：正文/推理增量以 ModelTextDelta/ModelReasoningDelta 事件实时上报
+        // （供 UI 逐字渲染），segment 边界（start/reset）由 StreamCollector 解释；
+        // 完整响应（正文/推理/工具调用/thinking 块）由 OnCompleted 承载，消息组装与原来一致
+        var collector = new StreamCollector(this, iteration);
+        await llmClient.GenerateStream(collector, messages, SystemPrompt, llmOptions, cancellationToken);
+        var response = collector.Response
+            // 流被取消/中断且未收到完成回调，无法组装助手消息；取消已由
             // OperationCanceledException 传播，走到这里说明是异常中断
-            throw new InvalidResponseException("模型流式响应中断，未收到完整结果");
-        }
+            ?? throw new InvalidResponseException("模型流式响应中断，未收到完整结果");
+        var usage = collector.Usage;
 
         // 记录 assistant 回复（含工具调用与 reasoning）
         string? assistantContent = response.Content;
@@ -198,5 +182,66 @@ public partial class Agent
             return result;
         }
         return result[..MaxToolResultLength] + "\n...[已截断]";
+    }
+
+    /// <summary>
+    /// 流式消费的 segment 解释器：Client 只提供 delta/reset/completed 回调，
+    /// "段"的边界在这里解释——首个增量到达时发 ModelStreamSegmentStart（attempt 从 1 起），
+    /// OnReset 时发 ModelStreamSegmentReset 并推进 attempt；UI 据此丢弃作废段的渲染。
+    /// </summary>
+    private sealed class StreamCollector(Agent agent, int iteration) : IResettableStreamSink
+    {
+        private int _attempt = 1;
+        private bool _segmentStarted;
+
+        public GenerateResponse? Response { get; private set; }
+        public TokenUsage Usage { get; private set; } = TokenUsage.Zero;
+
+        public void OnTextDelta(string delta)
+        {
+            EnsureSegmentStarted();
+            if (delta.Length > 0)
+            {
+                agent.Log(new AgentLogEvent(
+                    AgentLogEventKind.ModelTextDelta, DateTimeOffset.UtcNow, iteration, Result: delta));
+            }
+        }
+
+        public void OnReasoningDelta(string delta)
+        {
+            EnsureSegmentStarted();
+            if (delta.Length > 0)
+            {
+                agent.Log(new AgentLogEvent(
+                    AgentLogEventKind.ModelReasoningDelta, DateTimeOffset.UtcNow, iteration, Result: delta));
+            }
+        }
+
+        public void OnReset(StreamResetReason reason, Exception cause)
+        {
+            agent.Log(new AgentLogEvent(
+                AgentLogEventKind.ModelStreamSegmentReset, DateTimeOffset.UtcNow, iteration,
+                Result: reason.ToString(), Exception: cause));
+            _attempt++;
+            _segmentStarted = false;
+        }
+
+        public void OnCompleted(GenerateResponse response, TokenUsage usage)
+        {
+            Response = response;
+            Usage = usage;
+        }
+
+        private void EnsureSegmentStarted()
+        {
+            if (_segmentStarted)
+            {
+                return;
+            }
+            _segmentStarted = true;
+            agent.Log(new AgentLogEvent(
+                AgentLogEventKind.ModelStreamSegmentStart, DateTimeOffset.UtcNow, iteration,
+                Result: _attempt.ToString()));
+        }
     }
 }

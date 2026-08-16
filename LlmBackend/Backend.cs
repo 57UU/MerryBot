@@ -35,13 +35,29 @@ public interface Backend
     public Task<(GenerateResponse, TokenUsage)> Generate(CancellationToken cancellationToken, IList<Message> messages, string systemPrompt, LlmOptions options);
 
     /// <summary>
-    /// 流式生成：按序产出增量事件，终结事件 <see cref="StreamCompleted"/> 携带完整
-    /// GenerateResponse 与 TokenUsage。枚举器是惰性的——请求在首次 MoveNextAsync 时发出，
-    /// 提前 break 会经 DisposeAsync 释放连接。取消令牌经枚举器通道传入：
-    /// 消费方用 <c>await foreach (var e in GenerateStream(...).WithCancellation(ct))</c>
-    /// 或显式 <c>GetAsyncEnumerator(ct)</c>，方法参数位置不传令牌。
+    /// 流式生成：请求立即发出，增量推入 sink；返回的 Task 在流读完
+    /// （OnCompleted 已回调）后完成，中途失败以归一化 LlmException 终结。
+    /// 取消令牌为普通参数（调用方取消时抛 OperationCanceledException）。
     /// </summary>
-    public IAsyncEnumerable<StreamEvent> GenerateStream(IList<Message> messages, string systemPrompt, LlmOptions options, CancellationToken cancellationToken = default);
+    public Task GenerateStream(IStreamSink sink, IList<Message> messages, string systemPrompt, LlmOptions options, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// 流式生成的推送式接收端：后端在 SSE 读循环上单线程顺序回调（不保证线程亲和），
+/// 回调应是轻量非阻塞操作（事件转发/缓冲）。
+/// 契约：OnCompleted 之后不再有任何回调；回调抛出的 LlmException
+/// （如重试层检出正文标记）会穿透后端读循环向上传播，后端不得包装。
+/// </summary>
+public interface IStreamSink
+{
+    /// <summary>正文增量（逐 token 或逐块，按序拼接即为完整正文）。</summary>
+    void OnTextDelta(string delta);
+
+    /// <summary>推理增量（OpenAI reasoning_content / Anthropic thinking 文字 / Responses reasoning 摘要），按序拼接。</summary>
+    void OnReasoningDelta(string delta);
+
+    /// <summary>流正常结束：携带完整 GenerateResponse 与 TokenUsage（正文/推理/工具调用/thinking 块均为全量）。</summary>
+    void OnCompleted(GenerateResponse response, TokenUsage usage);
 }
 
 public record LlmOptions(
@@ -165,18 +181,3 @@ public record TokenUsage(
         a.completionUsage + b.completionUsage,
         a.cachedUsage + b.cachedUsage);
 };
-
-/// <summary>流式生成事件基类：正文/推理增量 + 携带完整响应的终结事件。</summary>
-public abstract record StreamEvent;
-
-/// <summary>正文增量（逐 token 或逐块，按序拼接即为完整正文）。</summary>
-public sealed record TextDelta(string Delta) : StreamEvent;
-
-/// <summary>
-/// 推理增量（OpenAI reasoning_content / Anthropic thinking 文字 / Responses reasoning 摘要），
-/// 按序拼接；工具调用不做增量流，完整结果在终结事件带回。
-/// </summary>
-public sealed record ReasoningDelta(string Delta) : StreamEvent;
-
-/// <summary>终结事件：携带完整 GenerateResponse 与 TokenUsage（正文/推理/工具调用/thinking 块均为全量）。</summary>
-public sealed record StreamCompleted(GenerateResponse Response, TokenUsage Usage) : StreamEvent;

@@ -28,7 +28,8 @@ public sealed class VisionRouterTests
         }
 
         // VisionRouter 只走非流式 Generate，流式接口保持未实现即可
-        public IAsyncEnumerable<StreamEvent> GenerateStream(
+        public Task GenerateStream(
+            IStreamSink sink,
             IList<Message> messages,
             string systemPrompt,
             LlmOptions options,

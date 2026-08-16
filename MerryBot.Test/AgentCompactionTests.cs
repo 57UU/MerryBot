@@ -101,21 +101,22 @@ public class AgentCompactionTests
         public int StreamRequests;
         public int CompactRequests;
 
-        public async IAsyncEnumerable<StreamEvent> GenerateStream(
-            IList<Message> messages, string systemPrompt, LlmOptions options,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public Task GenerateStream(
+            IStreamSink sink, IList<Message> messages, string systemPrompt, LlmOptions options,
+            CancellationToken cancellationToken = default)
         {
             StreamRequests++;
             if (StreamRequests == 1)
             {
-                yield return new StreamCompleted(
+                sink.OnCompleted(
                     new GenerateResponse(null, new[] { new ToolCall("call_1", "fake_tool", "{}") }, null),
                     new TokenUsage(8000, 5000, 3000));
-                yield break;
+                return Task.CompletedTask;
             }
-            yield return new StreamCompleted(
+            sink.OnCompleted(
                 new GenerateResponse("最终回复", null, null),
                 new TokenUsage(8000, 5000, 3000));
+            return Task.CompletedTask;
         }
 
         public Task<(GenerateResponse, TokenUsage)> Generate(
@@ -133,21 +134,22 @@ public class AgentCompactionTests
         public int StreamRequests;
         public int CompactRequests;
 
-        public async IAsyncEnumerable<StreamEvent> GenerateStream(
-            IList<Message> messages, string systemPrompt, LlmOptions options,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public Task GenerateStream(
+            IStreamSink sink, IList<Message> messages, string systemPrompt, LlmOptions options,
+            CancellationToken cancellationToken = default)
         {
             StreamRequests++;
             if (StreamRequests == 1)
             {
-                yield return new StreamCompleted(
+                sink.OnCompleted(
                     new GenerateResponse(null, new[] { new ToolCall("call_1", "fake_tool", "{}") }, null),
                     new TokenUsage(8000, 8000, 0));
-                yield break;
+                return Task.CompletedTask;
             }
-            yield return new StreamCompleted(
+            sink.OnCompleted(
                 new GenerateResponse("最终回复", null, null),
                 new TokenUsage(8000, 8000, 0));
+            return Task.CompletedTask;
         }
 
         public Task<(GenerateResponse, TokenUsage)> Generate(
@@ -164,21 +166,22 @@ public class AgentCompactionTests
     {
         public int RequestCount;
 
-        public async IAsyncEnumerable<StreamEvent> GenerateStream(
-            IList<Message> messages, string systemPrompt, LlmOptions options,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public Task GenerateStream(
+            IStreamSink sink, IList<Message> messages, string systemPrompt, LlmOptions options,
+            CancellationToken cancellationToken = default)
         {
             RequestCount++;
             if (RequestCount == 1)
             {
-                yield return new StreamCompleted(
+                sink.OnCompleted(
                     new GenerateResponse(null, new[] { new ToolCall("call_1", "fake_tool", "{}") }, null),
                     new TokenUsage(6000, 6000, 0));
-                yield break;
+                return Task.CompletedTask;
             }
-            yield return new StreamCompleted(
+            sink.OnCompleted(
                 new GenerateResponse("最终回复", null, null),
                 new TokenUsage(6000, 6000, 0));
+            return Task.CompletedTask;
         }
 
         public Task<(GenerateResponse, TokenUsage)> Generate(
