@@ -212,7 +212,9 @@ internal partial class Logic
 
         var (isTargeted, textMessage) = ExtractMessage(ingress.MessageChain, data.self_id);
         var command = ParseCommand(textMessage);
-        var context = new MessageContext(new SessionKey("qq", "group", groupId.ToString()), data.sender.user_id, data.sender.nickname, data.self_id);
+        // 群聊中优先使用群名片（card），未设置时回退全局昵称（nickname）
+        string nickname = string.IsNullOrEmpty(data.sender.card) ? data.sender.nickname : data.sender.card;
+        var context = new MessageContext(new SessionKey("qq", "group", groupId.ToString()), data.sender.user_id, nickname, data.self_id);
         OnMessage(isTargeted, command, ingress.MessageChain, context);
         _ = messageService.PrefetchAsync(ingress);
     }

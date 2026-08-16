@@ -259,13 +259,13 @@ public class MessageTool : ToolSet
         return (buffer.ToArray(), response.Content.Headers.ContentType?.MediaType);
     }
 
-    /// <summary>与群历史上下文相同的消息渲染格式：[时间] 昵称: 内容</summary>
+    /// <summary>与群历史上下文相同的消息渲染格式：[时间] [用户 id(昵称:name)]: 内容</summary>
     private static string FormatMessage(ProcessedMessage m)
     {
         var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
         var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
         var content = string.Join("", m.MessageChain.Select(tm => tm.ToString()));
-        return $"[{timeStr}] {name}: {content}";
+        return $"[{timeStr}] [用户 {m.SenderId}(昵称:{name})]: {content}";
     }
     private async Task<string> SendMarkdownMessage(string message)
     {

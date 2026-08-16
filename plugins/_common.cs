@@ -125,6 +125,7 @@ public interface MessageChannel
 
 /// <summary>
 /// 轻量消息上下文（平台无关）：会话定位 + 发送者/机器人身份，替代 NapCat 私有的 ReceivedGroupMessage。
+/// SenderNickname 为展示昵称：群聊中优先使用群名片（card），未设置时回退全局昵称（nickname）。
 /// </summary>
 public record MessageContext(SessionKey Session, long SenderId, string? SenderNickname, long SelfId);
 
