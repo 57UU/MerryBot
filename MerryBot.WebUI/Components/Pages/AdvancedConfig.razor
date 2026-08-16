@@ -1,0 +1,132 @@
+@page "/advanced"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@using MerryBot.WebUI.Api
+
+<PageTitle>高级配置</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>高级配置</h1>
+        <p class="page-header-sub">查看 / 删除插件数据库（plugin_data.db）中的原始 BSON 数据，用于排查与清理残留数据（如已删除插件遗留的记录）。</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+            @(IsLoading ? "刷新中…" : "刷新")
+        </button>
+    </div>
+</div>
+
+@if (Error != null)
+{
+    <div class="message-item-custom mb-3-custom">@Error</div>
+}
+
+<section class="advanced-section">
+    <h2>插件数据（Plugin_Data_Table）</h2>
+    <p class="text-muted-custom small-custom">共 @(DataEntries?.Count ?? 0) 条</p>
+    @if (DataEntries == null)
+    {
+        <div class="message-item-custom">加载中…</div>
+    }
+    else if (DataEntries.Count == 0)
+    {
+        <div class="message-item-custom">暂无数据。</div>
+    }
+    else
+    {
+        @foreach (var entry in DataEntries)
+        {
+            <div class="advanced-entry">
+                <div class="advanced-entry-head">
+                    <code class="advanced-entry-id">@entry.Id</code>
+                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteEntryAsync(entry, isConfig: false)">删除</button>
+                </div>
+                <pre class="advanced-entry-bson">@entry.Bson</pre>
+            </div>
+        }
+    }
+</section>
+
+<section class="advanced-section">
+    <h2>插件配置（Plugin_Config_Table）</h2>
+    <p class="text-muted-custom small-custom">共 @(ConfigEntries?.Count ?? 0) 条</p>
+    @if (ConfigEntries == null)
+    {
+        <div class="message-item-custom">加载中…</div>
+    }
+    else if (ConfigEntries.Count == 0)
+    {
+        <div class="message-item-custom">暂无数据。</div>
+    }
+    else
+    {
+        @foreach (var entry in ConfigEntries)
+        {
+            <div class="advanced-entry">
+                <div class="advanced-entry-head">
+                    <code class="advanced-entry-id">@entry.Id</code>
+                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteEntryAsync(entry, isConfig: true)">删除</button>
+                </div>
+                <pre class="advanced-entry-bson">@entry.Bson</pre>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private List<RawEntryDto>? DataEntries;
+    private List<RawEntryDto>? ConfigEntries;
+    private string? Error;
+    private bool IsLoading;
+    private bool _initialized;
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            DataEntries = await JSRuntime.InvokeAsync<List<RawEntryDto>>("configApi.request", "GET", "/api/advanced/data");
+            ConfigEntries = await JSRuntime.InvokeAsync<List<RawEntryDto>>("configApi.request", "GET", "/api/advanced/config");
+        }
+        catch (Exception ex)
+        {
+            Error = $"加载失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task DeleteEntryAsync(RawEntryDto entry, bool isConfig)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 [{entry.Id}] ？此操作不可恢复。"))
+        {
+            return;
+        }
+        try
+        {
+            string api = isConfig ? "/api/advanced/config/" : "/api/advanced/data/";
+            // _id 含 "/"（如 plugin/agent），URL 编码后由 catch-all 路由还原
+            await JSRuntime.InvokeAsync<object>("configApi.request", "DELETE", api + Uri.EscapeDataString(entry.Id));
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"删除失败：{ex.Message}";
+        }
+    }
+}

@@ -51,8 +51,8 @@ public partial class PluginStorageDatabase
     /// </summary>
     private async Task MigratePrefixV1Async()
     {
-        await MigrateCollectionPrefixAsync(_db, "Plugin_Data_Table", "plugin");
-        await MigrateCollectionPrefixAsync(_db, "Plugin_Config_Table", "plugin");
+        await MigrateCollectionPrefixAsync(_db, DataTableName, "plugin");
+        await MigrateCollectionPrefixAsync(_db, ConfigTableName, "plugin");
     }
 
     /// <summary>

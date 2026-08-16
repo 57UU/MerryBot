@@ -90,6 +90,46 @@ public partial class PluginStorageDatabase : IDisposable
         return legacyData?.Value;
     }
 
+    /// <summary>Plugin_Data_Table 物理集合名（插件对象数据）。</summary>
+    private const string DataTableName = "Plugin_Data_Table";
+    /// <summary>Plugin_Config_Table 物理集合名（插件配置）。</summary>
+    private const string ConfigTableName = "Plugin_Config_Table";
+
+    /// <summary>
+    /// 读取 Plugin_Data_Table 全部原始文档（BsonDocument）。
+    /// 以原始 Bson 形式返回，不反序列化 Value 字段：Value 带 LiteDB _type 元数据，
+    /// 已删除插件（如 highlights）的类型不存在时强类型读取会抛 LiteException。
+    /// 供 WebUI 高级配置面板展示/排查残留数据。
+    /// </summary>
+    public async Task<IReadOnlyList<BsonDocument>> GetRawDataEntriesAsync()
+        => await GetRawEntriesAsync(DataTableName);
+
+    /// <summary>读取 Plugin_Config_Table 全部原始文档（BsonDocument），语义同 <see cref="GetRawDataEntriesAsync"/>。</summary>
+    public async Task<IReadOnlyList<BsonDocument>> GetRawConfigEntriesAsync()
+        => await GetRawEntriesAsync(ConfigTableName);
+
+    /// <summary>按 _id 删除 Plugin_Data_Table 中的一条原始记录；不存在返回 false。</summary>
+    public Task<bool> DeleteRawDataEntryAsync(string id)
+        => DeleteRawEntryAsync(DataTableName, id);
+
+    /// <summary>按 _id 删除 Plugin_Config_Table 中的一条原始记录；不存在返回 false。</summary>
+    public Task<bool> DeleteRawConfigEntryAsync(string id)
+        => DeleteRawEntryAsync(ConfigTableName, id);
+
+    private async Task<IReadOnlyList<BsonDocument>> GetRawEntriesAsync(string collectionName)
+    {
+        var collection = _db.GetCollection(collectionName);
+        var docs = await collection.FindAllAsync();
+        return docs.ToList();
+    }
+
+    private Task<bool> DeleteRawEntryAsync(string collectionName, string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        var collection = _db.GetCollection(collectionName);
+        return collection.DeleteAsync(new BsonValue(id));
+    }
+
 
 
     public void Dispose() => _db?.Dispose();

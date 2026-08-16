@@ -41,6 +41,8 @@ internal partial class Logic
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, GetCoreWebAddress());
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
+        // 高级配置面板：原始 BSON 查看/删除插件数据库条目（排查残留数据用）
+        AdvancedConfigApiMapper.Map(webUiApplication, PluginStorageDatabase);
         // hostLifecycle 先于 StatusApiMapper 创建：概览页需展示 git 版本信息
         hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase);
         StatusApiMapper.Map(webUiApplication, () => new BotStatusDto(
