@@ -23,6 +23,8 @@ internal partial class Logic
     private readonly MessageService messageService;
     private readonly WebApplication webUiApplication;
     private readonly ConfigRegistry configRegistry;
+    /// <summary>core 拥有的进程生命周期服务（版本/更新/重启/重载/退出），插件与 WebUI 共用</summary>
+    private readonly HostLifecycle hostLifecycle;
     /// <summary>core 拥有的定时任务调度器：Agent 插件只注册执行器，生命周期归宿主</summary>
     private readonly ClockService clockService;
     private readonly CoreClockStore clockStore;
@@ -46,6 +48,8 @@ internal partial class Logic
             ConfigManager.Instance.NapcatServer), historyRecorder);
         GroupApiMapper.Map(webUiApplication, this, historyRecorder);
         LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
+        hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase, async (groupId, text) => await botClient.Bot.SendGroupMessage(groupId, text));
+        UpdateApiMapper.Map(webUiApplication, hostLifecycle);
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         // 调度器先于插件创建；存储用 core 自己的命名空间（prefix "core"），与插件数据隔离
         clockStore = new CoreClockStore(PluginStorageDatabase.CreateScope("clock", prefix: "core"));

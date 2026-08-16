@@ -80,7 +80,7 @@ public record PluginInterop(
     IEnumerable<long> GroupId,
     PluginInfoGetter PluginInfoGetter,
     PluginStorage PluginStorage,
-    Action<int> Shutdown,
+    IHostLifecycle Lifecycle,
     long AuthorizedUser,
     string PathPrefix,
     EventRegister EventRegister,

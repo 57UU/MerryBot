@@ -62,6 +62,9 @@
 
     <div class="nav-footer">
         <div class="d-flex flex-column gap-2">
+            <button class="btn btn-secondary btn-sm" @onclick="CheckUpdateAsync" disabled="@Checking">
+                @(Checking ? "检测中…" : "检测更新")
+            </button>
             <button class="btn btn-danger btn-sm" @onclick="RestartAsync" disabled="@Restarting">
                 @(Restarting ? "重启中…" : "重启程序")
             </button>
@@ -75,6 +78,7 @@
 @code {
     private bool Restarting;
     private bool Reloading;
+    private bool Checking;
 
     private async Task CloseNavIfToggled()
     {
@@ -110,6 +114,38 @@
         catch
         {
             // 重启瞬间连接断开属预期
+        }
+    }
+
+    private async Task CheckUpdateAsync()
+    {
+        if (Checking) return;
+        Checking = true;
+        try
+        {
+            var result = await JSRuntime.InvokeAsync<UpdateCheckResult>("configApi.request", "POST", "/api/update/check");
+            if (result is not { HasUpdate: true })
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"已是最新版本\n\n{result?.VersionInfo}");
+                return;
+            }
+
+            var confirmed = await JSRuntime.InvokeAsync<bool>(
+                "confirm", $"检测到新版本：\n\n{result.CommitMessages}\n\n立即更新并重启？");
+            if (!confirmed)
+            {
+                return;
+            }
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/update");
+            await JSRuntime.InvokeVoidAsync("alert", "正在更新并重启，请稍后刷新页面…");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"检测更新失败: {ex.Message}");
+        }
+        finally
+        {
+            Checking = false;
         }
     }
 

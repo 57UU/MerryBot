@@ -231,7 +231,7 @@ public override Task OnMessageAsync(
 |DelegatingClockExecutor ClockExecutor {get;}|定时任务执行器注册口：core 先以空转发器建调度器，Agent 插件初始化时设置 `Inner` 注册自己的执行器|
 |T? GetVariable<T>(string key)|获取当前插件命名空间下`Variable`中的配置项|
 |List<MessageInterceptor> Interceptors|设置拦截器，拦截特定消息被插件处理|
-|Action<int> Shutdown|关闭程序，参数为退出码|
+|IHostLifecycle Lifecycle|core 生命周期回调：检测更新 / 请求更新（fetch+merge+编译备用槽+切槽重启）/ 重启 / 重载 / 退出|
 |long AuthorizedUser|获取授权用户的QQ号|
 
 ### 拦截器-Interceptors

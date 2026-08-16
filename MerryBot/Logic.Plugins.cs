@@ -55,7 +55,7 @@ internal partial class Logic
                 QqGroupIDs,
                 () => plugins,
                 pluginStorage,
-                Shutdown,
+                hostLifecycle,
                 AuthorizedUser,
                 botClient.PathPrefix,
                 EventRegister,
