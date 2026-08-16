@@ -31,7 +31,11 @@ var history = new PlaceholderContextHistory();
 var catalog = new CatalogService();
 
 using IApplication app = Application.Create();
+// 彻底关闭鼠标：不发射鼠标跟踪转义序列，终端原生选择/滚动恢复（标准终端行为）。
+// 在 Init 前后各设一次，防止 Init 时的配置(MEC)绑定重置该标志。
+app.Mouse.IsMouseDisabled = true;
 app.Init();
+app.Mouse.IsMouseDisabled = true;
 var chatApp = new ChatApp(app, cfg, llmClient, history, catalog);
 
 var terminalToolSets = new ConcurrentBag<TerminalToolSet>();

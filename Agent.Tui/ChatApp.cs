@@ -9,7 +9,6 @@ using LlmBackend;
 using LlmClient;
 using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
-using Terminal.Gui.Input;
 using Terminal.Gui.Text;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -178,10 +177,6 @@ public sealed partial class ChatApp
         _pane.SetScheme(SingleColorScheme(Color.Gray));
 
         _window.Add(_status, _chat, _pane, inputBar);
-
-        // 点击窗口空白处/聊天区 → 焦点回到输入框
-        _window.MouseEvent += (_, e) => OnBlankClick(e);
-        _chat.MouseEvent += (_, e) => OnBlankClick(e);
 
         // 启动后自动聚焦输入框，无需点击。
         // 注意：Initialized 在 Begin/EndInit 期间触发，此时同步 SetFocus 可能被焦点后置检查拒绝（偶发崩溃），

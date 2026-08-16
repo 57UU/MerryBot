@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Terminal.Gui.Drawing;
-using Terminal.Gui.Input;
 using Terminal.Gui.Text;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -102,16 +101,6 @@ public sealed partial class ChatApp
                 _input.SetFocus();
             }
         });
-    }
-
-    /// <summary>点击窗口空白处/聊天区时，把焦点还给输入框（滚轮滚动不受影响）。</summary>
-    private void OnBlankClick(Mouse e)
-    {
-        if (e.IsSingleClicked)
-        {
-            e.Handled = true;
-            _input!.SetFocus();
-        }
     }
 
     /// <summary>把展示用的角色名映射为行角色，用于着色。</summary>
