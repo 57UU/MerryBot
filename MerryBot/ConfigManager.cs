@@ -19,7 +19,7 @@ public static class ConfigManager
         private set { field = value; }
     }
     /// <summary>保护 QqGroups 列表的并发读写（WS 消息线程与 WebUI 线程）。</summary>
-    private static readonly object _groupsLock = new();
+    private static readonly Lock _groupsLock = new();
     private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     /// <summary>从插件存储数据库加载核心配置；不存在时落库默认配置，类型不匹配时仅使用内存默认值。</summary>
     public async static Task Initialize(PluginStorageDatabase db)
@@ -65,18 +65,28 @@ public static class ConfigManager
     /// <summary>返回启用群列表的线程安全快照。</summary>
     public static IReadOnlyList<long> GetGroupIdsSnapshot()
     {
-        lock (_groupsLock)
+        _groupsLock.Enter();
+        try
         {
             return Instance.QqGroups.ToArray();
+        }
+        finally
+        {
+            _groupsLock.Exit();
         }
     }
 
     /// <summary>线程安全地判断群组是否已启用。</summary>
     public static bool ContainsGroup(long groupId)
     {
-        lock (_groupsLock)
+        _groupsLock.Enter();
+        try
         {
             return Instance.QqGroups.Contains(groupId);
+        }
+        finally
+        {
+            _groupsLock.Exit();
         }
     }
 
@@ -84,7 +94,8 @@ public static class ConfigManager
     public static async Task AddGroupAsync(long groupId)
     {
         bool changed = false;
-        lock (_groupsLock)
+        _groupsLock.Enter();
+        try
         {
             var groups = Instance.QqGroups;
             if (!groups.Contains(groupId))
@@ -92,6 +103,10 @@ public static class ConfigManager
                 groups.Add(groupId);
                 changed = true;
             }
+        }
+        finally
+        {
+            _groupsLock.Exit();
         }
         if (changed)
         {
@@ -103,9 +118,14 @@ public static class ConfigManager
     public static async Task RemoveGroupAsync(long groupId)
     {
         bool changed = false;
-        lock (_groupsLock)
+        _groupsLock.Enter();
+        try
         {
             changed = Instance.QqGroups.Remove(groupId);
+        }
+        finally
+        {
+            _groupsLock.Exit();
         }
         if (changed)
         {

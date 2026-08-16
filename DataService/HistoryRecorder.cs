@@ -7,16 +7,16 @@ namespace DataService;
 
 public class HistoryRecorder : IDisposable
 {
-    LiteDatabaseAsync database;
-    ILiteCollectionAsync<GroupMessage> messagesCollection;
-    ILiteCollectionAsync<ImageEntry> imageBedCollection;
-    ILiteCollectionAsync<FileEntry> fileBedCollection;
-    ILiteCollectionAsync<GroupEvent> eventsCollection;
-    ILiteCollectionAsync<ForwardMessageEntry> forwardMessagesCollection;
-    ILiteCollectionAsync<GroupNameEntry> groupNameCollection;
-    ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
-    ILiteCollectionAsync<ResourceReference> resourceReferencesCollection;
-    private IdGen.IdGenerator idGenerator;
+    readonly LiteDatabaseAsync database;
+    readonly ILiteCollectionAsync<GroupMessage> messagesCollection;
+    readonly ILiteCollectionAsync<ImageEntry> imageBedCollection;
+    readonly ILiteCollectionAsync<FileEntry> fileBedCollection;
+    readonly ILiteCollectionAsync<GroupEvent> eventsCollection;
+    readonly ILiteCollectionAsync<ForwardMessageEntry> forwardMessagesCollection;
+    readonly ILiteCollectionAsync<GroupNameEntry> groupNameCollection;
+    readonly ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
+    readonly ILiteCollectionAsync<ResourceReference> resourceReferencesCollection;
+    private readonly IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     private readonly IObjectStorage _objectStorage;
     private const string ImageBucket = "images";

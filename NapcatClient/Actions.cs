@@ -132,7 +132,7 @@ public class Actions
         Dictionary<string, dynamic> parameters = new();
         parameters["group_id"] = groupId;
         parameters["message"] = messageChain;
-        ParameteredAct act = new ParameteredAct(
+        ParameteredAct act = new(
             "send_group_msg",
             parameters
             );
@@ -230,9 +230,9 @@ public class Actions
     /// <param name="text">文本</param>
     /// <param name="nickname">昵称</param>
     /// <returns></returns>
-    public Task<ResponseRootObject> SendLongMessage(string groupId, string text, string nickname)
+    public async Task<ResponseRootObject> SendLongMessage(string groupId, string text, string nickname)
     {
-        var fowardChain = new GroupForwardChain.Builder(getSelfId().ToString(), nickname, groupId);
+        var fowardChain = new GroupForwardChain.Builder((await getSelfId()).ToString(), nickname, groupId);
 
         int i = 0;
         while (i < text.Length)
@@ -273,7 +273,7 @@ public class Actions
             }
         }
         Act act = new("send_group_forward_msg", fowardChain.Build());
-        return _SendAction(act);
+        return await _SendAction(act);
 
     }
     /// <summary>
