@@ -99,19 +99,23 @@ public static class TuiConfigStore
         }
     }
 
-    /// <summary>内置 opencode 供应商，保留原 Program.cs 的开箱即用体验。</summary>
+    /// <summary>
+    /// 内置 opencode 供应商（OpenCode Zen 网关），保留开箱即用体验。
+    /// 默认指向限时免费的 deepseek-v4-flash-free 模型（OpenAI 兼容 /chat/completions 端点）。
+    /// 注意：OpenCode Zen 即使是免费模型也需要登录 opencode.ai/auth 获取 API Key（免费额度内不扣费）。
+    /// </summary>
     public static TuiConfig CreateDefault() => new()
     {
-        Active = new ActiveSelection { Provider = "opencode", Model = "deepseek-v4-flash" },
+        Active = new ActiveSelection { Provider = "opencode", Model = "deepseek-v4-flash-free" },
         Providers =
         [
             new ProviderConfig
             {
                 Id = "opencode",
-                Name = "OpenCode Go",
-                ApiBase = "https://opencode.ai/zen/go/v1",
+                Name = "OpenCode Zen",
+                ApiBase = "https://opencode.ai/zen/v1",
                 ApiKey = string.Empty,
-                Models = ["deepseek-v4-flash"],
+                Models = ["deepseek-v4-flash-free"],
             },
         ],
     };

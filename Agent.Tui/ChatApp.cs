@@ -150,10 +150,16 @@ public sealed partial class ChatApp
             CanFocus = true, // 子输入框要能获得焦点，容器必须 CanFocus
         };
         inputBar.Padding.Thickness = new Thickness(1, 0, 1, 0); // 左右各 1 列 padding
+        // 整个输入条用统一的无底色 Scheme（前景白色，背景 Color.None），
+        // 避免 TextField 默认的对比底色破坏"仅外边框"的视觉。
+        inputBar.SetScheme(SingleColorScheme(Color.White));
 
         _promptLabel = new Label { Text = PromptIdleText, X = 0, Y = 0 };
         _promptLabel.SetScheme(SingleColorScheme(Color.Green));
-        _input = new TextField { X = 2, Y = 0, Width = Dim.Fill() };
+        // _input 的 X 跟随 _promptLabel 右边缘，避免提示文字变长时盖住输入框
+        // （如 "API Base（回车用默认）: " 比 "❯ " 长得多）。
+        _input = new TextField { X = Pos.Right(_promptLabel), Y = 0, Width = Dim.Fill() };
+        _input.SetScheme(SingleColorScheme(Color.White));
         _input.Accepting += OnInputAccepting;
         _input.KeyDown += OnInputKeyDown;
         inputBar.Add(_promptLabel, _input);

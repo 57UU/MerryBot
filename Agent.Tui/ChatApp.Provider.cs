@@ -12,10 +12,7 @@ public sealed partial class ChatApp
 
     private async Task OpenModelPickerAsync(string query)
     {
-        if (!_catalog.IsLoaded)
-        {
-            await _catalog.EnsureLoadedAsync(CancellationToken.None);
-        }
+        await EnsureCatalogAsync();
         var (activeProvider, activeModel) = _cfg.ResolveActive();
         var rows = BuildModelRows();
         if (rows.Count == 0)
@@ -140,7 +137,7 @@ public sealed partial class ChatApp
 
     private async Task RunProviderAddAsync()
     {
-        await _catalog.EnsureLoadedAsync(CancellationToken.None);
+        await EnsureCatalogAsync();
         var catalogProviders = _catalog.IsLoaded
             ? _catalog.GetAllProviders().OrderBy(p => p.Name).ToList()
             : [];
@@ -217,7 +214,7 @@ public sealed partial class ChatApp
         }
         var existing = _cfg.Providers[idx];
 
-        await _catalog.EnsureLoadedAsync(CancellationToken.None);
+        await EnsureCatalogAsync();
 
         var apiBase = await PromptAsync("API Base（回车不变）: ", existing.ApiBase);
         if (apiBase is null)
@@ -285,7 +282,7 @@ public sealed partial class ChatApp
         }
         var existing = _cfg.Providers[idx];
 
-        await _catalog.EnsureLoadedAsync(CancellationToken.None);
+        await EnsureCatalogAsync();
         var models = _catalog.IsLoaded ? _catalog.GetModels(existing.Id) : Array.Empty<ModelInfo>();
         if (models.Count == 0)
         {
@@ -377,4 +374,35 @@ public sealed partial class ChatApp
 
     private static int ParseIndex(string numArg)
         => int.TryParse(numArg, out var n) && n >= 1 ? n - 1 : -1;
+
+    /// <summary>
+    /// 加载 models.dev 目录；未加载时给用户一个"正在加载"的提示，避免长时间无反馈。
+    /// 已加载则直接返回。
+    /// </summary>
+    private async Task EnsureCatalogAsync()
+    {
+        if (_catalog.IsLoaded)
+        {
+            return;
+        }
+        AppendChat("sys", "正在加载 models.dev 目录…");
+        try
+        {
+            await _catalog.EnsureLoadedAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            AppendChat("error", $"加载 models.dev 目录失败：{ex.Message}");
+            return;
+        }
+        if (_catalog.IsLoaded)
+        {
+            var count = _catalog.GetAllProviders().Count;
+            AppendChat("sys", $"models.dev 目录已就绪（{count} 个供应商）。");
+        }
+        else
+        {
+            AppendChat("sys", "models.dev 目录不可用。可输入 /refresh 重新拉取。");
+        }
+    }
 }

@@ -156,6 +156,27 @@ public sealed partial class ChatApp
         }
         return width;
     }
-    /// <summary>单一前景色、终端默认背景（Color.None）的 Scheme，用于状态栏/提示符等弱化或强调元素。</summary>
-    private static Scheme SingleColorScheme(Color foreground) => new(new Attribute(foreground, Color.None));
+    /// <summary>
+    /// 单一前景色、终端默认背景（Color.None）的 Scheme，用于状态栏/提示符等弱化或强调元素。
+    /// 关键点：显式设置所有视觉角色（Focus / Editable / Active 等）为同一个 Attribute，
+    /// 禁用 Terminal.Gui 的派生算法——否则 Focus 会交换 fg/bg、Editable 会把背景设为前景的 dim 50%，
+    /// 导致 TextField 聚焦时出现灰色/反色底色，破坏"仅外边框"的扁平视觉。
+    /// </summary>
+    private static Scheme SingleColorScheme(Color foreground)
+    {
+        var attr = new Attribute(foreground, Color.None);
+        return new Scheme
+        {
+            Normal = attr,
+            HotNormal = attr,
+            Focus = attr,
+            HotFocus = attr,
+            Active = attr,
+            HotActive = attr,
+            Highlight = attr,
+            Editable = attr,
+            ReadOnly = attr,
+            Disabled = attr,
+        };
+    }
 }

@@ -20,6 +20,7 @@ public class Terminal : IDisposable
 
     private readonly string _shell;
     private readonly string _arguments;
+    private readonly string? _initialWorkingDirectory;
     private readonly string _endMarker = $"_END_{Guid.NewGuid()}";
     private readonly SemaphoreSlim _mutex = new(1, 1);
 
@@ -27,14 +28,14 @@ public class Terminal : IDisposable
     private StreamWriter _writer = null!;
     private StreamReader _reader = null!;
     private StreamReader _errorReader = null!;
-    private bool _isGotoHome;
     private bool _disposed;
 
     /// <summary>
     /// 创建终端：user 非空时以 sudo -u user 运行 /bin/bash（忽略 shell 参数）；
     /// shell 为必填项，指定要启动的 shell 可执行文件（如 /bin/bash、bash、pwsh、cmd 等）。
+    /// workingDirectory 指定 shell 进程的初始工作目录（不传则继承进程 CWD）。
     /// </summary>
-    public static Terminal Create(string shell, string? user = null)
+    public static Terminal Create(string shell, string? user = null, string? workingDirectory = null)
     {
         if (string.IsNullOrWhiteSpace(shell))
         {
@@ -42,15 +43,16 @@ public class Terminal : IDisposable
         }
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(user))
         {
-            return new Terminal("sudo", $"-u {user} /bin/bash");
+            return new Terminal("sudo", $"-u {user} /bin/bash", workingDirectory);
         }
-        return new Terminal(shell, string.Empty);
+        return new Terminal(shell, string.Empty, workingDirectory);
     }
 
-    public Terminal(string shell, string arguments)
+    public Terminal(string shell, string arguments, string? workingDirectory = null)
     {
         _shell = shell;
         _arguments = arguments;
+        _initialWorkingDirectory = workingDirectory;
         InitializeProcess();
     }
 
@@ -63,12 +65,6 @@ public class Terminal : IDisposable
         await _mutex.WaitAsync();
         try
         {
-            if (!_isGotoHome)
-            {
-                await _writer.WriteLineAsync("cd ~");
-                await _writer.FlushAsync();
-                _isGotoHome = true;
-            }
             if (!string.IsNullOrWhiteSpace(cwd))
             {
                 await _writer.WriteLineAsync($"cd {ShellQuote(cwd)}");
@@ -193,13 +189,15 @@ public class Terminal : IDisposable
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                WorkingDirectory = !string.IsNullOrWhiteSpace(_initialWorkingDirectory)
+                    ? _initialWorkingDirectory
+                    : Environment.CurrentDirectory,
             },
         };
         _process.Start();
         _writer = _process.StandardInput;
         _reader = _process.StandardOutput;
         _errorReader = _process.StandardError;
-        _isGotoHome = false;
         _disposed = false;
         CreatedCount++;
     }

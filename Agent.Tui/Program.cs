@@ -8,6 +8,10 @@ using LlmBackend;
 using LlmClient;
 using Terminal.Gui.App;
 
+// 记录用户启动 TUI 时的原始工作目录，传给 TerminalToolSet 作为 bash 进程的初始 CWD；
+// 必须在 SetCurrentDirectory 之前捕获，否则会被 BaseDirectory 覆盖。
+var originalWorkingDirectory = Environment.CurrentDirectory;
+
 // Browser's bundled scripts are copied beside the executable. Setting the working
 // directory here makes `dotnet run --project Agent.Tui` work consistently.
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
@@ -87,7 +91,7 @@ Task<(global::Agent.Agent, Action<string>)> CreateAgentAsync(string sessionId)
     var manager = sessionManager ?? throw new InvalidOperationException("会话管理器尚未初始化。");
     var clock = clockService ?? throw new InvalidOperationException("定时服务尚未初始化。");
     var webBrowser = browser ?? throw new InvalidOperationException("浏览器尚未初始化。");
-    var terminal = new TerminalToolSet(manager, sessionId);
+    var terminal = new TerminalToolSet(manager, sessionId, initialWorkingDirectory: originalWorkingDirectory);
     terminalToolSets.Add(terminal);
 
     return CreateAsync();

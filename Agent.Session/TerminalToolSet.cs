@@ -32,6 +32,8 @@ public class TerminalToolSet : ToolSet, IDisposable
     private readonly int _maxImageBytes;
     /// <summary>构造时按平台探测到的 shell，前后台终端创建与 prompt 注入共用</summary>
     private readonly string _detectedShell;
+    /// <summary>shell 进程的初始工作目录；为 null 时由 Terminal 继承进程 CWD</summary>
+    private readonly string? _initialWorkingDirectory;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
 
@@ -106,13 +108,15 @@ public class TerminalToolSet : ToolSet, IDisposable
         string sessionId,
         string? user = null,
         VisionRouter? visionRouter = null,
-        int maxImageBytes = 10 * 1024 * 1024)
+        int maxImageBytes = 10 * 1024 * 1024,
+        string? initialWorkingDirectory = null)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _sessionId = sessionId;
         this.user = user;
         _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClients: null);
         _maxImageBytes = maxImageBytes;
+        _initialWorkingDirectory = initialWorkingDirectory;
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             throw new PlatformNotSupportedException("user（sudo 模式）仅支持 Linux");
@@ -120,7 +124,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         // 先探测 shell，前后台统一使用，检测结果同时写入工具 prompt
         _detectedShell = DetectShell();
         // 懒加载：首次前台调用取 .Value 时才启动共享常驻终端进程
-        _sync = new Lazy<Terminal>(() => Terminal.Create(_detectedShell, user));
+        _sync = new Lazy<Terminal>(() => Terminal.Create(_detectedShell, user, _initialWorkingDirectory));
 
         // 图片查看能力：主模型或辅助视觉模型任一可用才注册 load_local_image 工具
         var hasVision = _visionRouter.MainHasVision || _visionRouter.HasVisionFallback;
@@ -307,7 +311,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         Terminal? terminal = null;
         try
         {
-            terminal = Terminal.Create(_detectedShell, user);
+            terminal = Terminal.Create(_detectedShell, user, _initialWorkingDirectory);
             int? effectiveTimeout = disableTimeout ? null : (timeout ?? DefaultBackgroundTimeoutSeconds);
             if (effectiveTimeout is <= 0)
             {
