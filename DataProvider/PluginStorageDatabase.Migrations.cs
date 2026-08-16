@@ -1,3 +1,4 @@
+using LiteDB;
 using LiteDB.Async;
 
 namespace DataProvider;
@@ -44,29 +45,37 @@ public partial class PluginStorageDatabase
     }
 
     /// <summary>
-    /// 迁移 v0 → v1：把 <see cref="_pluginDataCollection"/> 与 <see cref="_groupConfigCollection"/>
-    /// 中的无前缀键统一迁移为 "plugin/" 前缀。
+    /// 迁移 v0 → v1：把 Plugin_Data_Table / Plugin_Config_Table 中的无前缀键统一迁移为 "plugin/" 前缀。
     /// 此前 GetPluginData/GetPluginConfig 依赖无前缀旧键的读取回退，迁移完成后旧键消失，
     /// 回退逻辑不再命中（保留作防御，避免其他路径写入的裸键读不到）。
     /// </summary>
     private async Task MigratePrefixV1Async()
     {
-        await MigrateCollectionPrefixAsync(_pluginDataCollection, "plugin");
-        await MigrateCollectionPrefixAsync(_groupConfigCollection, "plugin");
+        await MigrateCollectionPrefixAsync(_db, "Plugin_Data_Table", "plugin");
+        await MigrateCollectionPrefixAsync(_db, "Plugin_Config_Table", "plugin");
     }
 
-    /// <summary>把集合中所有不含 "/" 的键改为 "{prefix}/{原键}"；目标键已存在时以新数据为准，丢弃旧键。</summary>
-    private static async Task MigrateCollectionPrefixAsync(ILiteCollectionAsync<PluginData> collection, string prefix)
+    /// <summary>
+    /// 把集合中所有不含 "/" 的键改为 "{prefix}/{原键}"；目标键已存在时以新数据为准，丢弃旧键。
+    /// 必须以原始 BsonDocument 操作而非强类型集合：Value 字段的 object 类型带 LiteDB _type 元数据，
+    /// 反序列化时会按 "Type.FullName, AssemblyName" 实例化，已删除旧插件（如 highlights）的类型
+    /// 不存在时直接抛 LiteException；迁移只改 _id 键，不应触碰 Value。
+    /// </summary>
+    private static async Task MigrateCollectionPrefixAsync(LiteDatabaseAsync db, string collectionName, string prefix)
     {
-        var items = await collection.FindAllAsync();
-        foreach (var item in items)
+        var collection = db.GetCollection(collectionName);
+        var docs = await collection.FindAllAsync();
+        foreach (var doc in docs)
         {
-            if (item.Id.Contains('/'))
+            string id = doc["_id"].AsString;
+            if (id.Contains('/'))
             {
                 continue;
             }
-            await collection.UpsertAsync(new PluginData { Id = $"{prefix}/{item.Id}", Value = item.Value });
-            await collection.DeleteAsync(item.Id);
+            // 改 _id 后 Upsert 按新键写入，再删旧键；新键已存在时新数据覆盖旧键
+            doc["_id"] = $"{prefix}/{id}";
+            await collection.UpsertAsync(doc);
+            await collection.DeleteAsync(id);
         }
     }
 }
