@@ -17,7 +17,6 @@ internal sealed partial class HostLifecycle : IHostLifecycle
 
     private readonly Action<int> shutdown;
     private readonly PluginStorageDatabase database;
-    private readonly Func<long, string, Task> sendGroupMessage;
     /// <summary>更新互斥锁：同一时间只允许一个更新流程，重入直接提示</summary>
     private static readonly SemaphoreSlim updateLock = new(1, 1);
     /// <summary>git 命令超时时间</summary>
@@ -29,15 +28,12 @@ internal sealed partial class HostLifecycle : IHostLifecycle
 
     public HostLifecycle(
         Action<int> shutdown,
-        PluginStorageDatabase database,
-        Func<long, string, Task> sendGroupMessage)
+        PluginStorageDatabase database)
     {
         ArgumentNullException.ThrowIfNull(shutdown);
         ArgumentNullException.ThrowIfNull(database);
-        ArgumentNullException.ThrowIfNull(sendGroupMessage);
         this.shutdown = shutdown;
         this.database = database;
-        this.sendGroupMessage = sendGroupMessage;
     }
 
     public Task<string> GetVersionInfoAsync(CancellationToken cancellationToken = default)
@@ -76,11 +72,15 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         }
     }
 
-    public async Task RequestUpdateAsync(bool force, long? notifyGroupId = null, CancellationToken cancellationToken = default)
+    public async Task RequestUpdateAsync(
+        bool force,
+        Func<string, Task>? notifier = null,
+        string? notifyTarget = null,
+        CancellationToken cancellationToken = default)
     {
         if (!updateLock.Wait(0))
         {
-            await NotifyAsync(notifyGroupId, "正在更新中，请稍候");
+            await NotifyAsync(notifier, "正在更新中，请稍候");
             return;
         }
         try
@@ -90,7 +90,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
 
             if (!hasChanges && !force)
             {
-                await NotifyAsync(notifyGroupId, "当前代码已经是最新版本，无需更新");
+                await NotifyAsync(notifier, "当前代码已经是最新版本，无需更新");
                 return;
             }
 
@@ -98,7 +98,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             string? projectRoot = FindProjectRoot(baseDir);
             if (projectRoot == null)
             {
-                await NotifyAsync(notifyGroupId, "无法定位项目根目录，更新失败");
+                await NotifyAsync(notifier, "无法定位项目根目录，更新失败");
                 return;
             }
             string buildDir = Path.Combine(projectRoot, "build");
@@ -112,7 +112,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             string targetSlot = activeSlot == "A" ? "B" : "A";
             string targetDir = Path.Combine(buildDir, $"slot_{targetSlot.ToLower()}");
 
-            await NotifyAsync(notifyGroupId, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
+            await NotifyAsync(notifier, $"{diff}\n{commitMessages}\n正在编译到备用槽位 slot_{targetSlot.ToLower()}...");
 
             // 编译到备用槽：build.sh <target_dir>，20 分钟超时
             string buildScript = Path.Combine(projectRoot, "build.sh");
@@ -148,7 +148,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             {
                 string errMsg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
                 logger.Error($"Build failed: {errMsg}");
-                await NotifyAsync(notifyGroupId, $"编译失败，当前版本继续运行\n{errMsg}");
+                await NotifyAsync(notifier, $"编译失败，当前版本继续运行\n{errMsg}");
                 return;
             }
 
@@ -157,17 +157,17 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             await File.WriteAllTextAsync(tempFile, targetSlot, cancellationToken);
             File.Move(tempFile, activeSlotFile, overwrite: true);
             logger.Info($"Build succeeded, switching to slot {targetSlot}");
-            await NotifyAsync(notifyGroupId, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
-            if (notifyGroupId is { } updateGroupId)
+            await NotifyAsync(notifier, $"编译完成，切换到 slot_{targetSlot.ToLower()}...");
+            if (notifyTarget is { } target)
             {
-                await SetNotifyFlagAsync(updateGroupId: updateGroupId);
+                await SetNotifyFlagAsync(updateTarget: target);
             }
             shutdown(CommonLib.ExitCode.PREBUILT);
         }
         catch (Exception ex)
         {
             logger.Error($"Update process error: {ex.Message}");
-            await NotifyAsync(notifyGroupId, $"更新过程出错: {ex.Message}\n当前版本继续运行");
+            await NotifyAsync(notifier, $"更新过程出错: {ex.Message}\n当前版本继续运行");
         }
         finally
         {
@@ -181,11 +181,11 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         return Task.CompletedTask;
     }
 
-    public async Task RequestReloadAsync(long? notifyGroupId = null)
+    public async Task RequestReloadAsync(string? notifyTarget = null)
     {
-        if (notifyGroupId is { } reloadGroupId)
+        if (notifyTarget is { } target)
         {
-            await SetNotifyFlagAsync(reloadGroupId: reloadGroupId);
+            await SetNotifyFlagAsync(reloadTarget: target);
         }
         shutdown(CommonLib.ExitCode.RELOAD);
     }
@@ -202,14 +202,14 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         cancellationToken.ThrowIfCancellationRequested();
         var flag = await GetNotifyAsync();
         await database.StorePluginData(NotifyKey, new CoreLifecycleNotify());
-        return new LifecycleNotifyTargets(flag.UpdateByGroupId, flag.ReloadByGroupId);
+        return new LifecycleNotifyTargets(flag.UpdateNotifyTarget, flag.ReloadNotifyTarget);
     }
 
     /// <summary>更新/重载完成后补发的通知标志（重启后由插件消费并发送结果）。</summary>
     private sealed class CoreLifecycleNotify
     {
-        public long UpdateByGroupId { get; set; } = -1;
-        public long ReloadByGroupId { get; set; } = -1;
+        public string? UpdateNotifyTarget { get; set; }
+        public string? ReloadNotifyTarget { get; set; }
     }
 
     private async Task<CoreLifecycleNotify> GetNotifyAsync()
@@ -218,23 +218,24 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         return data as CoreLifecycleNotify ?? new CoreLifecycleNotify();
     }
 
-    private async Task SetNotifyFlagAsync(long? updateGroupId = null, long? reloadGroupId = null)
+    private async Task SetNotifyFlagAsync(string? updateTarget = null, string? reloadTarget = null)
     {
         var flag = await GetNotifyAsync();
-        if (updateGroupId is { } ug) flag.UpdateByGroupId = ug;
-        if (reloadGroupId is { } rg) flag.ReloadByGroupId = rg;
+        if (updateTarget is { } ut) flag.UpdateNotifyTarget = ut;
+        if (reloadTarget is { } rt) flag.ReloadNotifyTarget = rt;
         await database.StorePluginData(NotifyKey, flag);
     }
 
-    private async Task NotifyAsync(long? notifyGroupId, string message)
+    /// <summary>把进度消息交给调用方提供的 notifier；发送失败只记日志，不中断更新流程。</summary>
+    private static async Task NotifyAsync(Func<string, Task>? notifier, string message)
     {
-        if (notifyGroupId is not { } groupId)
+        if (notifier == null)
         {
             return;
         }
         try
         {
-            await sendGroupMessage(groupId, message);
+            await notifier(message);
         }
         catch (Exception ex)
         {

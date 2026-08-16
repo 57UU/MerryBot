@@ -33,6 +33,11 @@ public partial class Agent
             }
         }
         SystemPrompt = sb.ToString();
+        if (!string.IsNullOrWhiteSpace(SystemPrompt))
+        {
+            var systemMessage = Message.System(SystemPrompt);
+            RecordMessage(systemMessage, TokenUsage.Zero);
+        }
     }
     public static async Task<Agent> Create(
         ContextHistory? contextHistory,

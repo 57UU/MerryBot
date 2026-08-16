@@ -41,14 +41,15 @@ internal partial class Logic
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, GetCoreWebAddress());
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
+        // hostLifecycle 先于 StatusApiMapper 创建：概览页需展示 git 版本信息
+        hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase);
         StatusApiMapper.Map(webUiApplication, () => new BotStatusDto(
             botClient.State == AdapterState.Connected,
             botClient.SelfId?.ToString() ?? "-",
             botClient.Nickname ?? "-",
-            ConfigManager.Instance.NapcatServer), historyRecorder);
+            ConfigManager.Instance.NapcatServer), historyRecorder, hostLifecycle);
         GroupApiMapper.Map(webUiApplication, this, historyRecorder);
         LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
-        hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase, async (groupId, text) => await botClient.Bot.SendGroupMessage(groupId, text));
         UpdateApiMapper.Map(webUiApplication, hostLifecycle);
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         // 调度器先于插件创建；存储用 core 自己的命名空间（prefix "core"），与插件数据隔离

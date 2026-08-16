@@ -74,6 +74,16 @@
     </div>
 </div>
 
+@if (Status != null && !string.IsNullOrWhiteSpace(Status.GitInfo))
+{
+    <div class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>Git 版本信息</strong></div>
+        <div class="message-content-custom">
+            <pre style="margin:0; white-space: pre-wrap; font-family: inherit; font-size: 0.9em;">@Status.GitInfo</pre>
+        </div>
+    </div>
+}
+
 <h2 class="page-title">快捷入口</h2>
 <div class="quick-links">
     <a class="quick-link" href="statistics">📊 <span>统计数据</span></a>
@@ -162,6 +172,7 @@
         public long WorkingSetBytes { get; set; }
         public long GcMemoryBytes { get; set; }
         public string Version { get; set; } = "";
+        public string GitInfo { get; set; } = "";
     }
 
     private sealed class BotPayload

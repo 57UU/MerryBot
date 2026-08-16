@@ -142,6 +142,11 @@ public class Message
         role = Role.User,
         content = [new MessagePartText { text = text }]
     };
+    public static Message System(string text) => new Message
+    {
+        role = Role.System,
+        content = [new MessagePartText { text = text }]
+    };
 
 }
 

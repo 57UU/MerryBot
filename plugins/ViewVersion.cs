@@ -29,18 +29,18 @@ public partial class ViewVersion : Plugin
         try
         {
             var targets = await Interop.Lifecycle.TakeNotifyTargetsAsync();
-            if (targets.UpdateByGroupId <= 0 && targets.ReloadByGroupId <= 0)
+            if (targets.UpdateNotifyTarget == null && targets.ReloadNotifyTarget == null)
             {
                 return;
             }
             var gitInfo = await Interop.Lifecycle.GetVersionInfoAsync();
-            if (targets.UpdateByGroupId > 0)
+            if (targets.UpdateNotifyTarget is { } updateTarget)
             {
-                await Channel.SendMessage(GroupSession(targets.UpdateByGroupId), $"update successful\n{gitInfo}");
+                await Channel.SendMessage(GroupSession(long.Parse(updateTarget)), $"update successful\n{gitInfo}");
             }
-            if (targets.ReloadByGroupId > 0)
+            if (targets.ReloadNotifyTarget is { } reloadTarget)
             {
-                await Channel.SendMessage(GroupSession(targets.ReloadByGroupId), $"reload successful\n{gitInfo}");
+                await Channel.SendMessage(GroupSession(long.Parse(reloadTarget)), $"reload successful\n{gitInfo}");
             }
         }
         catch (Exception ex)
@@ -62,7 +62,10 @@ public partial class ViewVersion : Plugin
                 if (authorized == context.SenderId)
                 {
                     bool force = command.Args.Contains("-f");
-                    _ = Interop.Lifecycle.RequestUpdateAsync(force, groupId);
+                    // 进度通知回调把消息发到本群；groupId 作为重启后补发结果的目标
+                    _ = Interop.Lifecycle.RequestUpdateAsync(force,
+                        async message => await Channel.SendMessage(GroupSession(groupId), message),
+                        groupId.ToString());
                 }
                 else
                 {
@@ -72,7 +75,7 @@ public partial class ViewVersion : Plugin
             case "reload":
                 if (authorized == context.SenderId)
                 {
-                    _ = Interop.Lifecycle.RequestReloadAsync(groupId);
+                    _ = Interop.Lifecycle.RequestReloadAsync(groupId.ToString());
                 }
                 else
                 {

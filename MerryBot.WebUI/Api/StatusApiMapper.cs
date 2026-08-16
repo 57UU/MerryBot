@@ -1,3 +1,4 @@
+using CommonLib;
 using DataService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -13,7 +14,7 @@ public sealed record BotStatusDto(
     string Nickname,
     string NapcatAddress);
 
-/// <summary>概览页状态：Bot 连接 + 群聊数 + 系统运行信息。</summary>
+/// <summary>概览页状态：Bot 连接 + 群聊数 + 系统运行信息 + git 版本信息。</summary>
 public sealed record SystemStatusDto(
     BotStatusDto Bot,
     int GroupCount,
@@ -24,22 +25,34 @@ public sealed record SystemStatusDto(
     double UptimeSeconds,
     long WorkingSetBytes,
     long GcMemoryBytes,
-    string Version);
+    string Version,
+    string GitInfo);
 
-/// <summary>概览页状态 API；系统信息直接取自当前进程，Bot 状态由主程序注入。</summary>
+/// <summary>概览页状态 API；系统信息直接取自当前进程，Bot 状态由主程序注入，git 信息来自 HostLifecycle。</summary>
 public static class StatusApiMapper
 {
     private static readonly DateTime ProcessStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
 
-    public static void Map(WebApplication app, Func<BotStatusDto> botStatusProvider, HistoryRecorder historyRecorder)
+    public static void Map(WebApplication app, Func<BotStatusDto> botStatusProvider, HistoryRecorder historyRecorder, IHostLifecycle hostLifecycle)
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(botStatusProvider);
         ArgumentNullException.ThrowIfNull(historyRecorder);
+        ArgumentNullException.ThrowIfNull(hostLifecycle);
 
         app.MapGet("/api/status", async () =>
         {
             var groups = await historyRecorder.GetAllGroupIdsAsync();
+            // git 信息获取失败不应影响整体状态展示，失败时返回空串
+            string gitInfo;
+            try
+            {
+                gitInfo = await hostLifecycle.GetVersionInfoAsync();
+            }
+            catch
+            {
+                gitInfo = string.Empty;
+            }
             return Results.Ok(new SystemStatusDto(
                 Bot: botStatusProvider(),
                 GroupCount: groups.Count,
@@ -50,7 +63,8 @@ public static class StatusApiMapper
                 UptimeSeconds: (DateTime.UtcNow - ProcessStartUtc).TotalSeconds,
                 WorkingSetBytes: Environment.WorkingSet,
                 GcMemoryBytes: GC.GetTotalMemory(forceFullCollection: false),
-                Version: typeof(StatusApiMapper).Assembly.GetName().Version?.ToString() ?? "unknown"));
+                Version: typeof(StatusApiMapper).Assembly.GetName().Version?.ToString() ?? "unknown",
+                GitInfo: gitInfo));
         });
     }
 }
