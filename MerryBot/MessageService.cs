@@ -1,4 +1,5 @@
 using BotPlugin;
+using CommonLib;
 using DataService;
 using LlmBackend;
 using NapcatClient;
@@ -24,10 +25,21 @@ internal sealed class MessageService : IMessageService
     private readonly HistoryRecorder history;
     private readonly NLog.Logger logger;
     private readonly long _resourceSizeLimit;
-    private readonly ConcurrentDictionary<MessageKey, ProcessedMessage> messages = new();
-    private readonly ConcurrentDictionary<MessageKey, Lazy<Task<ProcessedMessage?>>> messageLoads = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<ProcessedForwardMessage?>>> forwardLoads = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<LocalMessageResource?>>> resourceLoads = new();
+
+    /// <summary>消息/转发/资源缓存过期时间；资源缓存额外受总字节上限约束。</summary>
+    private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(24);
+    /// <summary>消息资源（图片/文件）缓存总字节上限；超出后按 LRU 淘汰，防止大文件长期常驻内存。</summary>
+    private const long ResourceCacheMaxBytes = 256L * 1024 * 1024;
+
+    // 数据缓存：命中返回快照副本；未命中走下方 in-flight 合并加载，成功后写入缓存、失败可重试
+    private readonly RequestCaching messageCache = new(CacheExpiration);
+    private readonly RequestCaching forwardCache = new(CacheExpiration);
+    private readonly RequestCaching resourceCache = new(CacheExpiration, sizeLimit: ResourceCacheMaxBytes,
+        sizeProvider: static value => value is LocalMessageResource resource ? Math.Max(1, resource.Data.LongLength) : 1);
+    // 加载中合并（同 key 并发只加载一次）；任务结束（成功/失败）后移除，结果落入上方缓存
+    private readonly ConcurrentDictionary<MessageKey, Lazy<Task<ProcessedMessage?>>> messageInFlight = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<ProcessedForwardMessage?>>> forwardInFlight = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<LocalMessageResource?>>> resourceInFlight = new();
     private readonly ConcurrentDictionary<string, ResourceDescriptor> resourceDescriptors = new();
     private readonly ConcurrentDictionary<string, ForwardSeed> forwardSeeds = new();
     private readonly ConcurrentDictionary<long, DateTime> groupInfoRefreshes = new();
@@ -57,6 +69,8 @@ internal sealed class MessageService : IMessageService
     public Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default)
         => history.GetMessageCountByGroupIdAsync(groupId);
 
+    private static string MessageCacheKey(MessageKey key) => $"msg:{key.GroupId}:{key.MessageId}";
+
     public MessageIngress Ingest(ReceivedGroupMessage raw)
     {
         var localized = LocalizeChain(raw.message, raw.GroupId);
@@ -72,7 +86,7 @@ internal sealed class MessageService : IMessageService
             false);
 
         // 真正到达的入站消息优先于同时进行的 get_msg 请求。
-        messages[new MessageKey(raw.GroupId, raw.message_id)] = snapshot;
+        messageCache.SetCache(MessageCacheKey(new MessageKey(raw.GroupId, raw.message_id)), snapshot);
         var ingress = new MessageIngress(snapshot, localized.Resources, localized.Forwards);
         _ = PersistIngressAsync(ingress);
         return ingress;
@@ -119,24 +133,25 @@ internal sealed class MessageService : IMessageService
         if (!long.TryParse(messageIdOrReference, out var messageId)) return null;
 
         var key = new MessageKey(groupId, messageId);
-        if (messages.TryGetValue(key, out var local)) return CloneSnapshot(local);
+        if (messageCache.TryGetCache<ProcessedMessage>(MessageCacheKey(key), out var local)) return CloneSnapshot(local);
 
-        var loader = messageLoads.GetOrAdd(key, static (messageKey, self) =>
+        var loader = messageInFlight.GetOrAdd(key, static (messageKey, self) =>
             new Lazy<Task<ProcessedMessage?>>(() => self.LoadMessageAsync(messageKey), LazyThreadSafetyMode.ExecutionAndPublication), this);
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
+            // 无论成败都结束 in-flight：成功时结果已写入缓存，失败时不缓存下次可重试
+            messageInFlight.TryRemove(key, out _);
             if (result == null)
             {
-                // 瞬时失败（远端不可达等）不永久缓存 null，移除后下次可重试
-                messageLoads.TryRemove(key, out _);
+                // 瞬时失败（远端不可达等）不缓存 null，下次可重试
                 return null;
             }
             return CloneSnapshot(result);
         }
         catch (Exception ex)
         {
-            messageLoads.TryRemove(key, out _);
+            messageInFlight.TryRemove(key, out _);
             logger.Warn(ex, "读取回复消息失败: {0}", key);
             return null;
         }
@@ -149,22 +164,25 @@ internal sealed class MessageService : IMessageService
             : forwardIdOrReference;
         if (string.IsNullOrWhiteSpace(forwardId)) return null;
 
-        var loader = forwardLoads.GetOrAdd(forwardId, static (id, state) =>
+        if (forwardCache.TryGetCache<ProcessedForwardMessage>(forwardId, out var cached)) return CloneForward(cached);
+
+        var loader = forwardInFlight.GetOrAdd(forwardId, static (id, state) =>
             new Lazy<Task<ProcessedForwardMessage?>>(() => state.self.LoadForwardAsync(id, state.sourceGroupId), LazyThreadSafetyMode.ExecutionAndPublication), (self: this, sourceGroupId));
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
+            // 无论成败都结束 in-flight：成功时结果已写入缓存，失败时不缓存下次可重试
+            forwardInFlight.TryRemove(forwardId, out _);
             if (result == null)
             {
-                // 瞬时失败不永久缓存 null，移除后下次可重试
-                forwardLoads.TryRemove(forwardId, out _);
+                // 瞬时失败不缓存 null，下次可重试
                 return null;
             }
             return CloneForward(result);
         }
         catch (Exception ex)
         {
-            forwardLoads.TryRemove(forwardId, out _);
+            forwardInFlight.TryRemove(forwardId, out _);
             logger.Warn(ex, "读取合并转发失败: {0}", forwardId);
             return null;
         }
@@ -173,22 +191,25 @@ internal sealed class MessageService : IMessageService
     public async Task<LocalMessageResource?> GetResourceAsync(string localUri, CancellationToken cancellationToken = default)
     {
         if (!LocalMessageReference.IsResource(localUri)) return null;
-        var loader = resourceLoads.GetOrAdd(localUri, static (uri, self) =>
+        if (resourceCache.TryGetCache<LocalMessageResource>(localUri, out var cached)) return cached with { Data = cached.Data.ToArray() };
+
+        var loader = resourceInFlight.GetOrAdd(localUri, static (uri, self) =>
             new Lazy<Task<LocalMessageResource?>>(() => self.LoadResourceAsync(uri), LazyThreadSafetyMode.ExecutionAndPublication), this);
         try
         {
             var result = await loader.Value.WaitAsync(cancellationToken);
+            // 无论成败都结束 in-flight：成功时结果已写入缓存，失败时不缓存下次可重试
+            resourceInFlight.TryRemove(localUri, out _);
             if (result == null)
             {
-                // 瞬时失败不永久缓存 null，移除后下次可重试
-                resourceLoads.TryRemove(localUri, out _);
+                // 瞬时失败不缓存 null，下次可重试
                 return null;
             }
             return result with { Data = result.Data.ToArray() };
         }
         catch (Exception ex)
         {
-            resourceLoads.TryRemove(localUri, out _);
+            resourceInFlight.TryRemove(localUri, out _);
             logger.Warn(ex, "读取消息资源失败: {0}", localUri);
             return null;
         }
@@ -229,17 +250,19 @@ internal sealed class MessageService : IMessageService
 
     private async Task<ProcessedMessage?> LoadMessageAsync(MessageKey key)
     {
-        if (messages.TryGetValue(key, out var local)) return local;
+        var cacheKey = MessageCacheKey(key);
+        if (messageCache.TryGetCache<ProcessedMessage>(cacheKey, out var local)) return local;
         var stored = await history.GetMessageByIdAsync(key.MessageId, key.GroupId);
         if (stored != null)
         {
             var restored = FromStoredMessage(stored);
-            return messages.GetOrAdd(key, restored);
+            messageCache.SetCache(cacheKey, restored);
+            return restored;
         }
 
         var remote = await bot.GetMessageById(key.MessageId.ToString());
         if (remote == null) return null;
-        if (messages.TryGetValue(key, out local)) return local;
+        if (messageCache.TryGetCache<ProcessedMessage>(cacheKey, out local)) return local;
 
         var localized = LocalizeChain(remote.Message, key.GroupId);
         var fetched = CreateSnapshot(
@@ -252,8 +275,9 @@ internal sealed class MessageService : IMessageService
             localized.Chain,
             DateTimeOffset.FromUnixTimeSeconds(remote.Time).UtcDateTime,
             false);
-        var winner = messages.GetOrAdd(key, fetched);
-        if (ReferenceEquals(winner, fetched))
+        messageCache.SetCache(cacheKey, fetched);
+        // 仅当前缓存值仍是本次加载结果时执行持久化，避免并发加载重复写库（Upsert 幂等，即使重复也无副作用）
+        if (ReferenceEquals(fetched, messageCache.TryGetCache<ProcessedMessage>(cacheKey, out var current) ? current : null))
         {
             await history.UpsertMessageAsync(ToStoredMessage(fetched));
             foreach (var resource in localized.Resources)
@@ -263,13 +287,18 @@ internal sealed class MessageService : IMessageService
             }
             foreach (var forward in localized.Forwards) forwardSeeds.TryAdd(forward.ForwardId, forward);
         }
-        return winner;
+        return fetched;
     }
 
     private async Task<ProcessedForwardMessage?> LoadForwardAsync(string forwardId, long sourceGroupId)
     {
         var stored = await history.GetForwardMessageByIdAsync(forwardId);
-        if (stored != null) return FromStoredForward(stored);
+        if (stored != null)
+        {
+            var restored = FromStoredForward(stored);
+            forwardCache.SetCache(forwardId, restored);
+            return restored;
+        }
 
         if (!forwardSeeds.TryGetValue(forwardId, out var seed))
         {
@@ -281,15 +310,20 @@ internal sealed class MessageService : IMessageService
 
         var forward = BuildForward(seed);
         await history.RecordForwardMessageAsync(ToStoredForward(forward));
+        forwardCache.SetCache(forwardId, forward);
         return forward;
     }
 
     private async Task<LocalMessageResource?> LoadResourceAsync(string localUri)
     {
+        if (resourceCache.TryGetCache<LocalMessageResource>(localUri, out var cachedResource)) return cachedResource;
+
         var reference = await history.GetResourceReferenceAsync(localUri);
         if (reference?.StoredObjectId is long objectId)
         {
-            return await ReadStoredResourceAsync(localUri, reference.Kind, reference.OriginalName, reference.IsImage, objectId);
+            var storedResource = await ReadStoredResourceAsync(localUri, reference.Kind, reference.OriginalName, reference.IsImage, objectId);
+            if (storedResource != null) resourceCache.SetCache(localUri, storedResource);
+            return storedResource;
         }
 
         if (!resourceDescriptors.TryGetValue(localUri, out var descriptor))
@@ -300,7 +334,9 @@ internal sealed class MessageService : IMessageService
         reference = await history.UpsertResourceReferenceAsync(reference);
         if (reference.StoredObjectId is long existingObjectId)
         {
-            return await ReadStoredResourceAsync(localUri, reference.Kind, reference.OriginalName, reference.IsImage, existingObjectId);
+            var existingResource = await ReadStoredResourceAsync(localUri, reference.Kind, reference.OriginalName, reference.IsImage, existingObjectId);
+            if (existingResource != null) resourceCache.SetCache(localUri, existingResource);
+            return existingResource;
         }
         if (string.IsNullOrWhiteSpace(descriptor.Source)) return null;
 
@@ -325,7 +361,9 @@ internal sealed class MessageService : IMessageService
         }
         reference.UpdatedTime = DateTime.UtcNow;
         await history.UpsertResourceReferenceAsync(reference);
-        return new LocalMessageResource(localUri, descriptor.Kind, descriptor.OriginalName, GetContentType(descriptor.Kind, descriptor.OriginalName ?? descriptor.Source), bytes);
+        var resource = new LocalMessageResource(localUri, descriptor.Kind, descriptor.OriginalName, GetContentType(descriptor.Kind, descriptor.OriginalName ?? descriptor.Source), bytes);
+        resourceCache.SetCache(localUri, resource);
+        return resource;
     }
 
     /// <summary>
@@ -551,6 +589,8 @@ internal sealed class MessageService : IMessageService
 
     private async Task MarkRecallAsync(long groupId, long messageId)
     {
+        // 主动失效消息缓存，避免撤回后仍返回未删除的旧快照
+        messageCache.Remove(MessageCacheKey(new MessageKey(groupId, messageId)));
         try { await history.MarkMessageAsDeletedAsync(messageId, groupId); }
         catch (Exception ex) { logger.Warn(ex, "标记撤回消息失败: {0}", messageId); }
     }
