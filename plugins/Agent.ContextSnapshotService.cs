@@ -50,12 +50,14 @@ internal sealed class ContextSnapshotService : IContextSnapshotService
         {
             var msg = raw.AsDocument;
 
-            // StoredMessagePartKind: Text=0, Image=1；图片展示为占位符
+            // StoredMessagePartKind 是 enum，LiteDB 默认序列化为字符串 "Text"/"Image"
             var content = string.Join('\n', msg["Content"].AsArray
                 .Select(part =>
                 {
                     var p = part.AsDocument;
-                    return p["Kind"].AsInt32 == 1 ? "[图片]" : p["Value"].AsString;
+                    var kind = p["Kind"];
+                    var isImage = kind.IsString ? kind.AsString == "Image" : kind.AsInt32 == 1;
+                    return isImage ? "[图片]" : p["Value"].AsString;
                 })
                 .Where(s => !string.IsNullOrEmpty(s)));
 
