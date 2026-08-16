@@ -59,7 +59,6 @@ public sealed partial class ChatApp
     // 聊天消息队列：输入框常驻，聊天期间可继续输入排队
     private readonly Channel<string> _chatQueue = Channel.CreateUnbounded<string>();
     private Task? _chatPump;
-    private volatile bool _chatRunning;
     private int _pendingCount;
 
     // 过程事件渲染：暂存模型中间输出，等确认是中间轮次后写入思考面板

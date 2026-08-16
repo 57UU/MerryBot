@@ -14,13 +14,15 @@ public sealed partial class ChatApp
     private void QueueChat(string input)
     {
         AppendChat("You", input);
+        // 先计数再入队：pump 取到消息即减（见 ChatPumpAsync），
+        // 因此 _pendingCount 恒为"等待处理"的消息数，处理中的不算排队。
+        var pending = Interlocked.Increment(ref _pendingCount);
         _chatQueue.Writer.TryWrite(input);
         _chatPump ??= Task.Run(ChatPumpAsync);
-        if (_chatRunning)
+        if (pending > 1)
         {
-            AppendChat("sys", $"已排队（队列 {Volatile.Read(ref _pendingCount) + 1}），处理完上一条后自动继续。");
+            AppendChat("sys", $"已排队（队列 {pending}），处理完上一条后自动继续。");
         }
-        Interlocked.Increment(ref _pendingCount);
         RefreshStatus();
     }
 
@@ -29,7 +31,9 @@ public sealed partial class ChatApp
     {
         await foreach (var msg in _chatQueue.Reader.ReadAllAsync())
         {
-            _chatRunning = true;
+            // 出队即减：只统计等待处理的消息，当前处理中的不算排队
+            Interlocked.Decrement(ref _pendingCount);
+            RefreshStatus();
             try
             {
                 await RunChatAsync(msg);
@@ -40,8 +44,6 @@ public sealed partial class ChatApp
             }
             finally
             {
-                _chatRunning = false;
-                Interlocked.Decrement(ref _pendingCount);
                 RefreshStatus();
             }
         }
