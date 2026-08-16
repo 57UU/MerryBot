@@ -4,19 +4,21 @@ using CommonLib;
 namespace BotPlugin;
 
 /// <summary>
-/// Agent 服务插件：对外注册 Skill / 记忆管理接口（供运行时工具与 WebUI 使用），
+/// Agent 服务插件：对外注册 Skill / 记忆 / 上下文快照 管理接口（供运行时工具与 WebUI 使用），
 /// 内部持有具体服务实现并转发调用，同时暴露给 AgentPlugin 复用同一份服务实例。
 /// </summary>
 [PluginTag("agent-service", "Agent服务", "向运行时与 WebUI 提供 Skill 与记忆管理服务")]
-public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemoryManagementService
+public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemoryManagementService, IContextSnapshotService
 {
     private readonly FileSkillManagementService skillService;
     private readonly MemoryManagementService memoryService;
+    private readonly ContextSnapshotService contextSnapshotService;
 
     public AgentServicePlugin(PluginInterop interop) : base(interop)
     {
         skillService = new FileSkillManagementService(Path.Combine(Interop.PathPrefix, "skills"));
         memoryService = new MemoryManagementService(Interop.PluginStorage.PluginDatabaseScope);
+        contextSnapshotService = new ContextSnapshotService(Interop.PluginStorage.PluginDatabaseScope);
     }
 
     /// <summary>供 AgentPlugin 复用：Skill 文件存储服务。</summary>
@@ -67,4 +69,12 @@ public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemor
 
     public Task<string?> GetPromptInjectionAsync(string sessionKey, CancellationToken cancellationToken = default)
         => memoryService.GetPromptInjectionAsync(sessionKey, cancellationToken);
+
+    // ── IContextSnapshotService 转发 ────────────────────────────────────────
+
+    public Task<IReadOnlyList<ContextSnapshotSession>> ListSessionsAsync(CancellationToken cancellationToken = default)
+        => contextSnapshotService.ListSessionsAsync(cancellationToken);
+
+    public Task<ContextSnapshotDetail?> GetSnapshotAsync(string sessionKey, CancellationToken cancellationToken = default)
+        => contextSnapshotService.GetSnapshotAsync(sessionKey, cancellationToken);
 }

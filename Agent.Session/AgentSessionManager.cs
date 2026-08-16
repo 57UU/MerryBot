@@ -1,15 +1,19 @@
+using System.Collections.Concurrent;
+using CommonLib;
+
 namespace Agent.Session;
 
-public class AgentSessionManager
+public class AgentSessionManager : IDisposable
 {
     /// <summary>会话空闲超过该时长即视为可淘汰（默认 12 小时，可由配置覆盖）</summary>
     private readonly TimeSpan _idleSessionTimeout;
-    /// <summary>惰性空闲清理的最小间隔，避免每次获取会话都做全表扫描</summary>
+    /// <summary>后台监控清理的扫描间隔</summary>
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
 
     private readonly Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> _agentCreator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<AgentSession>>> _agentSessions = new();
-    private long _lastCleanupTicks;
+    private readonly ConcurrentDictionary<string, Lazy<Task<AgentSession>>> _agentSessions = new();
+    private readonly CancellationTokenSource _cleanupCts = new();
+    private readonly Task _cleanupTask;
 
     public AgentSessionManager(
         Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> agentCreator,
@@ -21,6 +25,8 @@ public class AgentSessionManager
         {
             throw new ArgumentOutOfRangeException(nameof(idleSessionTimeout), "会话空闲淘汰时长必须大于 0。");
         }
+        // 后台监控任务：定期扫描并清理空闲会话（清理前先压缩，减少下次加载占用）
+        _cleanupTask = Task.Run(() => CleanupLoopAsync(_cleanupCts.Token));
     }
 
     /// <summary>
@@ -30,9 +36,6 @@ public class AgentSessionManager
     public async Task<AgentSession> GetSessionAsync(string sessionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-
-        // 惰性清理：每次获取会话时顺带检查（受 CleanupInterval 节流），避免空闲会话永不淘汰
-        TryCleanupIdleSessions();
 
         var lazySession = _agentSessions.GetOrAdd(
             sessionId,
@@ -59,20 +62,53 @@ public class AgentSessionManager
     }
 
     /// <summary>
-    /// 惰性空闲清理：距上次清理超过 CleanupInterval 时扫描一次，空闲超过
-    /// _idleSessionTimeout 且当前不忙的会话从字典移除（AgentSession/Agent 均无 Dispose，
-    /// "释放"即移除引用，交由 GC 回收）。只在会话不忙时清理，避免打断正在处理的消息；
-    /// 只移除仍是原 Lazy 实例的条目，避免误删并发新建的会话。
+    /// 移除指定会话并立即重建：重建会重新执行 creator（重新构建 LLM 客户端与工具集）。
+    /// 供 /new 使用——调用方需先清空持久化历史，再重建以刷新 tools 并从空历史开始。
     /// </summary>
-    private void TryCleanupIdleSessions()
+    public async Task<AgentSession> RebuildSessionAsync(string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        _agentSessions.TryRemove(sessionId, out _);
+        return await GetSessionAsync(sessionId);
+    }
+
+    /// <summary>后台监控循环：按 CleanupInterval 周期扫描空闲会话，Dispose 取消时静默退出。</summary>
+    private async Task CleanupLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(CleanupInterval, cancellationToken);
+                try
+                {
+                    await CleanupIdleSessionsAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleLogger.Instance.Warn($"会话空闲清理失败: {ex.Message}");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常退出（Dispose 取消）
+        }
+    }
+
+    /// <summary>
+    /// 扫描并清理空闲会话：清理（移除引用，交由 GC）前先调用 CompactAsync 压缩上下文，
+    /// 压缩摘要会被持久化，下次重建该会话时从压缩快照恢复，减少占用。
+    /// 只在会话不忙时清理，避免打断正在处理的消息；只移除仍是原 Lazy 实例的条目，
+    /// 避免误删并发新建的会话。
+    /// </summary>
+    private async Task CleanupIdleSessionsAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        if (Interlocked.Read(ref _lastCleanupTicks) > now.Ticks - CleanupInterval.Ticks)
-        {
-            return;
-        }
-        Interlocked.Exchange(ref _lastCleanupTicks, now.Ticks);
-
         foreach (var kvp in _agentSessions)
         {
             var lazy = kvp.Value;
@@ -86,8 +122,36 @@ public class AgentSessionManager
             {
                 continue;
             }
+
+            // 清理前先压缩：压缩摘要持久化后，下次加载直接从压缩快照恢复。
+            // 压缩失败（如 LLM 不可用）记录日志仍继续清理——历史已逐轮落库，移除引用不丢数据。
+            try
+            {
+                await session.CompactAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ConsoleLogger.Instance.Warn($"会话压缩失败（{kvp.Key}），仍按空闲清理: {ex.Message}");
+            }
+
+            // 压缩期间可能有新消息入队（刷新 LastActiveUtc 或正在处理），再确认一次仍空闲才移除
+            var now2 = DateTime.UtcNow;
+            if (session.IsBusy || now2 - session.LastActiveUtc <= _idleSessionTimeout)
+            {
+                continue;
+            }
             ((ICollection<KeyValuePair<string, Lazy<Task<AgentSession>>>>)_agentSessions)
                 .Remove(new KeyValuePair<string, Lazy<Task<AgentSession>>>(kvp.Key, lazy));
         }
+    }
+
+    public void Dispose()
+    {
+        _cleanupCts.Cancel();
+        _cleanupCts.Dispose();
     }
 }

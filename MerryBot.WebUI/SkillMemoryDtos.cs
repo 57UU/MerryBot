@@ -9,3 +9,9 @@ public sealed record MemorySessionDto(
 
 public sealed record MemoryIndexUpdateRequest(string SessionKey, string Content);
 public sealed record MemoryEntryUpdateRequest(string SessionKey, string Key, string Content);
+
+public sealed record ContextSessionDto(
+    string SessionKey,
+    string DisplayName,
+    int MessageCount,
+    DateTimeOffset UpdatedAtUtc);

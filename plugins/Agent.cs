@@ -229,7 +229,10 @@ public partial class AgentPlugin : Plugin
                     switch (item.Kind)
                     {
                         case ControlKind.New:
+                            // /new 需重建会话：CreateAgent 可能因配置/技能变化重建工具集；
+                            // 先清空持久化历史，再移除并重建，让新会话从空历史 + 新工具开始
                             await session.ResetAsync();
+                            session = await sessionManager.RebuildSessionAsync(sessionId);
                             SendGroupReply(groupId, [item.SenderId], "已开启新对话");
                             break;
                         case ControlKind.Compact:
@@ -327,6 +330,7 @@ public partial class AgentPlugin : Plugin
     {
         disposeCts.Cancel();
         disposeCts.Dispose();
+        sessionManager.Dispose();
         rateLimiter.Dispose();
         browser.Dispose();
     }

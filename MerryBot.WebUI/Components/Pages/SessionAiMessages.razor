@@ -1,9 +1,9 @@
 @page "/sessionai"
-@using DataService
+@using CommonLib
 @rendermode InteractiveServer
-@inject HistoryRecorder HistoryRecorder
+@inject IJSRuntime JSRuntime
 
-<PageTitle>Session AI 消息</PageTitle>
+<PageTitle>Session 上下文</PageTitle>
 
 <div class="container-custom h-100-custom" style="height: 100%;">
 
@@ -32,7 +32,7 @@
                     else if (Sessions.Count == 0)
                     {
                         <div class="text-center-custom text-muted-custom py-2-custom">
-                            暂无 AI 消息记录。
+                            暂无上下文快照。
                         </div>
                     }
                     else
@@ -43,10 +43,10 @@
                                 <li class="list-group-item-custom @(SelectedSessionKey == session.SessionKey ? "active-custom" : "")"
                                     tabindex="0"
                                     role="button"
-                                    @onclick="() => SelectSession(session.SessionKey)"
-                                    @onkeydown="() => SelectSession(session.SessionKey)">
-                                    <div>@GetDisplayName(session)</div>
-                                    <small class="text-muted-custom">@session.MessageCount 条 · @DateTimeOffset.FromUnixTimeSeconds(session.LastTime).LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
+                                    @onclick="() => SelectSessionAsync(session.SessionKey)"
+                                    @onkeydown="() => SelectSessionAsync(session.SessionKey)">
+                                    <div>@session.DisplayName</div>
+                                    <small class="text-muted-custom">@session.MessageCount 条 · @session.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
                                 </li>
                             }
                         </ul>
@@ -55,63 +55,103 @@
             </div>
         </div>
 
-        <!-- 右侧消息展示 -->
+        <!-- 右侧上下文展示 -->
         <div class="col-right">
-            <PagedMessageContainer TItem="AiMessageEntry"
-                                   ElementId="session-ai-message-container"
-                                   Key="@SelectedSessionKey"
-                                   EmptyText="暂无 AI 消息"
-                                   LoadPageAsync="LoadAiMessagesPage">
-                <HeaderContent>
+            <div class="card-full-height">
+                <div class="card-header-custom">
                     @if (!string.IsNullOrEmpty(SelectedSessionKey))
                     {
-                        <span>@SelectedSessionKey 的 AI 消息</span>
+                        <span>@SelectedSessionKey 的当前上下文</span>
                     }
                     else
                     {
                         <span>请选择一个 session</span>
                     }
-                </HeaderContent>
-                <BodyContent>
-                    @foreach (var message in context)
+                </div>
+                <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+                    @if (LoadError != null && Snapshot is null)
                     {
-                        <div class="message-item-custom mb-3-custom">
-                            <div class="message-header-custom">
-                                <strong>@message.MessageType</strong>
-                                <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
-                            </div>
-                            <div class="message-content-custom">
-                                <div>@message.Content</div>
-                                @if (message.TotalTokens > 0)
-                                {
-                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @message.TotalTokens</div>
-                                }
-                            </div>
+                        <div class="text-center-custom text-danger-custom mt-5-custom">@LoadError</div>
+                    }
+                    else if (Snapshot is null && !string.IsNullOrEmpty(SelectedSessionKey))
+                    {
+                        <div class="text-center-custom text-muted-custom mt-5-custom">
+                            @if (SnapshotLoading)
+                            {
+                                <span>加载中…</span>
+                            }
+                            else
+                            {
+                                <span>该 session 暂无上下文快照。</span>
+                            }
                         </div>
                     }
-                </BodyContent>
-            </PagedMessageContainer>
+                    else if (Snapshot is null)
+                    {
+                        <div class="text-center-custom text-muted-custom mt-5-custom">请从左侧选择一个 session</div>
+                    }
+                    else if (Snapshot.Messages.Count == 0)
+                    {
+                        <div class="text-center-custom text-muted-custom mt-5-custom">上下文为空（可能是刚压缩或重置过）。</div>
+                    }
+                    else
+                    {
+                        @foreach (var message in Snapshot.Messages)
+                        {
+                            <div class="message-item-custom mb-3-custom">
+                                <div class="message-header-custom">
+                                    <strong>@message.Role</strong>
+                                </div>
+                                <div class="message-content-custom">
+                                    @if (!string.IsNullOrEmpty(message.Content))
+                                    {
+                                        <div>@message.Content</div>
+                                    }
+                                    @if (message.ToolCalls.Count > 0)
+                                    {
+                                        <div class="text-muted-custom small-custom mt-1-custom">
+                                            工具调用：
+                                            @foreach (var call in message.ToolCalls)
+                                            {
+                                                <div>· @(call.Name)(@(call.Arguments))</div>
+                                            }
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(message.ReasoningContent))
+                                    {
+                                        <div class="text-muted-custom small-custom mt-1-custom">
+                                            <details>
+                                                <summary>思维链</summary>
+                                                <div style="white-space: pre-wrap;">@message.ReasoningContent</div>
+                                            </details>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        <div class="text-muted-custom small-custom mt-2-custom">
+                            快照时间：@Snapshot.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 @code {
-    /// <summary>有 AI 消息记录的 session 汇总，null 表示加载中。</summary>
-    private List<AiMessageSessionSummary>? Sessions;
-
-    private IReadOnlyDictionary<long, string> GroupNames = new Dictionary<long, string>();
-
+    private List<ContextSessionDto>? Sessions;
     private string SelectedSessionKey { get; set; } = string.Empty;
-
+    private ContextSnapshotDetail? Snapshot;
+    private bool SnapshotLoading;
     private string? LoadError;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSessionsAsync();
-        // 首次进入自动选中第一个 session
         if (Sessions is { Count: > 0 })
         {
-            SelectedSessionKey = Sessions[0].SessionKey;
+            await SelectSessionAsync(Sessions[0].SessionKey);
         }
     }
 
@@ -120,15 +160,7 @@
         try
         {
             LoadError = null;
-            var sessionsTask = HistoryRecorder.ListAiMessageSessionsAsync();
-            var namesTask = HistoryRecorder.GetAllGroupNamesAsync();
-            await Task.WhenAll(sessionsTask, namesTask);
-            Sessions = sessionsTask.Result;
-            // GroupBy 防止重复 GroupId 导致 ToDictionary 抛 ArgumentException
-            GroupNames = namesTask.Result
-                .Where(item => !string.IsNullOrWhiteSpace(item.Name))
-                .GroupBy(item => item.GroupId)
-                .ToDictionary(group => group.Key, group => group.First().Name);
+            Sessions = await JSRuntime.InvokeAsync<List<ContextSessionDto>>("configApi.request", "GET", "/api/context/sessions");
         }
         catch (Exception exception)
         {
@@ -136,25 +168,25 @@
         }
     }
 
-    private void SelectSession(string sessionKey)
+    private async Task SelectSessionAsync(string sessionKey)
     {
-        if (SelectedSessionKey == sessionKey) return;
+        if (SelectedSessionKey == sessionKey && Snapshot is not null) return;
         SelectedSessionKey = sessionKey;
-    }
-
-    /// <summary>qq/group/{id} 展示为群名，其余类型直接展示原始 sessionKey。</summary>
-    private string GetDisplayName(AiMessageSessionSummary session)
-    {
-        var parts = session.SessionKey.Split('/', StringSplitOptions.None);
-        if (parts is ["qq", "group", var id] && long.TryParse(id, out var groupId))
+        Snapshot = null;
+        SnapshotLoading = true;
+        try
         {
-            return GroupNames.TryGetValue(groupId, out var name)
-                ? $"{name} ({groupId})"
-                : $"群 {groupId}";
+            var encoded = Uri.EscapeDataString(sessionKey);
+            Snapshot = await JSRuntime.InvokeAsync<ContextSnapshotDetail>("configApi.request", "GET", $"/api/context/snapshot?sessionKey={encoded}");
+            LoadError = null;
         }
-        return session.SessionKey;
+        catch (Exception exception)
+        {
+            LoadError = $"加载上下文失败: {exception.Message}";
+        }
+        finally
+        {
+            SnapshotLoading = false;
+        }
     }
-
-    private Task<List<AiMessageEntry>> LoadAiMessagesPage(int page, int pageSize)
-        => HistoryRecorder.GetAiMessagesBySessionKeyAsync(SelectedSessionKey, page, pageSize);
 }

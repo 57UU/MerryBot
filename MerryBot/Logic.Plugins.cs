@@ -158,6 +158,19 @@ internal partial class Logic
         {
             MemoryApiMapper.Map(webUiApplication, memoryManager, historyRecorder);
         }
+
+        var contextSnapshotManager = plugins
+            .Select(static plugin => plugin.Instance)
+            .OfType<IContextSnapshotService>()
+            .SingleOrDefault();
+        if (contextSnapshotManager == null)
+        {
+            logger.Warn("Agent 上下文快照服务未加载，未注册上下文快照 Web API。");
+        }
+        else
+        {
+            ContextSnapshotApiMapper.Map(webUiApplication, contextSnapshotManager, historyRecorder);
+        }
     }
 
     private static int _shutdownTriggered;
