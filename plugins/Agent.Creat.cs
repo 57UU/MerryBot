@@ -21,7 +21,8 @@ public partial class AgentPlugin : Plugin
 
         var resolved = await llmProvider.CreateClientAsync(agentConfig.LlmModel);
         var skillToolSet = await SkillToolSet.CreateAsync(skillService);
-        var memoryPromptInjection = await memoryService.GetPromptInjectionAsync(sessionId);
+        // 记忆工具集由 memoryService 实例化：内部完成懒创建空 index 记录并注入记忆上下文
+        var memoryToolSet = await memoryService.CreateMemoryToolSetAsync(sessionId);
 
         // ── 辅助视觉模型：主模型不具备视觉能力时用于看图，支持多个并逐层降级 ────────
         var visionClients = new List<Client>();
@@ -60,7 +61,7 @@ public partial class AgentPlugin : Plugin
             new PromptToolSet(dynamicPrompt),
             skillToolSet,
             new Cron(sessionId, Interop.ClockService),
-            new MemoryToolSet(memoryService, sessionId, memoryPromptInjection),
+            memoryToolSet,
         };
         if (agentConfig.AllowShell)
         {
@@ -71,10 +72,12 @@ public partial class AgentPlugin : Plugin
         {
             SystemPrompt = agentConfig.AiPrompt,
             MaxOutputTokens = resolved.Model.MaxOutputTokens,
-            MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 20),
-            ContextCompactRatio = Math.Clamp(agentConfig.ContextCompactRatio, 0.1, 0.95),
+            MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 150),
+            ContextCompactRatio = Math.Clamp(agentConfig.ContextCompactRatio, 0.1, 0.9),
             // 思维强度跟随模型配置（ModelRecord.ReasoningEffort），换模型自动跟随
             ReasoningEffort = resolved.Model.ReasoningEffort,
+            // 审计记录：每条会话消息（user/assistant/tool）落库 ai_messages，仅文本、不受上下文压缩影响
+            OnMessageRecorded = (message, usage) => RecordAiAuditMessageAsync(sessionId, message, usage),
         };
         // 子任务工具：复用父会话同一模型客户端、options 与工具列表（含自身，允许嵌套派生子任务）；
         // 完成/失败时以 stackable 消息注入本会话，主 Agent 拿到结果后继续处理

@@ -109,7 +109,9 @@ public class Agent
             var messages = contextManager.context.Messages;
             if (!string.IsNullOrWhiteSpace(userInput))
             {
-                messages.Add(Message.User(userInput));
+                var userMessage = Message.User(userInput);
+                messages.Add(userMessage);
+                RecordMessage(userMessage, TokenUsage.Zero);
             }
 
             var toolDefs = toolSets!.SelectMany(toolSet => toolSet.Tools()).ToList();
@@ -233,14 +235,16 @@ public class Agent
 
         // 记录 assistant 回复（含工具调用与 reasoning）
         string? assistantContent = response.Content;
-        messages.Add(new Message
+        var assistantMessage = new Message
         {
             role = Role.Assistant,
             content = string.IsNullOrEmpty(assistantContent) ? [] : [new MessagePartText { text = assistantContent }],
             toolCalls = response.ToolCalls ?? [],
             reasoningContent = response.ReasoningContent ?? string.Empty,
             thinkingBlocks = response.ThinkingBlocks ?? string.Empty,
-        });
+        };
+        messages.Add(assistantMessage);
+        RecordMessage(assistantMessage, usage);
 
         // 无工具调用说明回复完成
         if (response.ToolCalls is not { Length: > 0 })
@@ -264,29 +268,34 @@ public class Agent
             // 悬空 tool_calls 导致后续请求被 API 拒绝（400），随后继续传播取消
             foreach (var toolCall in response.ToolCalls)
             {
-                messages.Add(new Message
+                var cancelledTool = new Message
                 {
                     role = Role.Tool,
                     toolCallId = toolCall.Id,
                     content = [new MessagePartText { text = $"{{\"error\": \"工具 {toolCall.Name} 已取消\"}}" }],
-                });
+                };
+                messages.Add(cancelledTool);
+                RecordMessage(cancelledTool, TokenUsage.Zero);
             }
             throw;
         }
         for (int i = 0; i < response.ToolCalls.Length; i++)
         {
-            messages.Add(new Message
+            var toolMessage = new Message
             {
                 role = Role.Tool,
                 toolCallId = response.ToolCalls[i].Id,
                 content = [new MessagePartText { text = toolResults[i] }],
-            });
+            };
+            messages.Add(toolMessage);
+            RecordMessage(toolMessage, TokenUsage.Zero);
         }
 
         // 工具追加的内容排在 tool 结果消息之后，下一轮生成时即可见
         while (iterationAdds.TryDequeue(out var added))
         {
             messages.Add(added);
+            RecordMessage(added, TokenUsage.Zero);
         }
         return (usage, null);
     }
@@ -382,6 +391,19 @@ public class Agent
         catch
         {
             // Diagnostics must never alter the Agent's normal execution path.
+        }
+    }
+
+    /// <summary>best-effort 消息审计回调：异常被吞掉，消息记录绝不能影响对话主流程。</summary>
+    private void RecordMessage(Message message, TokenUsage usage)
+    {
+        try
+        {
+            options.OnMessageRecorded?.Invoke(message, usage);
+        }
+        catch
+        {
+            // Message audit must never alter the Agent's normal execution path.
         }
     }
 

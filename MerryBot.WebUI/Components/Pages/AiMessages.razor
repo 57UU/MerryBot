@@ -20,7 +20,8 @@
         <div class="col-right">
             <PagedMessageContainer TItem="AiMessageEntry"
                                    ElementId="ai-message-container"
-                                   GroupId="SelectedAiGroupId"
+                                   Key="@(SelectedAiGroupId > 0 ? SelectedAiGroupId.ToString() : string.Empty)"
+                                   EmptySelectionHint="请从左侧选择一个群聊"
                                    EmptyText="暂无 AI 消息"
                                    LoadPageAsync="LoadAiMessagesPage">
                 <HeaderContent>

@@ -56,7 +56,7 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
             : TimeSpan.FromHours(12);
         sessionManager = new AgentSessionManager(CreateAgent, idleSessionTimeout);
         // 调度器由 core 拥有：插件只注册自己的执行器（把任务内容投给本插件的 AgentSession 执行）
-        Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager, RecordCronAiMessageAsync);
+        Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager);
         persistenceStartTask = InitializePersistenceAsync();
     }
     private static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
@@ -251,21 +251,10 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
                     .Select(static item => item.SenderId)
                     .Distinct()
                     .ToArray();
-                var (reply, usage) = await session.ChatAndWaitAsync(
+                await session.ChatAndWaitAsync(
                     userInput,
                     reply => SendGroupReply(groupId, replyTargets, reply),
                     disposeCts.Token);
-                if (!string.IsNullOrWhiteSpace(reply))
-                {
-                    try
-                    {
-                        await Interop.MessageService.RecordAiMessageAsync(sessionId, reply, usage);
-                    }
-                    catch (Exception exception)
-                    {
-                        Logger.Warn($"记录 AI 消息失败: {groupId}\n{exception.Message}");
-                    }
-                }
             }
         }
         catch (OperationCanceledException)
@@ -314,14 +303,25 @@ public partial class AgentPlugin : Plugin, ISkillManagementService, IMemoryManag
         _ = Channel.SendMessage(new SessionKey("qq", "group", groupId.ToString()), chain);
     }
 
-    /// <summary>定时任务回复后记录 AI 消息（sessionId 即会话标识，仅文本 + token 用量）。</summary>
-    private Task RecordCronAiMessageAsync(string sessionId, string content, TokenUsage usage)
+    /// <summary>
+    /// Agent 消息审计回调：把每条会话消息（user/assistant/tool）以角色为类型写入 ai_messages。
+    /// 只提取文本 part，纯非文本消息（如图片）不落库；消息产生即落库，不受上下文压缩/重置影响。
+    /// </summary>
+    private async void RecordAiAuditMessageAsync(string sessionId, Message message, TokenUsage usage)
     {
-        if (string.IsNullOrWhiteSpace(content))
+        try
         {
-            return Task.CompletedTask;
+            var text = string.Join('\n', message.content.OfType<MessagePartText>().Select(part => part.text)).Trim();
+            if (text.Length == 0)
+            {
+                return;
+            }
+            await Interop.MessageService.RecordAiMessageAsync(sessionId, message.role.Value, text, usage);
         }
-        return Interop.MessageService.RecordAiMessageAsync(sessionId, content, usage);
+        catch (Exception exception)
+        {
+            Logger.Warn($"记录 AI 审计消息失败: {exception.Message}");
+        }
     }
 
     public override void Dispose()

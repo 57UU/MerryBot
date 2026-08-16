@@ -34,6 +34,34 @@ internal sealed class MemoryManagementService : IMemoryManagementService
             .ToList();
     }
 
+    /// <summary>为指定 session 创建记忆工具集：懒创建空的 index 记录，并注入记忆上下文。</summary>
+    public async Task<MemoryToolSet> CreateMemoryToolSetAsync(string sessionKey, CancellationToken cancellationToken = default)
+    {
+        await EnsureMemoryIndexAsync(sessionKey, cancellationToken);
+        var promptInjection = await GetPromptInjectionAsync(sessionKey, cancellationToken);
+        return new MemoryToolSet(this, sessionKey, promptInjection);
+    }
+
+    /// <summary>确保该 session 存在 index 记忆记录，不存在则创建一条空的（懒创建，幂等）。</summary>
+    private async Task EnsureMemoryIndexAsync(string sessionKey, CancellationToken cancellationToken = default)
+    {
+        var normalizedSessionKey = ValidateSessionKey(sessionKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        var id = CreateId(normalizedSessionKey, IndexKey);
+        if (await memories.FindByIdAsync(id) is not null) return;
+        var now = DateTime.UtcNow;
+        await memories.UpsertAsync(new MemoryRecord
+        {
+            Id = id,
+            SessionKey = normalizedSessionKey,
+            Key = IndexKey,
+            Content = string.Empty,
+            IsIndex = true,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+        });
+    }
+
     public async Task<string> GetMemoryIndexAsync(string sessionKey, CancellationToken cancellationToken = default)
     {
         var normalizedSessionKey = ValidateSessionKey(sessionKey);

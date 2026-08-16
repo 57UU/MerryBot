@@ -1,3 +1,4 @@
+using LlmBackend;
 using LlmClient;
 using System;
 using System.Collections.Generic;
@@ -23,4 +24,11 @@ public class AgentOptions
     /// callback are ignored so observability can never interrupt a chat.
     /// </summary>
     public Action<AgentLogEvent>? OnLog { get; set; }
+
+    /// <summary>
+    /// Optional, best-effort message audit callback：每条对话消息（user/assistant/tool）
+    /// 产生时回调，携带当轮 token 用量（user/tool 为 Zero）。回调内应自行过滤非文本 part；
+    /// 抛出的异常会被忽略，不影响对话主流程。null 表示不记录。
+    /// </summary>
+    public Action<Message, TokenUsage>? OnMessageRecorded { get; set; }
 }

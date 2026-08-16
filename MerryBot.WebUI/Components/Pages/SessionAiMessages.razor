@@ -1,0 +1,160 @@
+@page "/sessionai"
+@using DataService
+@rendermode InteractiveServer
+@inject HistoryRecorder HistoryRecorder
+
+<PageTitle>Session AI 消息</PageTitle>
+
+<div class="container-custom h-100-custom" style="height: 100%;">
+
+    <div class="row-layout">
+        <!-- 左侧 session 列表 -->
+        <div class="col-left">
+            <div class="card-full-height">
+                <div class="card-header-custom">
+                    Session 列表
+                </div>
+                <div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
+                    @if (LoadError != null)
+                    {
+                        <div class="text-center-custom text-danger-custom py-2-custom">
+                            @LoadError
+                            <br />
+                            <button type="button" class="btn-link-custom" @onclick="LoadSessionsAsync">点击重试</button>
+                        </div>
+                    }
+                    else if (Sessions is null)
+                    {
+                        <div class="text-center-custom text-muted-custom py-2-custom">
+                            加载 session 列表中...
+                        </div>
+                    }
+                    else if (Sessions.Count == 0)
+                    {
+                        <div class="text-center-custom text-muted-custom py-2-custom">
+                            暂无 AI 消息记录。
+                        </div>
+                    }
+                    else
+                    {
+                        <ul class="list-group-custom">
+                            @foreach (var session in Sessions)
+                            {
+                                <li class="list-group-item-custom @(SelectedSessionKey == session.SessionKey ? "active-custom" : "")"
+                                    tabindex="0"
+                                    role="button"
+                                    @onclick="() => SelectSession(session.SessionKey)"
+                                    @onkeydown="() => SelectSession(session.SessionKey)">
+                                    <div>@GetDisplayName(session)</div>
+                                    <small class="text-muted-custom">@session.MessageCount 条 · @DateTimeOffset.FromUnixTimeSeconds(session.LastTime).LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧消息展示 -->
+        <div class="col-right">
+            <PagedMessageContainer TItem="AiMessageEntry"
+                                   ElementId="session-ai-message-container"
+                                   Key="SelectedSessionKey"
+                                   EmptyText="暂无 AI 消息"
+                                   LoadPageAsync="LoadAiMessagesPage">
+                <HeaderContent>
+                    @if (!string.IsNullOrEmpty(SelectedSessionKey))
+                    {
+                        <span>@SelectedSessionKey 的 AI 消息</span>
+                    }
+                    else
+                    {
+                        <span>请选择一个 session</span>
+                    }
+                </HeaderContent>
+                <BodyContent>
+                    @foreach (var message in context)
+                    {
+                        <div class="message-item-custom mb-3-custom">
+                            <div class="message-header-custom">
+                                <strong>@message.MessageType</strong>
+                                <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </div>
+                            <div class="message-content-custom">
+                                <div>@message.Content</div>
+                                @if (message.TotalTokens > 0)
+                                {
+                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @message.TotalTokens</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </BodyContent>
+            </PagedMessageContainer>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>有 AI 消息记录的 session 汇总，null 表示加载中。</summary>
+    private List<AiMessageSessionSummary>? Sessions;
+
+    private IReadOnlyDictionary<long, string> GroupNames = new Dictionary<long, string>();
+
+    private string SelectedSessionKey { get; set; } = string.Empty;
+
+    private string? LoadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessionsAsync();
+        // 首次进入自动选中第一个 session
+        if (Sessions is { Count: > 0 })
+        {
+            SelectedSessionKey = Sessions[0].SessionKey;
+        }
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        try
+        {
+            LoadError = null;
+            var sessionsTask = HistoryRecorder.ListAiMessageSessionsAsync();
+            var namesTask = HistoryRecorder.GetAllGroupNamesAsync();
+            await Task.WhenAll(sessionsTask, namesTask);
+            Sessions = sessionsTask.Result;
+            // GroupBy 防止重复 GroupId 导致 ToDictionary 抛 ArgumentException
+            GroupNames = namesTask.Result
+                .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+                .GroupBy(item => item.GroupId)
+                .ToDictionary(group => group.Key, group => group.First().Name);
+        }
+        catch (Exception exception)
+        {
+            LoadError = $"加载 session 列表失败: {exception.Message}";
+        }
+    }
+
+    private void SelectSession(string sessionKey)
+    {
+        if (SelectedSessionKey == sessionKey) return;
+        SelectedSessionKey = sessionKey;
+    }
+
+    /// <summary>qq/group/{id} 展示为群名，其余类型直接展示原始 sessionKey。</summary>
+    private string GetDisplayName(AiMessageSessionSummary session)
+    {
+        var parts = session.SessionKey.Split('/', StringSplitOptions.None);
+        if (parts is ["qq", "group", var id] && long.TryParse(id, out var groupId))
+        {
+            return GroupNames.TryGetValue(groupId, out var name)
+                ? $"{name} ({groupId})"
+                : $"群 {groupId}";
+        }
+        return session.SessionKey;
+    }
+
+    private Task<List<AiMessageEntry>> LoadAiMessagesPage(int page, int pageSize)
+        => HistoryRecorder.GetAiMessagesBySessionKeyAsync(SelectedSessionKey, page, pageSize);
+}

@@ -41,9 +41,9 @@ internal sealed class MessageService : IMessageService
     }
 
 
-    /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
-    public Task RecordAiMessageAsync(string sessionKey, string content, TokenUsage usage)
-        => history.RecordAiMessageAsync(sessionKey, "ai", content,
+    /// <summary>记录一条 AI 会话消息到审计历史（仅文本内容，可带 token 用量）。messageType 为 user/assistant/tool。</summary>
+    public Task RecordAiMessageAsync(string sessionKey, string messageType, string content, TokenUsage usage)
+        => history.RecordAiMessageAsync(sessionKey, messageType, content,
             usage.promptUsage, usage.completionUsage, usage.totalUsage);
 
     /// <summary>分页查询群聊历史消息（按时间倒序，第 1 页为最新；过滤已撤回消息）。</summary>

@@ -46,8 +46,8 @@ public interface IMessageService
     /// <summary>群聊历史消息总数（含撤回消息）。</summary>
     Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default);
 
-    /// <summary>记录一条 AI 回复到群聊历史（仅文本内容，带 token 用量）。</summary>
-    Task RecordAiMessageAsync(string sessionKey, string content, TokenUsage usage);
+    /// <summary>记录一条 AI 会话消息到审计历史（仅文本内容，可带 token 用量）。messageType 为 user/assistant/tool。</summary>
+    Task RecordAiMessageAsync(string sessionKey, string messageType, string content, TokenUsage usage);
 }
 
 /// <summary>处理链中使用的稳定本地 URI。</summary>

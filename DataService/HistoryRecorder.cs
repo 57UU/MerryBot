@@ -767,6 +767,16 @@ public class HistoryRecorder : IDisposable
         return await aiMessagesCollection.CountAsync(x => x.SessionKey == sessionKey);
     }
 
+    /// <summary>按 session 聚合全部 AI 消息：返回有 AI 消息记录的 session 汇总（消息数、最后消息时间），按最后时间倒序。</summary>
+    public async Task<List<AiMessageSessionSummary>> ListAiMessageSessionsAsync()
+    {
+        var all = await aiMessagesCollection.FindAllAsync();
+        return all.GroupBy(x => x.SessionKey, StringComparer.Ordinal)
+            .Select(group => new AiMessageSessionSummary(group.Key, group.Count(), group.Max(x => x.Time)))
+            .OrderByDescending(summary => summary.LastTime)
+            .ToList();
+    }
+
     public async Task<int> GetMessageCountByGroupIdAsync(long groupId)
     {
         return await messagesCollection.CountAsync(x => x.GroupId == groupId);

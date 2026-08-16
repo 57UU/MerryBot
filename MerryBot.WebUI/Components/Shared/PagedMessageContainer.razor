@@ -8,10 +8,10 @@
 	</div>
 	<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;"
 		@onscroll="HandleScroll" id="@ElementId">
-		@if (GroupId <= 0)
+		@if (string.IsNullOrEmpty(Key))
 		{
 			<div class="text-center-custom text-muted-custom mt-5-custom">
-				请从左侧选择一个群聊
+				@EmptySelectionHint
 			</div>
 		}
 		else if (IsLoadingMessages)
@@ -51,9 +51,13 @@
 	[Parameter]
 	public string ElementId { get; set; } = string.Empty;
 
-	/// <summary>当前展示的群聊 ID，大于 0 时才会加载；变化时自动重新加载。</summary>
+	/// <summary>当前展示的会话键（会话 ID / 群 ID 字符串），为空时不加载；变化时自动重新加载。</summary>
 	[Parameter]
-	public long GroupId { get; set; }
+	public string Key { get; set; } = string.Empty;
+
+	/// <summary>未选择任何会话时的占位提示文案。</summary>
+	[Parameter]
+	public string EmptySelectionHint { get; set; } = "请从左侧选择一个会话";
 
 	/// <summary>分页数据源：(page, pageSize) → 消息列表。</summary>
 	[Parameter]
@@ -102,12 +106,12 @@
 	// 消息渲染完成（OnAfterRenderAsync）后滚动到底
 	private bool _pendingScrollToBottom;
 
-	private long _lastLoadedGroupId;
+	private string _lastLoadedKey = string.Empty;
 
 	protected override async Task OnParametersSetAsync()
 	{
-		if (GroupId <= 0 || _lastLoadedGroupId == GroupId) return;
-		_lastLoadedGroupId = GroupId;
+		if (string.IsNullOrEmpty(Key) || _lastLoadedKey == Key) return;
+		_lastLoadedKey = Key;
 		await LoadAsync();
 	}
 
