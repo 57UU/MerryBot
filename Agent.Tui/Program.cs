@@ -3,13 +3,13 @@ using Agent;
 using Agent.Session;
 using Agent.Tools;
 using Agent.Tui;
+using Agent.Tui.Core;
 using BrowserService;
 using LlmBackend;
 using LlmClient;
-using Terminal.Gui.App;
 
-// 记录用户启动 TUI 时的原始工作目录，传给 TerminalToolSet 作为 bash 进程的初始 CWD；
-// 必须在 SetCurrentDirectory 之前捕获，否则会被 BaseDirectory 覆盖。
+// 记录用户启动 TUI 时的原始工作目录,传给 TerminalToolSet 作为 bash 进程的初始 CWD;
+// 必须在 SetCurrentDirectory 之前捕获,否则会被 BaseDirectory 覆盖。
 var originalWorkingDirectory = Environment.CurrentDirectory;
 
 // Browser's bundled scripts are copied beside the executable. Setting the working
@@ -20,8 +20,7 @@ Directory.CreateDirectory(skillsPath);
 
 var cfg = TuiConfigStore.Load();
 var (activeProvider, activeModel) = cfg.ResolveActive();
-// 直接构造真实后端：运行时切换供应商/模型经 Client.UpdateBackend 生效，
-// 无需重建 Client/Agent（重试与上下文保持）
+// 直接构造真实后端:运行时切换供应商/模型经 Client.UpdateBackend 生效,无需重建 Client/Agent
 var backend = new ChatCompletionBackend(
     activeProvider?.ApiBase ?? string.Empty,
     activeProvider?.ApiKey ?? string.Empty,
@@ -29,14 +28,7 @@ var backend = new ChatCompletionBackend(
 var llmClient = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
 var history = new PlaceholderContextHistory();
 var catalog = new CatalogService();
-
-using IApplication app = Application.Create();
-// 彻底关闭鼠标：不发射鼠标跟踪转义序列，终端原生选择/滚动恢复（标准终端行为）。
-// 在 Init 前后各设一次，防止 Init 时的配置(MEC)绑定重置该标志。
-app.Mouse.IsMouseDisabled = true;
-app.Init();
-app.Mouse.IsMouseDisabled = true;
-var chatApp = new ChatApp(app, cfg, llmClient, history, catalog);
+var chatApp = new ChatApp(cfg, llmClient, history, catalog);
 
 var terminalToolSets = new ConcurrentBag<TerminalToolSet>();
 Browser? browser = null;
@@ -61,8 +53,12 @@ try
     var session = await sessionManager.GetSessionAsync(ChatApp.SessionId);
     chatApp.SetSession(session);
 
-    var window = chatApp.BuildMainWindow();
-    app.Run(window);
+    chatApp.App.BackgroundTask = async token =>
+    {
+        // pump 在 TuiApp 启动前创建;TuiApp 主循环内轮询渲染
+        await Task.CompletedTask;
+    };
+    chatApp.App.Run();
 }
 catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 {
@@ -85,6 +81,7 @@ finally
         terminalToolSet.Dispose();
     }
     browser?.Dispose();
+    chatApp.Dispose();
     shutdown.Dispose();
 }
 

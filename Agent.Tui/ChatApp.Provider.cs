@@ -1,4 +1,4 @@
-using Agent.Tui.Views;
+using Agent.Tui.Core;
 using LlmBackend;
 using ModelsDev.Sdk.Models;
 
@@ -39,8 +39,8 @@ public sealed partial class ChatApp
         }
 
         var activeIdx = rows.FindIndex(r => r.ProviderId == activeProvider?.Id && r.ModelId == activeModel);
-        var items = rows.Select(r => new PickList.Item(r.Display, r)).ToList();
-        var picker = new PickList("选择模型", items, preSelected: activeIdx);
+        var items = rows.Select(r => new SelectList<object>.Item(r.Display, r)).ToList();
+        var picker = new SelectList<object>("选择模型", items, preSelected: activeIdx);
         var result = await PickAsync(picker);
         if (result is { Count: 1 })
         {
@@ -147,8 +147,8 @@ public sealed partial class ChatApp
             return;
         }
 
-        var items = catalogProviders.Select(p => new PickList.Item($"{p.Name} ({p.Id})", p)).ToList();
-        var picker = new PickList("选择供应商", items);
+        var items = catalogProviders.Select(p => new SelectList<object>.Item($"{p.Name} ({p.Id})", p)).ToList();
+        var picker = new SelectList<object>("选择供应商", items);
         var picked = await PickAsync(picker);
         if (picked is not { Count: 1 })
         {
@@ -173,8 +173,8 @@ public sealed partial class ChatApp
             AppendChat("sys", $"目录中 {provider.Name} 没有可用模型。");
             return;
         }
-        var modelItems = models.Select(m => new PickList.Item($"{m.Id} — {m.Name}", m)).ToList();
-        var modelPicker = new PickList("勾选模型", modelItems, multi: true);
+        var modelItems = models.Select(m => new SelectList<object>.Item($"{m.Id} — {m.Name}", m)).ToList();
+        var modelPicker = new SelectList<object>("勾选模型", modelItems, multi: true);
         var chosen = await PickAsync(modelPicker);
         if (chosen is not { Count: > 0 })
         {
@@ -238,8 +238,8 @@ public sealed partial class ChatApp
                     preChecked.Add(i);
                 }
             }
-            var modelItems = models.Select(m => new PickList.Item($"{m.Id} — {m.Name}", m)).ToList();
-            var modelPicker = new PickList("勾选模型", modelItems, multi: true, preChecked: preChecked);
+            var modelItems = models.Select(m => new SelectList<object>.Item($"{m.Id} — {m.Name}", m)).ToList();
+            var modelPicker = new SelectList<object>("勾选模型", modelItems, multi: true, preChecked: preChecked);
             var chosen = await PickAsync(modelPicker);
             if (chosen is null)
             {
@@ -298,8 +298,8 @@ public sealed partial class ChatApp
                 preChecked.Add(i);
             }
         }
-        var modelItems = models.Select(m => new PickList.Item($"{m.Id} — {m.Name}", m)).ToList();
-        var picker = new PickList("勾选模型", modelItems, multi: true, preChecked: preChecked);
+        var modelItems = models.Select(m => new SelectList<object>.Item($"{m.Id} — {m.Name}", m)).ToList();
+        var picker = new SelectList<object>("勾选模型", modelItems, multi: true, preChecked: preChecked);
         var chosen = await PickAsync(picker);
         if (chosen is null)
         {

@@ -52,6 +52,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Test", "MerryBot.T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Browser.Test", "Browser.Test\Browser.Test.csproj", "{A1DAC979-04A5-4281-9B86-7EC2247D35F2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Tui", "MerryBot.Tui\MerryBot.Tui.csproj", "{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -302,6 +304,18 @@ Global
 		{A1DAC979-04A5-4281-9B86-7EC2247D35F2}.Release|x64.Build.0 = Release|Any CPU
 		{A1DAC979-04A5-4281-9B86-7EC2247D35F2}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1DAC979-04A5-4281-9B86-7EC2247D35F2}.Release|x86.Build.0 = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|x64.Build.0 = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Debug|x86.Build.0 = Debug|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x64.ActiveCfg = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x64.Build.0 = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x86.ActiveCfg = Release|Any CPU
+		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
