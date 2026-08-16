@@ -54,7 +54,14 @@ public record LlmOptions(
     /// <summary>首字节（首 token）超时，仅流式请求生效；非流式只受 TotalTimeout 约束</summary>
     TimeSpan? TimeToFirstByte = null,
     TimeSpan? TotalTimeout = null
-    );
+    )
+{
+    /// <summary>
+    /// 返回与当前实例相同但禁用工具的副本（上下文压缩等纯文本摘要任务用）。
+    /// 用 with 复制而非重建，避免丢失其余配置。
+    /// </summary>
+    public LlmOptions WithoutTools() => this with { Tools = null };
+}
 public class GenerateResponse
 {
     public string? Content { get; }

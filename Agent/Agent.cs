@@ -88,10 +88,10 @@ public partial class Agent
             : $"请将上文对话信息压缩为一个段落，无需保留system prompt，重点保留与主题「{topic}」相关的内容";
         forkedContext.Messages.Add(Message.User(instruction));
         Log(new AgentLogEvent(AgentLogEventKind.ModelRequest, DateTimeOffset.UtcNow, iteration));
-        // 压缩为纯文本摘要任务，显式禁用工具（Tools 保持 null）：
+        // 压缩为纯文本摘要任务，从基准选项派生一个禁用工具的副本（WithoutTools 保留其余配置）：
         // 开启工具时模型可能返回 tool_calls 而摘要为空，导致 ContextManager 判定压缩失败、
         // 保留原上下文；同时避免压缩过程产生额外的工具执行消耗。
-        var (result, tokenUsage) = await llmClient.Generate(cancellationToken, forkedContext.Messages, SystemPrompt, new LlmOptions(Tools: null));
+        var (result, tokenUsage) = await llmClient.Generate(cancellationToken, forkedContext.Messages, SystemPrompt, new LlmOptions().WithoutTools());
         Log(new AgentLogEvent(
             AgentLogEventKind.ModelResponse,
             DateTimeOffset.UtcNow,
@@ -138,7 +138,7 @@ public partial class Agent
                 // 必须保留 ReasoningEffort：anthropic 开启 thinking 后历史含思考块，
                 // 请求突然关闭 thinking 会被 API 拒绝（thinking 块必须持续回传）
                 var iterationOptions = iteration == options.MaxIterations - 1
-                    ? new LlmOptions(MaxTokens: options.MaxOutputTokens, ReasoningEffort: options.ReasoningEffort)
+                    ? llmOptions.WithoutTools()
                     : llmOptions;
 
                 TokenUsage usage;
