@@ -103,10 +103,12 @@ public static class RawMode
         var handle = GetStdHandle(STD_INPUT_HANDLE);
         if (handle == IntPtr.Zero || handle == new IntPtr(-1)) return;
         if (!GetConsoleMode(handle, out _winOriginalMode)) return;
-        // 保留 VT 输入；关闭行缓冲/回显/processed(让 Ctrl+C 作为输入键到达)
+        // 关闭行缓冲/回显/processed(让 Ctrl+C 作为输入键到达)。
+        // 不保留 ENABLE_VIRTUAL_TERMINAL_INPUT:该标志面向"裸字节读 VT 序列",
+        // 与 Console.ReadKey 配合反而可能干扰按键枚举识别(回车/退格被错判为控制字符);
+        // 输出侧的 VT 由终端/输出句柄处理,与此处输入句柄无关。
         var mode = _winOriginalMode;
-        mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
-        mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+        mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
         SetConsoleMode(handle, mode);
     }
 

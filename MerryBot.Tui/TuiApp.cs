@@ -25,7 +25,20 @@ public sealed class TuiApp : IDisposable
     public Func<string[]>? ScreenRoot { get; set; }
 
     /// <summary>聚焦组件（其 CursorMarker 会被解析为硬件光标）。</summary>
-    public IFocusable? Focused { get; set; }
+    private IFocusable? _focused;
+
+    public IFocusable? Focused
+    {
+        get => _focused;
+        set
+        {
+            if (ReferenceEquals(_focused, value)) return;
+            if (_focused is IFocusable prev) prev.IsFocused = false;
+            _focused = value;
+            if (_focused is IFocusable next) next.IsFocused = true;
+            _needsRender = true;
+        }
+    }
 
     /// <summary>输入未被组件消费时的全局处理（如 Ctrl+C 退出）。</summary>
     public Action<KeyEvent>? OnUnhandledInput { get; set; }

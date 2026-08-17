@@ -118,6 +118,17 @@ public sealed class KeyParser
 
     private static KeyEvent FromConsoleKey(ConsoleKeyInfo key)
     {
+        // raw mode / VT 输入下,Console.ReadKey 有时不返回正确的 ConsoleKey 枚举,
+        // 而是把回车/退格当作控制字符塞进 KeyChar。这里先按控制字符归一化,
+        // 保证回车、删除在任何终端下都能被 Input 正确识别。
+        var c = key.KeyChar;
+        if (key.Key == ConsoleKey.Enter || c == '\r' || c == '\n')
+            return KeyEvent.Named(Key.Enter);
+        if (key.Key == ConsoleKey.Backspace || c == '\b' || c == '\x7f')
+            return KeyEvent.Named(Key.Backspace);
+        if (key.Key == ConsoleKey.Delete)
+            return KeyEvent.Named(Key.Delete);
+
         switch (key.Key)
         {
             case ConsoleKey.Enter:
