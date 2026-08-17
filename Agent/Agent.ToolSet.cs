@@ -87,11 +87,9 @@ public class ToolSetBridge : ToolSet
             // 取消（会话取消或工具超时）不是工具错误：原样传播，由 Agent 统一回填取消结果
             throw;
         }
-        catch (Exception e)
-        {
-            // 参数解析或函数执行失败时返回错误信息，便于模型自行纠正后重试
-            return $"{{\"error\": {JsonSerializer.Serialize(e.Message)}}}";
-        }
+        // 非取消类异常不再在此吞掉并伪装成成功结果：交由上层 InvokeToolAsync 统一捕获，
+        // 回填相同的 {"error":...} JSON（模型仍可自纠重试），同时记录 ToolCallFailed 状态，
+        // 避免 TUI 将工具失败误显为"已完成"。
     }
 
     public override string? Prompt()

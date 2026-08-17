@@ -30,7 +30,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Agent\Agent.csproj" />
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
+    <ProjectReference Include="..\Browser\Browser.csproj" />
     <ProjectReference Include="..\LlmClient\LlmClient.csproj" />
     <ProjectReference Include="..\MerryBot\MerryBot.csproj" />
     <ProjectReference Include="..\MerryBot.WebUI\MerryBot.WebUI.csproj" />

@@ -1,4 +1,5 @@
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Chromium;
 using System.Text.Json.Serialization;
 using System.Timers;
 
@@ -129,17 +130,17 @@ public class ResourceCountdown : IDisposable
 }
 
 /// <summary>
-/// ChromeOptions的扩展方法类，用于配置爬虫隐身参数
+/// ChromiumOptions的扩展方法类（Chrome/Edge 通用），用于配置爬虫隐身参数
 /// </summary>
 public static class ChromeOptionsExtensions
 {
     /// <summary>
-    /// 配置ChromeOptions以增强爬虫隐身性
+    /// 配置ChromiumOptions以增强爬虫隐身性
     /// </summary>
-    /// <param name="options">ChromeOptions实例</param>
+    /// <param name="options">ChromiumOptions实例</param>
     /// <param name="userAgent">自定义User-Agent，默认使用Edge浏览器UA</param>
-    /// <returns>配置后的ChromeOptions实例</returns>
-    public static ChromeOptions ConfigureForWebScraping(this ChromeOptions options, string? userAgent = null)
+    /// <returns>配置后的ChromiumOptions实例</returns>
+    public static ChromiumOptions ConfigureForWebScraping(this ChromiumOptions options, string? userAgent = null)
     {
         if (options == null)
         {
@@ -189,9 +190,9 @@ public static class ChromeOptionsExtensions
     /// <summary>
     /// 启用Headless模式的扩展方法
     /// </summary>
-    /// <param name="options">ChromeOptions实例</param>
-    /// <returns>配置后的ChromeOptions实例</returns>
-    public static ChromeOptions EnableHeadlessMode(this ChromeOptions options)
+    /// <param name="options">ChromiumOptions实例</param>
+    /// <returns>配置后的ChromiumOptions实例</returns>
+    public static ChromiumOptions EnableHeadlessMode(this ChromiumOptions options)
     {
         if (options == null)
         {

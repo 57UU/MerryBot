@@ -23,4 +23,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- 允许单元测试工程访问 internal 成员（如 IsChromeAvailable 的可注入重载） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MerryBot.Test" />
+  </ItemGroup>
 </Project>
