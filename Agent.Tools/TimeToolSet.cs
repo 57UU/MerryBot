@@ -15,6 +15,7 @@ public sealed class TimeToolSet : ToolSet
         builder.AddFunction<CurrentTimeArgs>(
             "current_time",
             "获取当前本地时间、时区和 UTC 时间。",
+            AgentToolsJsonContext.Default.CurrentTimeArgs,
             GetCurrentTimeAsync);
         bridge = builder.Build();
     }
@@ -35,7 +36,7 @@ public sealed class TimeToolSet : ToolSet
             $"UTC 时间: {localNow.UtcDateTime:O}");
     }
 
-    private sealed class CurrentTimeArgs
+    internal sealed class CurrentTimeArgs
     {
     }
 }

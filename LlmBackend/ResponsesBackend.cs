@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace LlmBackend;
@@ -41,8 +42,8 @@ public class ResponsesBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(messages, systemPrompt, options, model, stream: false), RequestJsonOptions);
+        string jsonData = (JsonNodeConverter.ToNode(
+            BuildRequestBody(messages, systemPrompt, options, model, stream: false)) ?? new JsonObject()).ToJsonString();
 
         string responseBody;
         // 非流式请求只挂总时长超时：LLM 服务端"算完整轮才发响应头"，首字节约等于
@@ -71,7 +72,7 @@ public class ResponsesBackend : Backend
             throw new NetworkException($"Responses API 网络错误: {e.Message}", e);
         }
 
-        var json = JsonSerializer.Deserialize<ResponsesResponse>(responseBody)
+        var json = JsonSerializer.Deserialize(responseBody, LlmBackendJsonContext.Default.ResponsesResponse)
             ?? throw new InvalidResponseException($"Responses API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
         if (json.Output == null)
         {
@@ -176,8 +177,8 @@ public class ResponsesBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(messages, systemPrompt, options, model, stream: true), RequestJsonOptions);
+        string jsonData = (JsonNodeConverter.ToNode(
+            BuildRequestBody(messages, systemPrompt, options, model, stream: true)) ?? new JsonObject()).ToJsonString();
 
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
@@ -214,7 +215,7 @@ public class ResponsesBackend : Backend
                 {
                     continue;
                 }
-                var streamEvent = JsonSerializer.Deserialize<ResponsesStreamEvent>(data);
+                var streamEvent = JsonSerializer.Deserialize(data, LlmBackendJsonContext.Default.ResponsesStreamEvent);
                 if (streamEvent is null)
                 {
                     continue;

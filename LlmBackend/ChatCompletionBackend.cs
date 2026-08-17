@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace LlmBackend;
@@ -37,8 +38,7 @@ public class ChatCompletionBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(model, messages, systemPrompt, options, stream: false), RequestJsonOptions);
+        string jsonData = BuildRequestBodyJson(model, messages, systemPrompt, options, stream: false).ToJsonString();
 
         string responseBody;
         // 非流式请求只挂总时长超时：LLM 服务端"算完整轮才发响应头"，首字节约等于
@@ -68,7 +68,7 @@ public class ChatCompletionBackend : Backend
             throw new NetworkException($"ChatCompletion 网络错误: {e.Message}", e);
         }
 
-        var json = JsonSerializer.Deserialize<ChatCompletionResponse>(responseBody)
+        var json = JsonSerializer.Deserialize(responseBody, LlmBackendJsonContext.Default.ChatCompletionResponse)
             ?? throw new InvalidResponseException($"ChatCompletion API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
 
         if (json.Choices == null || json.Choices.Count == 0)
@@ -107,8 +107,7 @@ public class ChatCompletionBackend : Backend
         string model = options.Model ?? _defaultModel
             ?? throw new ArgumentException("模型未指定：请在 LlmOptions.Model 或构造函数 defaultModel 中提供", nameof(options));
 
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(model, messages, systemPrompt, options, stream: true), RequestJsonOptions);
+        string jsonData = BuildRequestBodyJson(model, messages, systemPrompt, options, stream: true).ToJsonString();
 
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
@@ -217,9 +216,146 @@ public class ChatCompletionBackend : Backend
     }
 
     /// <summary>
-    /// 构造请求体：非流式与流式共用，流式追加 stream 标志与 include_usage
-    /// （让流末尾携带 usage 块，终结事件才能给出完整用量）。
+    /// 构建 ChatCompletion 请求体（JsonNode 树，NativeAOT 兼容——不依赖反射序列化）。
+    /// 非流式与流式共用，流式追加 stream 标志与 include_usage（让流末尾携带 usage 块）。
     /// </summary>
+    private static JsonObject BuildRequestBodyJson(
+        string model,
+        IList<Message> messages,
+        string systemPrompt,
+        LlmOptions options,
+        bool stream)
+    {
+        var requestBody = new JsonObject
+        {
+            ["model"] = model,
+            ["messages"] = BuildMessagesJson(messages, systemPrompt),
+        };
+        if (options.Temperature != null) requestBody["temperature"] = options.Temperature;
+        if (options.ReasoningEffort != null) requestBody["reasoning_effort"] = options.ReasoningEffort;
+        if (options.MaxTokens != null) requestBody["max_tokens"] = options.MaxTokens;
+        if (options.Tools != null) requestBody["tools"] = JsonSerializer.SerializeToNode(options.Tools, LlmBackendJsonContext.Default.ListToolDef);
+        if (stream)
+        {
+            requestBody["stream"] = true;
+            requestBody["stream_options"] = new JsonObject { ["include_usage"] = true };
+        }
+        if (options.ExtraBody != null)
+        {
+            foreach (var (key, value) in options.ExtraBody)
+            {
+                requestBody[key] = value is JsonNode n ? n : JsonValue.Create(value);
+            }
+        }
+        return requestBody;
+    }
+
+    /// <summary>转换消息列表为 JsonArray（AOT 兼容版）。</summary>
+    private static JsonArray BuildMessagesJson(IList<Message> messages, string systemPrompt)
+    {
+        bool hasSystemPrompt = !string.IsNullOrWhiteSpace(systemPrompt);
+        var result = new JsonArray();
+
+        if (hasSystemPrompt)
+        {
+            result.Add(new JsonObject
+            {
+                ["role"] = "system",
+                ["content"] = systemPrompt,
+            });
+        }
+
+        for (int i = 0; i < messages.Count; i++)
+        {
+            if (i == 0 && hasSystemPrompt && messages[0].role == Role.System)
+            {
+                continue;
+            }
+            result.Add(ConvertMessageJson(messages[i]));
+        }
+        return result;
+    }
+
+    /// <summary>转换一条消息为 JsonObject（AOT 兼容版）。</summary>
+    private static JsonObject ConvertMessageJson(Message message)
+    {
+        var result = new JsonObject
+        {
+            ["role"] = message.role.Value,
+            ["content"] = ConvertContentJson(message.content),
+        };
+
+        // assistant：工具调用
+        if (message.toolCalls != null && message.toolCalls.Any())
+        {
+            var calls = new JsonArray();
+            foreach (var t in message.toolCalls)
+            {
+                calls.Add(new JsonObject
+                {
+                    ["id"] = t.Id,
+                    ["type"] = "function",
+                    ["function"] = new JsonObject
+                    {
+                        ["name"] = t.Name,
+                        ["arguments"] = t.Arguments,
+                    },
+                });
+            }
+            result["tool_calls"] = calls;
+        }
+        // assistant：reasoning 内容
+        if (!string.IsNullOrEmpty(message.reasoningContent))
+        {
+            result["reasoning_content"] = message.reasoningContent;
+        }
+        // tool：对应的 tool_call_id
+        if (!string.IsNullOrEmpty(message.toolCallId))
+        {
+            result["tool_call_id"] = message.toolCallId;
+        }
+        return result;
+    }
+
+    /// <summary>转换消息内容：仅一个文本 part 时输出字符串，含图片或多个 part 时输出数组（AOT 兼容版）。</summary>
+    private static JsonNode ConvertContentJson(IEnumerable<MessagePart>? parts)
+    {
+        var list = parts?.ToList() ?? new List<MessagePart>();
+        if (list.Count == 0)
+        {
+            return JsonValue.Create(string.Empty)!;
+        }
+        if (list.Count == 1 && list[0] is MessagePartText text)
+        {
+            return JsonValue.Create(text.text ?? string.Empty)!;
+        }
+        var arr = new JsonArray();
+        foreach (var part in list)
+        {
+            switch (part)
+            {
+                case MessagePartText t:
+                    arr.Add(new JsonObject
+                    {
+                        ["type"] = "text",
+                        ["text"] = t.text ?? string.Empty,
+                    });
+                    break;
+                case MessagePartImage img:
+                    arr.Add(new JsonObject
+                    {
+                        ["type"] = "image_url",
+                        ["image_url"] = new JsonObject { ["url"] = img.image },
+                    });
+                    break;
+                default:
+                    arr.Add(new JsonObject { ["type"] = "text", ["text"] = string.Empty });
+                    break;
+            }
+        }
+        return arr;
+    }
+
     private static Dictionary<string, object> BuildRequestBody(
         string model,
         IList<Message> messages,
@@ -270,7 +406,7 @@ public class ChatCompletionBackend : Backend
         ChatCompletionStreamChunk? chunk;
         try
         {
-            chunk = JsonSerializer.Deserialize<ChatCompletionStreamChunk>(data);
+            chunk = JsonSerializer.Deserialize(data, LlmBackendJsonContext.Default.ChatCompletionStreamChunk);
         }
         catch (JsonException e)
         {

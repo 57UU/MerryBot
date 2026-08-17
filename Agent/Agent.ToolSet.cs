@@ -1,8 +1,10 @@
 using System.Collections;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using LlmBackend;
 
 namespace Agent;
@@ -101,16 +103,17 @@ public class ToolSetBridge : ToolSet
 
     public class Builder
     {
-        // net9.0 起默认 JsonSerializer 不再将字符串解析为枚举，而 Schema 以字符串 enum 值描述枚举，
-        // 故显式注册 JsonStringEnumConverter 保持一致
-        private static readonly JsonSerializerOptions DeserializeOptions = new()
+        // net9.0 起默认 JsonSerializer 不再将字符串解析为枚举，而 Schema 以字符串 enum 值描述枚举。
+        // NativeAOT 下反序列化走调用方传入的 JsonTypeInfo<T>(source generator)，不使用反射 options。
+        private readonly string? prompt;
+        private readonly List<RegisteredTool> tools = new();
+
+        /// <summary>反射版反序列化 options（仅非 NativeAOT 路径的旧重载使用）。</summary>
+        private static readonly JsonSerializerOptions ReflectionOptions = new()
         {
             PropertyNameCaseInsensitive = true,
             Converters = { new JsonStringEnumConverter() },
         };
-
-        private readonly string? prompt;
-        private readonly List<RegisteredTool> tools = new();
 
         public Builder(string? prompt = null)
         {
@@ -118,29 +121,61 @@ public class ToolSetBridge : ToolSet
         }
 
         /// <summary>
-        /// 注册一个 C# 函数为 LLM 工具。参数类型 T 的属性会通过反射自动生成 JSON Schema，
+        /// 注册一个 C# 函数为 LLM 工具（NativeAOT source-gen 版）。
+        /// 参数类型 T 的属性会通过反射自动生成 JSON Schema，
         /// 支持 DescriptionAttribute（参数说明）、JsonPropertyNameAttribute（JSON 字段名）、
         /// JsonRequiredAttribute（强制必填）、JsonIgnoreAttribute（跳过该属性）；
         /// Nullable 与可空引用类型属性自动视为可选参数。函数为异步签名，返回 Task&lt;string&gt;。
+        /// typeInfo 为调用方提供的 STJ source-gen JsonTypeInfo（NativeAOT 兼容的显式类型传递）。
         /// </summary>
-        public Builder AddFunction<T>(string name, string description, Func<T, Task<string>> function)
-            => AddFunctionCore<T>(name, description, (json, _, _) => function(json.Deserialize<T>(DeserializeOptions)!));
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, JsonTypeInfo<T> typeInfo, Func<T, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, _, _) => function(json.Deserialize(typeInfo)!));
 
         /// <summary>
-        /// 注册需要在本次工具调用期间向 Agent 追加消息的函数。第二个参数由调用方注入；
-        /// 与单参数函数并存，普通工具无需感知该回调。
+        /// 注册一个 C# 函数为 LLM 工具（反射序列化版，非 NativeAOT 路径使用）。
+        /// 与 source-gen 版功能相同，但入参用运行时反射反序列化——仅适合普通 JIT 运行。
+        /// 带 JsonTypeInfo 的 source-gen 重载会优先选用于 NativeAOT 目标。
         /// </summary>
-        public Builder AddFunction<T>(string name, string description, Func<T, Action<Message>, Task<string>> function)
-            => AddFunctionCore<T>(name, description, (json, _, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, onIterationAdd));
+        [RequiresUnreferencedCode("反射反序列化工具入参，NativeAOT 下请改用带 JsonTypeInfo 的重载")]
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, Func<T, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, _, _) => function(json.Deserialize<T>(ReflectionOptions)!));
 
         /// <summary>
-        /// 注册需要感知取消的工具函数（如网络下载）。第三个参数为本次调用携带的
+        /// 注册需要在本次工具调用期间向 Agent 追加消息的函数（NativeAOT source-gen 版）。
+        /// 第二个参数由调用方注入；与单参数函数并存，普通工具无需感知该回调。
+        /// </summary>
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, JsonTypeInfo<T> typeInfo, Func<T, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, _, onIterationAdd) => function(json.Deserialize(typeInfo)!, onIterationAdd));
+
+        /// <summary>
+        /// 注册需要在本次工具调用期间向 Agent 追加消息的函数（反射版，非 NativeAOT 路径）。
+        /// </summary>
+        [RequiresUnreferencedCode("反射反序列化工具入参，NativeAOT 下请改用带 JsonTypeInfo 的重载")]
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, Func<T, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, _, onIterationAdd) => function(json.Deserialize<T>(ReflectionOptions)!, onIterationAdd));
+
+        /// <summary>
+        /// 注册需要感知取消的工具函数（NativeAOT source-gen 版）。第三个参数为本次调用携带的
         /// CancellationToken，与 Agent 的 per-tool 超时/会话取消联动；与无 token 的重载并存。
         /// </summary>
-        public Builder AddFunction<T>(string name, string description, Func<T, CancellationToken, Action<Message>, Task<string>> function)
-            => AddFunctionCore<T>(name, description, (json, cancellationToken, onIterationAdd) => function(json.Deserialize<T>(DeserializeOptions)!, cancellationToken, onIterationAdd));
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, JsonTypeInfo<T> typeInfo, Func<T, CancellationToken, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, cancellationToken, onIterationAdd) => function(json.Deserialize(typeInfo)!, cancellationToken, onIterationAdd));
 
-        private Builder AddFunctionCore<T>(string name, string description, Func<JsonElement, CancellationToken, Action<Message>, Task<string>> invoker)
+        /// <summary>
+        /// 注册需要感知取消的工具函数（反射版，非 NativeAOT 路径）。
+        /// </summary>
+        [RequiresUnreferencedCode("反射反序列化工具入参，NativeAOT 下请改用带 JsonTypeInfo 的重载")]
+        public Builder AddFunction<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, Func<T, CancellationToken, Action<Message>, Task<string>> function)
+            => AddFunctionCore<T>(name, description, (json, cancellationToken, onIterationAdd) => function(json.Deserialize<T>(ReflectionOptions)!, cancellationToken, onIterationAdd));
+
+        private Builder AddFunctionCore<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+            string name, string description, Func<JsonElement, CancellationToken, Action<Message>, Task<string>> invoker)
         {
             var def = new ToolDef
             {
@@ -168,8 +203,12 @@ public class ToolSetBridge : ToolSet
         /// <summary>
         /// 递归生成 JSON Schema：基础类型映射为 string/integer/number/boolean，
         /// 枚举带 enum 取值，集合带 items，复杂对象递归展开 properties。
+        /// AOT 兼容：调用方(T) 带 PublicProperties 的 DynamicallyAccessedMembers 约束，
+        /// 保证此处反射能读到属性元数据。
         /// </summary>
-        private static Dictionary<string, object?> BuildTypeSchema(Type type, List<Type> path)
+        private static Dictionary<string, object?> BuildTypeSchema(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type,
+            List<Type> path)
         {
             var underlying = Nullable.GetUnderlyingType(type);
             if (underlying != null) type = underlying;
@@ -232,7 +271,8 @@ public class ToolSetBridge : ToolSet
             }
         }
 
-        private static Type? GetEnumerableElementType(Type type)
+        private static Type? GetEnumerableElementType(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
         {
             if (type.IsArray) return type.GetElementType();
             if (!type.IsGenericType) return null;

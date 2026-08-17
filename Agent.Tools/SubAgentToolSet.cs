@@ -61,12 +61,15 @@ public class SubAgentToolSet : ToolSet, IDisposable
         builder.AddFunction<SubagentArgs>("subagent",
             "派发一个异步子任务：创建全新上下文的子 Agent 执行给定任务，立即返回 task_id，不阻塞当前处理；" +
             "子任务完成后结果会自动注入对话，也可用 subagent_output 查询全文、subagent_stop 终止。",
+            AgentToolsJsonContext.Default.SubagentArgs,
             StartSubagentAsync);
         builder.AddFunction<SubagentOutputArgs>("subagent_output",
             "查询子任务结果：未完成返回执行中提示，已完成返回结果全文并移除任务。",
+            AgentToolsJsonContext.Default.SubagentOutputArgs,
             QuerySubagentAsync);
         builder.AddFunction<SubagentStopArgs>("subagent_stop",
             "终止指定子任务。",
+            AgentToolsJsonContext.Default.SubagentStopArgs,
             StopSubagentAsync);
         bridge = builder.Build();
     }
@@ -77,7 +80,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：subagent</summary>
-    private sealed class SubagentArgs
+    internal sealed class SubagentArgs
     {
         [Description("要交给子 Agent 完成的任务描述")]
         public string task { get; set; } = string.Empty;
@@ -87,14 +90,14 @@ public class SubAgentToolSet : ToolSet, IDisposable
     }
 
     /// <summary>工具参数：subagent_output</summary>
-    private sealed class SubagentOutputArgs
+    internal sealed class SubagentOutputArgs
     {
         [Description("子任务 id")]
         public string task_id { get; set; } = string.Empty;
     }
 
     /// <summary>工具参数：subagent_stop</summary>
-    private sealed class SubagentStopArgs
+    internal sealed class SubagentStopArgs
     {
         [Description("子任务 id")]
         public string task_id { get; set; } = string.Empty;

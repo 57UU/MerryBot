@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace LlmBackend;
@@ -61,8 +62,8 @@ public class AnthropicBackend : Backend
         {
             ApplyCacheBreakpoints(apiMessages);
         }
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: false));
+        string jsonData = (JsonNodeConverter.ToNode(
+            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: false)) ?? new JsonObject()).ToJsonString();
 
         string responseBody;
         // 非流式请求只挂总时长超时：LLM 服务端"算完整轮才发响应头"，首字节约等于
@@ -92,7 +93,7 @@ public class AnthropicBackend : Backend
             throw new NetworkException($"Anthropic API 网络错误: {e.Message}", e);
         }
 
-        var json = JsonSerializer.Deserialize<AnthropicResponse>(responseBody)
+        var json = JsonSerializer.Deserialize(responseBody, LlmBackendJsonContext.Default.AnthropicResponse)
             ?? throw new InvalidResponseException($"Anthropic API 返回了无法解析的响应: {BackendErrors.Shorten(responseBody)}");
         if (json.Content == null)
         {
@@ -132,8 +133,8 @@ public class AnthropicBackend : Backend
                     });
                     break;
                 case "tool_use":
-                    var arguments = block.Input != null
-                        ? JsonSerializer.Serialize(block.Input)
+                    var arguments = block.Input is { ValueKind: not JsonValueKind.Undefined } input
+                        ? input.GetRawText()
                         : "{}";
                     toolCalls.Add(new ToolCall(block.Id ?? "", block.Name ?? "", arguments));
                     break;
@@ -144,7 +145,7 @@ public class AnthropicBackend : Backend
             textBuilder.Length > 0 ? textBuilder.ToString() : null,
             toolCalls.Count > 0 ? [.. toolCalls] : null,
             reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
-            thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
+            thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks, LlmBackendJsonContext.Default.ListThinkingBlock) : null);
         var usage = json.Usage ?? new AnthropicUsage();
         return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
     }
@@ -258,8 +259,8 @@ public class AnthropicBackend : Backend
         {
             ApplyCacheBreakpoints(apiMessages);
         }
-        string jsonData = JsonSerializer.Serialize(
-            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: true));
+        string jsonData = (JsonNodeConverter.ToNode(
+            BuildRequestBody(systemPrompt, options, model, maxTokens, thinkingEnabled, thinkingBudget, apiMessages, stream: true)) ?? new JsonObject()).ToJsonString();
 
         using var totalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         totalCts.CancelAfter(options.TotalTimeout ?? LlmDefaults.StreamingTotalGeneration);
@@ -307,7 +308,7 @@ public class AnthropicBackend : Backend
                 {
                     continue;
                 }
-                var streamEvent = JsonSerializer.Deserialize<AnthropicStreamEvent>(data);
+                var streamEvent = JsonSerializer.Deserialize(data, LlmBackendJsonContext.Default.AnthropicStreamEvent);
                 if (streamEvent is null)
                 {
                     continue;
@@ -418,7 +419,7 @@ public class AnthropicBackend : Backend
                 textBuilder.Length > 0 ? textBuilder.ToString() : null,
                 toolCalls.Length > 0 ? toolCalls : null,
                 reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
-                thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
+                thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks, LlmBackendJsonContext.Default.ListThinkingBlock) : null);
             var tokenUsage = usage is null
                 ? TokenUsage.Zero
                 : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
@@ -566,7 +567,7 @@ public class AnthropicBackend : Backend
     {
         try
         {
-            var saved = JsonSerializer.Deserialize<List<ThinkingBlock>>(thinkingBlocksJson);
+            var saved = JsonSerializer.Deserialize(thinkingBlocksJson, LlmBackendJsonContext.Default.ListThinkingBlock);
             if (saved == null) return;
             foreach (var tb in saved)
             {
@@ -665,7 +666,9 @@ public class AnthropicBackend : Backend
         }
         try
         {
-            return JsonSerializer.Deserialize<object>(arguments) ?? new Dictionary<string, object>();
+            // AOT 兼容:任意 JSON 用 JsonDocument 解析,不依赖反射反序列化
+            using var doc = JsonDocument.Parse(arguments);
+            return doc.RootElement.Clone();
         }
         catch (JsonException)
         {

@@ -45,8 +45,8 @@ public class SkillToolSet : ToolSet
             .ToDictionary(static skill => skill.Name, StringComparer.OrdinalIgnoreCase);
 
         var builder = new ToolSetBridge.Builder(BuildPrompt());
-        builder.AddFunction<SkillListArgs>("skill_list", "列出所有可用技能名称。", ListSkillsAsync);
-        builder.AddFunction<SkillReadArgs>("skill_read", "读取指定技能的内容，返回技能文件全文。", ReadSkillAsync);
+        builder.AddFunction<SkillListArgs>("skill_list", "列出所有可用技能名称。", AgentToolsJsonContext.Default.SkillListArgs, ListSkillsAsync);
+        builder.AddFunction<SkillReadArgs>("skill_read", "读取指定技能的内容，返回技能文件全文。", AgentToolsJsonContext.Default.SkillReadArgs, ReadSkillAsync);
         bridge = builder.Build();
     }
 
@@ -61,14 +61,14 @@ public class SkillToolSet : ToolSet
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：skill_read</summary>
-    private sealed class SkillReadArgs
+    internal sealed class SkillReadArgs
     {
         [Description("技能名称")]
         public string skill { get; set; } = string.Empty;
     }
 
     /// <summary>工具参数：skill_list（无参数）</summary>
-    private sealed class SkillListArgs { }
+    internal sealed class SkillListArgs { }
 
     private string BuildPrompt()
     {

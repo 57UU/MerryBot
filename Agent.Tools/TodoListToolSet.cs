@@ -29,6 +29,7 @@ public class TodoListToolSet : ToolSet
         builder.AddFunction<TodoListArgs>(
             "todo_list",
             "查看或更新待办清单：不带 todos 参数查看当前清单；传 todos 数组则整体替换（空数组清空）。每项含 title 与 status（pending 待办 / in_progress 进行中 / done 已完成）。",
+            AgentToolsJsonContext.Default.TodoListArgs,
             HandleAsync);
         bridge = builder.Build();
     }
@@ -38,13 +39,13 @@ public class TodoListToolSet : ToolSet
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：todos 缺省表示仅查询</summary>
-    private sealed class TodoListArgs
+    internal sealed class TodoListArgs
     {
         public List<TodoItem>? todos { get; set; }
     }
 
     /// <summary>清单项</summary>
-    private sealed class TodoItem
+    internal sealed class TodoItem
     {
         [Description("任务标题，简短可执行")]
         public string title { get; set; } = string.Empty;
@@ -53,7 +54,7 @@ public class TodoListToolSet : ToolSet
         public TodoStatus status { get; set; }
     }
 
-    private enum TodoStatus { pending, in_progress, done }
+    internal enum TodoStatus { pending, in_progress, done }
 
     private Task<string> HandleAsync(TodoListArgs args)
     {

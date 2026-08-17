@@ -133,22 +133,26 @@ public class TerminalToolSet : ToolSet, IDisposable
         var builder = new ToolSetBridge.Builder(prompt);
         var shellDescription = "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
               "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时。";
-        builder.AddFunction<BashArgs>("shell", shellDescription,
+        builder.AddFunction<BashArgs>("shell", shellDescription, AgentSessionJsonContext.Default.BashArgs,
             (BashArgs args, CancellationToken ct, Action<Message> onIterationAdd) => RunAsync(args, ct));
         if (hasVision)
         {
             builder.AddFunction<LoadLocalImageArgs>("load_local_image",
                 "加载本地图片文件并注入对话供模型查看。相对路径按 shell 当前工作目录解析（cd 状态跨调用保留）。",
+                AgentSessionJsonContext.Default.LoadLocalImageArgs,
                 LoadLocalImageAsync);
         }
         builder.AddFunction<TaskListArgs>("task_list",
             "列出所有后台 shell 任务：id、说明、运行中/已完成、已耗时。",
+            AgentSessionJsonContext.Default.TaskListArgs,
             _ => Task.FromResult(ListTasks()));
         builder.AddFunction<TaskOutputArgs>("task_output",
             "查询后台 shell 任务结果：未完成返回执行中提示，已完成返回结果并移除任务。",
+            AgentSessionJsonContext.Default.TaskOutputArgs,
             QueryTaskAsync);
         builder.AddFunction<TaskStopArgs>("task_stop",
             "终止指定后台 shell 任务。",
+            AgentSessionJsonContext.Default.TaskStopArgs,
             StopTaskAsync);
         bridge = builder.Build();
     }
@@ -159,7 +163,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：bash</summary>
-    private class BashArgs
+    internal class BashArgs
     {
         [Description("要执行的命令")]
         public string command { get; set; } = string.Empty;
@@ -181,7 +185,7 @@ public class TerminalToolSet : ToolSet, IDisposable
     }
 
     /// <summary>工具参数：load_local_image</summary>
-    private sealed class LoadLocalImageArgs
+    internal sealed class LoadLocalImageArgs
     {
         [Description("要加载的图片文件路径，相对路径按 shell 当前工作目录解析")]
         public string image_path { get; set; } = string.Empty;
@@ -191,21 +195,21 @@ public class TerminalToolSet : ToolSet, IDisposable
     }
 
     /// <summary>工具参数：task_output</summary>
-    private sealed class TaskOutputArgs
+    internal sealed class TaskOutputArgs
     {
         [Description("后台任务 id")]
         public string task_id { get; set; } = string.Empty;
     }
 
     /// <summary>工具参数：task_stop</summary>
-    private sealed class TaskStopArgs
+    internal sealed class TaskStopArgs
     {
         [Description("后台任务 id")]
         public string task_id { get; set; } = string.Empty;
     }
 
     /// <summary>工具参数：task_list（无参数）</summary>
-    private sealed class TaskListArgs { }
+    internal sealed class TaskListArgs { }
 
     private async Task<string> RunAsync(BashArgs args, CancellationToken cancellationToken)
     {

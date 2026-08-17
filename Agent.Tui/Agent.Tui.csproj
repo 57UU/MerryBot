@@ -5,16 +5,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- NativeAOT 发布配置：产物为单文件原生二进制，无需 CLR/JIT -->
+    <PublishAot>true</PublishAot>
+    <!-- 全球化固定不变量：大幅减小体积（TUI 不需要文化相关的日期/数字格式化差异） -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- 浮点不做运行时舍入模式切换（AOT 默认优化） -->
+    <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
     <ProjectReference Include="..\MerryBot.Tui\MerryBot.Tui.csproj" />
     <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
 </Project>

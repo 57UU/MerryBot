@@ -12,12 +12,6 @@ namespace Agent.Session;
 /// </summary>
 public sealed class Cron : ToolSet
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-    };
-
     private readonly string _sessionId;
     private readonly ClockService _service;
     private readonly ToolSetBridge _bridge;
@@ -35,26 +29,32 @@ public sealed class Cron : ToolSet
         builder.AddFunction<ClockCreateArgs>(
             "clock_create",
             "创建定时任务。cron 使用 Linux 五字段格式：分 时 日 月 周；run_once=true 时只执行下一次匹配。",
+            AgentSessionJsonContext.Default.ClockCreateArgs,
             CreateAsync);
         builder.AddFunction<ClockListArgs>(
             "clock_list",
             "列出当前会话的定时任务摘要。",
+            AgentSessionJsonContext.Default.ClockListArgs,
             ListAsync);
         builder.AddFunction<ClockGetArgs>(
             "clock_get",
             "按 ID 查看当前会话定时任务的完整详情。",
+            AgentSessionJsonContext.Default.ClockGetArgs,
             GetAsync);
         builder.AddFunction<ClockUpdateArgs>(
             "clock_update",
             "按 ID 更新当前会话定时任务；未传入的字段保持不变。",
+            AgentSessionJsonContext.Default.ClockUpdateArgs,
             UpdateAsync);
         builder.AddFunction<ClockDeleteArgs>(
             "clock_delete",
             "按 ID 删除当前会话定时任务，执行历史会保留。",
+            AgentSessionJsonContext.Default.ClockDeleteArgs,
             DeleteAsync);
         builder.AddFunction<ClockLogArgs>(
             "clock_log",
             "查看当前会话的定时任务执行记录，可按任务 ID、状态和时间范围过滤。",
+            AgentSessionJsonContext.Default.ClockLogArgs,
             LogAsync);
         _bridge = builder.Build();
     }
@@ -111,7 +111,7 @@ public sealed class Cron : ToolSet
     private async Task<string> DeleteAsync(ClockDeleteArgs args)
     {
         await _service.DeleteAsync(_sessionId, args.id);
-        return Serialize(new { id = args.id, deleted = true });
+        return Serialize(new ClockDeleteResult { Id = args.id, Deleted = true });
     }
 
     private async Task<string> LogAsync(ClockLogArgs args)
@@ -143,26 +143,29 @@ public sealed class Cron : ToolSet
         return status;
     }
 
-    private static object ToSummary(ClockTask task) => new
+    private static ClockTaskSummary ToSummary(ClockTask task) => new ClockTaskSummary
     {
-        id = task.Id,
-        cron = task.CronExpression,
-        timezone = task.TimeZoneId,
-        content = task.Content.Length <= 120 ? task.Content : task.Content[..120] + "…",
-        trigger = task.Trigger,
-        runOnce = task.RunOnce,
-        timeoutSeconds = task.TimeoutSeconds,
-        enabled = task.Enabled,
-        nextRunAtUtc = task.NextRunAtUtc,
-        lastRunAtUtc = task.LastRunAtUtc,
+        Id = task.Id,
+        Cron = task.CronExpression,
+        Timezone = task.TimeZoneId,
+        Content = task.Content.Length <= 120 ? task.Content : task.Content[..120] + "…",
+        Trigger = task.Trigger,
+        RunOnce = task.RunOnce,
+        TimeoutSeconds = task.TimeoutSeconds,
+        Enabled = task.Enabled,
+        NextRunAtUtc = task.NextRunAtUtc,
+        LastRunAtUtc = task.LastRunAtUtc,
     };
 
-    private static string Serialize(object value) => JsonSerializer.Serialize(value, JsonOptions);
+    private static string Serialize(ClockTask task) => JsonSerializer.Serialize(task, AgentSessionJsonContext.Default.ClockTask);
+    private static string Serialize(List<ClockTaskSummary> summaries) => JsonSerializer.Serialize(summaries, AgentSessionJsonContext.Default.ListClockTaskSummary);
+    private static string Serialize(ClockDeleteResult result) => JsonSerializer.Serialize(result, AgentSessionJsonContext.Default.ClockDeleteResult);
+    private static string Serialize(IReadOnlyList<ClockRunLog> logs) => JsonSerializer.Serialize(logs, AgentSessionJsonContext.Default.ListClockRunLog);
 
     private static string BuildPrompt() =>
         "clock_update 只修改实际传入的字段；clock_log 的状态可使用 running、succeeded、timedOut、failed、skipped、cancelled。";
 
-    private sealed class ClockCreateArgs
+    internal sealed class ClockCreateArgs
     {
         [Description("Linux 五字段 Cron 表达式：分 时 日 月 周，例如 0 9 * * 1-5")]
         public string cron { get; set; } = string.Empty;
@@ -183,17 +186,17 @@ public sealed class Cron : ToolSet
         public int? timeout_seconds { get; set; }
     }
 
-    private sealed class ClockListArgs
+    internal sealed class ClockListArgs
     {
     }
 
-    private sealed class ClockGetArgs
+    internal sealed class ClockGetArgs
     {
         [Description("任务 ID")]
         public Guid id { get; set; }
     }
 
-    private sealed class ClockUpdateArgs
+    internal sealed class ClockUpdateArgs
     {
         [Description("任务 ID")]
         public Guid id { get; set; }
@@ -220,13 +223,13 @@ public sealed class Cron : ToolSet
         public bool? enabled { get; set; }
     }
 
-    private sealed class ClockDeleteArgs
+    internal sealed class ClockDeleteArgs
     {
         [Description("任务 ID")]
         public Guid id { get; set; }
     }
 
-    private sealed class ClockLogArgs
+    internal sealed class ClockLogArgs
     {
         [Description("可选，按任务 ID 过滤")]
         public Guid? task_id { get; set; }

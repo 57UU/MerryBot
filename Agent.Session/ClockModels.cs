@@ -60,6 +60,30 @@ public sealed class ClockTrigger
     };
 }
 
+/// <summary>
+/// 定时任务摘要（列表接口返回的轻量视图，AOT 兼容：替代匿名类型序列化）。
+/// </summary>
+public sealed class ClockTaskSummary
+{
+    public Guid Id { get; set; }
+    public string Cron { get; set; } = string.Empty;
+    public string Timezone { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public ClockTrigger Trigger { get; set; } = new();
+    public bool RunOnce { get; set; }
+    public int TimeoutSeconds { get; set; }
+    public bool Enabled { get; set; }
+    public DateTimeOffset? NextRunAtUtc { get; set; }
+    public DateTimeOffset? LastRunAtUtc { get; set; }
+}
+
+/// <summary>删除操作的具名返回值（替代匿名类型序列化）。</summary>
+public sealed class ClockDeleteResult
+{
+    public Guid Id { get; set; }
+    public bool Deleted { get; set; }
+}
+
 public enum ClockRunStatus
 {
     Running,

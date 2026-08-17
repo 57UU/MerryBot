@@ -27,7 +27,7 @@ public static class BackendErrors
         var message = responseBody ?? string.Empty;
         try
         {
-            var error = JsonSerializer.Deserialize<ApiErrorEnvelope>(message);
+            var error = JsonSerializer.Deserialize(message, LlmBackendJsonContext.Default.ApiErrorEnvelope);
             if (!string.IsNullOrEmpty(error?.Error?.Message))
             {
                 message = error.Error.Message;
@@ -45,7 +45,7 @@ public static class BackendErrors
         string message = $"API 错误 ({(int)statusCode} {statusCode})";
         try
         {
-            var error = JsonSerializer.Deserialize<ApiErrorEnvelope>(responseBody);
+            var error = JsonSerializer.Deserialize(responseBody, LlmBackendJsonContext.Default.ApiErrorEnvelope);
             if (!string.IsNullOrEmpty(error?.Error?.Message))
             {
                 message += $": {error.Error.Message}";
@@ -72,12 +72,12 @@ public static class BackendErrors
         };
     }
 
-    private sealed class ApiErrorEnvelope
+    internal sealed class ApiErrorEnvelope
     {
         public ApiErrorBody? Error { get; set; }
     }
 
-    private sealed class ApiErrorBody
+    internal sealed class ApiErrorBody
     {
         public string? Message { get; set; }
     }

@@ -1,11 +1,12 @@
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Agent.Tui;
 
 /// <summary>
-/// TUI 的 YAML 配置根。明文存放 API Key（实验性质，不做加密）。
+/// TUI 的配置根。明文存放 API Key（实验性质，不做加密）。
 /// schema 见 <see cref="ProviderConfig"/> / <see cref="ActiveSelection"/>。
+/// 存储格式为 JSON（NativeAOT 兼容：STJ source generator，不支持反射式 YAML）。
 /// </summary>
 public sealed class TuiConfig
 {
@@ -49,20 +50,16 @@ public sealed class ProviderConfig
     public List<string> Models { get; set; } = [];
 }
 
-/// <summary>YAML 文件读写。失败时回退默认配置，保证进程可启动。</summary>
+/// <summary>JSON 配置读写。失败时回退默认配置，保证进程可启动。</summary>
 public static class TuiConfigStore
 {
-    public const string FileName = "tui-config.yaml";
+    public const string FileName = "tui-config.json";
 
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
-        .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .IgnoreUnmatchedProperties()
-        .Build();
-
-    private static readonly ISerializer Serializer = new SerializerBuilder()
-        .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitDefaults)
-        .Build();
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
 
     public static string Path => System.IO.Path.Combine(AppContext.BaseDirectory, FileName);
 
@@ -77,8 +74,8 @@ public static class TuiConfigStore
                 Save(seed);
                 return seed;
             }
-            var yaml = File.ReadAllText(path);
-            return Deserializer.Deserialize<TuiConfig>(yaml) ?? CreateDefault();
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize(json, TuiConfigJsonContext.Default.TuiConfig) ?? CreateDefault();
         }
         catch
         {
@@ -91,7 +88,7 @@ public static class TuiConfigStore
     {
         try
         {
-            File.WriteAllText(Path, Serializer.Serialize(cfg));
+            File.WriteAllText(Path, JsonSerializer.Serialize(cfg, TuiConfigJsonContext.Default.TuiConfig));
         }
         catch
         {
@@ -119,4 +116,13 @@ public static class TuiConfigStore
             },
         ],
     };
+}
+
+/// <summary>TuiConfig 的 STJ source generator 上下文（NativeAOT 兼容）。</summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(TuiConfig))]
+[JsonSerializable(typeof(ActiveSelection))]
+[JsonSerializable(typeof(ProviderConfig))]
+internal sealed partial class TuiConfigJsonContext : JsonSerializerContext
+{
 }

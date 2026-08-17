@@ -89,10 +89,9 @@ public sealed class ModelsDevClient
     /// </summary>
     public void LoadFromJson(string json)
     {
-        var providers = JsonSerializer.Deserialize<Dictionary<string, Provider>>(json, JsonOptions.Default);
+        var providers = JsonSerializer.Deserialize(json, ModelsDevJsonContext.Default.DictionaryStringProvider);
         _providers = providers ?? throw new JsonException("Failed to deserialize provider data");
     }
-
     /// <summary>
     /// Gets all providers.
     /// </summary>

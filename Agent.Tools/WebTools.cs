@@ -22,8 +22,8 @@ public class WebTools : ToolSet
         this.browser = browser;
         var builder = new ToolSetBridge.Builder(
             "需要获取实时信息、搜索结果或指定网页内容时，使用 web_search / web_fetch 工具，返回内容已是整理后的文本。");
-        builder.AddFunction<WebSearchArgs>("web_search", "搜索网络，返回相关网页的标题、链接与摘要", SearchAsync);
-        builder.AddFunction<WebFetchArgs>("web_fetch", "抓取指定 URL 的网页正文文本", FetchAsync);
+        builder.AddFunction<WebSearchArgs>("web_search", "搜索网络，返回相关网页的标题、链接与摘要", AgentToolsJsonContext.Default.WebSearchArgs, SearchAsync);
+        builder.AddFunction<WebFetchArgs>("web_fetch", "抓取指定 URL 的网页正文文本", AgentToolsJsonContext.Default.WebFetchArgs, FetchAsync);
         bridge = builder.Build();
     }
 
@@ -32,14 +32,14 @@ public class WebTools : ToolSet
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>工具参数：web_search</summary>
-    private sealed class WebSearchArgs
+    internal sealed class WebSearchArgs
     {
         [Description("搜索关键词")]
         public string query { get; set; } = string.Empty;
     }
 
     /// <summary>工具参数：web_fetch</summary>
-    private sealed class WebFetchArgs
+    internal sealed class WebFetchArgs
     {
         [Description("要抓取的网页 URL")]
         public string url { get; set; } = string.Empty;
