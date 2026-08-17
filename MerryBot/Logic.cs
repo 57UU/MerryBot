@@ -236,7 +236,7 @@ internal partial class Logic
     private static string GetCoreWebAddress()
     {
         return string.IsNullOrWhiteSpace(ConfigManager.Instance.WebAddress)
-            ? "http://0.0.0.0:5000"
+            ? "http://localhost:5000"
             : ConfigManager.Instance.WebAddress;
     }
 
