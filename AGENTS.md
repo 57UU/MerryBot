@@ -133,6 +133,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 - Blazor InteractiveServer，与主程序同进程运行，监听 `WebAddress`（默认 `http://localhost:5000`）
 - 提供 `/api/...` Minimal API：状态、群组管理、日志、配置编辑、LLM Provider/模型/Key 管理、Skill 上传/禁用、记忆管理、上下文快照、更新检测
 - 图片/文件经 `/api/image/{id}`、`/api/file/{id}`、`/api/resource` 由本地存储提供，消息链中的媒体均为 `merrybot://` 本地引用，前端不直连远端 URL
+- **设计决策（by design）**：WebUI **不做内置鉴权**，默认仅绑定 `localhost` —— 这是有意为之，目的是保持配置/管理入口的简洁性，避免引入账号体系与登录复杂度。**远程访问的推荐方式是 SSH 端口转发**（如 `ssh -L 5000:localhost:5000 user@host`），由 SSH 承担认证与加密，WebUI 自身不需要也不应暴露到公网。若用户自行将 `WebAddress` 改为 `0.0.0.0`，则须自行经受控内网或 HTTPS 反向代理保护，风险自担
 
 ## 数据与存储
 
@@ -214,7 +215,8 @@ dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 - **LLM API Key**：写入数据库前用本机 DataProtection 密钥加密（密钥环在 `<data>/llm-provider-key-ring/`）；WebUI 只回显末四位与指纹，不回读原文。密钥环文件应妥善保护，丢失后已存 Key 无法解密
 - **授权校验**：`/update`、`/reload` 等高危操作校验发送者 QQ == `AuthorizedUser`；WebUI 的更新接口同样受 `HostLifecycle` 互斥与授权约束
 - **Shell 工具默认关闭**：`allow-shell` 未开启时 `TerminalToolSet` 不注册（模型无法执行 shell）；开启后仅 Linux 可用，且按 `shell-user` 指定的系统用户执行，需保证该用户权限受控
-- **WebUI 监听地址**：默认仅绑定 `localhost:5000`；远程管理请用 SSH 端口转发。若改为 `0.0.0.0`，须经受控内网或 HTTPS 反向代理访问（尤其 LLM 配置页会经浏览器提交 Key）
+- **Shell 工具推荐搭配 `shell-user` 使用**：`bash`/`shell` 工具应始终与 `shell-user` 配置一同设置 —— 让命令以独立低权限系统用户身份执行，实现**用户隔离**（LLM 进程与 shell 进程的权限面分离），而不是以机器人自身用户或 root 运行。推荐为该用途创建专用用户（如 `bot-shell`），仅授予最小所需权限
+- **WebUI 监听地址**：默认仅绑定 `localhost:5000`；远程管理请用 SSH 端口转发（无内置鉴权是设计决策，见"WebUI"一节，**不要**擅自为 WebUI 增加账号/登录体系）。若改为 `0.0.0.0`，须经受控内网或 HTTPS 反向代理访问（尤其 LLM 配置页会经浏览器提交 Key）
 - **资源引用**：消息链中的图片/文件一律经 `merrybot://` 本地引用 + 本地 API 提供，前端不直连远端 URL，避免 SSRF/隐私外泄；下载资源受 `ResourceSizeLimitMb` 限制
 - **插件隔离**：`PluginInitializer` 按插件隔离依赖解析失败（单个插件异常不影响其余插件加载）；插件数据库按 scope 隔离，`DropCollectionAsync` 只能删自己 scope 内的表
 - **日志脱敏**：群消息日志只记录群号/发送者/消息链长度摘要，不落完整消息链
