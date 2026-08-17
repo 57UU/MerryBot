@@ -65,7 +65,16 @@ public partial class AgentPlugin : Plugin
         };
         if (agentConfig.AllowShell)
         {
-            tools.Add(new TerminalToolSet(sessionManager, sessionId, user: agentConfig.ShellUser, visionRouter: visionRouter, maxImageBytes: agentConfig.MaxImageSizeMb * 1024 * 1024));
+            tools.Add(
+                new TerminalToolSet(
+                    sessionManager,
+                    sessionId,
+                    user: agentConfig.ShellUser,
+                    visionRouter: visionRouter,
+                    maxImageBytes: agentConfig.MaxImageSizeMb * 1024 * 1024,
+                    maxBackgroundTasks: Math.Clamp(agentConfig.MaxBackgroundTasks, 1, 64)
+                    )
+                );
         }
 
         var agentOptions = new AgentOptions
@@ -73,6 +82,7 @@ public partial class AgentPlugin : Plugin
             SystemPrompt = agentConfig.AiPrompt,
             MaxOutputTokens = resolved.Model.MaxOutputTokens,
             MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 150),
+            MaxConcurrentToolCalls = Math.Clamp(agentConfig.MaxConcurrentToolCalls, 1, 64),
             ContextCompactRatio = Math.Clamp(agentConfig.ContextCompactRatio, 0.1, 0.9),
             // 思维强度跟随模型配置（ModelRecord.ReasoningEffort），换模型自动跟随
             ReasoningEffort = resolved.Model.ReasoningEffort,
@@ -91,7 +101,8 @@ public partial class AgentPlugin : Plugin
                 var session = await sessionManager.GetSessionAsync(sessionId);
                 await session.Chat(msg, type: "subagent_result", stackable: true);
             },
-            disposeCts.Token));
+            disposeCts.Token,
+            maxSubagents: Math.Clamp(agentConfig.MaxSubagents, 1, 64)));
 
         var agent = await Agent.Agent.Create(
             new DatabaseContextHistory(Interop.PluginStorage.PluginDatabaseScope, sessionId),

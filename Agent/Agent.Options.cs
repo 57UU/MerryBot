@@ -14,6 +14,12 @@ public class AgentOptions
     public int? MaxOutputTokens { get; set; }
 
     /// <summary>
+    /// 单轮迭代中并行执行的工具调用数上限（&gt;=1）。模型一次可能请求多个工具调用，
+    /// 全部并发会放大成本与资源占用（如大量 web_fetch/后台任务）；超限部分排队串行执行。
+    /// </summary>
+    public int MaxConcurrentToolCalls { get; set; } = 4;
+
+    /// <summary>
     /// 深度思考档位（"low" / "medium" / "high"），仅 anthropic 格式生效：
     /// 映射为 thinking budget_tokens，返回的思考块（含签名）在 tool calling
     /// 多轮中原样回传。空值表示不开启。

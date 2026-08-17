@@ -27,6 +27,8 @@ public class SubAgentToolSet : ToolSet, IDisposable
     private readonly IList<ToolSet> _tools;
     private readonly Func<string, Task> _notifyAsync;
     private readonly CancellationToken _shutdownToken;
+    /// <summary>同时运行中的子任务数上限（每个子任务=一次完整 LLM 调用），防成本失控</summary>
+    private readonly int _maxSubagents;
     private readonly ConcurrentDictionary<string, SubTask> _tasks = new();
 
     private sealed record SubTask(string Id, string TaskText, Task<string> Result, CancellationTokenSource Cts, DateTime StartTime)
@@ -46,7 +48,8 @@ public class SubAgentToolSet : ToolSet, IDisposable
         AgentOptions options,
         IList<ToolSet> tools,
         Func<string, Task> notifyAsync,
-        CancellationToken shutdownToken)
+        CancellationToken shutdownToken,
+        int maxSubagents = 3)
     {
         _llmClient = llmClient ?? throw new ArgumentNullException(nameof(llmClient));
         _tokenLimit = tokenLimit;
@@ -54,6 +57,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _notifyAsync = notifyAsync ?? throw new ArgumentNullException(nameof(notifyAsync));
         _shutdownToken = shutdownToken;
+        _maxSubagents = Math.Max(1, maxSubagents);
 
         var builder = new ToolSetBridge.Builder(
             "如需把任务交给独立的子 Agent 处理，调用 subagent 工具：子 Agent 拥有全新上下文，" +
@@ -113,6 +117,12 @@ public class SubAgentToolSet : ToolSet, IDisposable
             throw new ArgumentException("system_prompt 参数不能为空");
         }
         CleanupExpiredTasks();
+        // 运行中子任务数上限：防止 LLM 派发大量子任务（每个=一次完整 LLM 调用）导致成本/资源失控
+        var runningCount = _tasks.Values.Count(t => !t.Result.IsCompleted);
+        if (runningCount >= _maxSubagents)
+        {
+            return Task.FromResult($"子任务已达上限（{_maxSubagents} 个运行中），请先等待现有子任务完成（subagent_output 查询）或终止（subagent_stop）后再派发新任务。");
+        }
         var id = Guid.NewGuid().ToString("N")[..8];
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownToken);
         // 子 Agent 的 SystemPrompt 由调用方指定（必填），其余选项复用父会话
@@ -120,6 +130,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
         {
             SystemPrompt = args.system_prompt,
             MaxIterations = _options.MaxIterations,
+            MaxConcurrentToolCalls = _options.MaxConcurrentToolCalls,
             ContextCompactRatio = _options.ContextCompactRatio,
             MaxOutputTokens = _options.MaxOutputTokens,
             ReasoningEffort = _options.ReasoningEffort,

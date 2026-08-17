@@ -57,12 +57,26 @@ public partial class Agent
         // 工具执行期间通过回调追加的内容（如图片用户消息）；
         // 工具并发执行，故用并发队列收集。
         var iterationAdds = new ConcurrentQueue<Message>();
-        // 并发执行所有工具调用，结果按调用顺序作为 tool 消息回填
-        string[] toolResults;
+        // 并发执行所有工具调用，但受 MaxConcurrentToolCalls 上限约束（防 LLM 一次请求大量并发工具
+        // 导致资源/成本失控）；超限的工具排队串行执行。结果按调用顺序作为 tool 消息回填
+        var maxConcurrent = Math.Max(1, options.MaxConcurrentToolCalls);
+        using var gate = new SemaphoreSlim(maxConcurrent);
+        var toolResults = new string[response.ToolCalls.Length];
         try
         {
-            toolResults = await Task.WhenAll(
-                response.ToolCalls.Select(toolCall => InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue)));
+            var tasks = response.ToolCalls.Select(async (toolCall, index) =>
+            {
+                await gate.WaitAsync(cancellationToken);
+                try
+                {
+                    toolResults[index] = await InvokeToolAsync(cancellationToken, toolCall, iteration, iterationAdds.Enqueue);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            });
+            await Task.WhenAll(tasks);
         }
         catch (OperationCanceledException)
         {

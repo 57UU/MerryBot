@@ -34,6 +34,8 @@ public class TerminalToolSet : ToolSet, IDisposable
     private readonly string _detectedShell;
     /// <summary>shell 进程的初始工作目录；为 null 时由 Terminal 继承进程 CWD</summary>
     private readonly string? _initialWorkingDirectory;
+    /// <summary>同时运行中的后台任务数上限（每个后台任务=独立 Terminal 进程），防进程风暴/资源耗尽</summary>
+    private readonly int _maxBackgroundTasks;
     private readonly Lazy<Terminal> _sync;
     private readonly ConcurrentDictionary<string, BackgroundTask> _tasks = new();
 
@@ -109,7 +111,8 @@ public class TerminalToolSet : ToolSet, IDisposable
         string? user = null,
         VisionRouter? visionRouter = null,
         int maxImageBytes = 10 * 1024 * 1024,
-        string? initialWorkingDirectory = null)
+        string? initialWorkingDirectory = null,
+        int maxBackgroundTasks = 5)
     {
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _sessionId = sessionId;
@@ -117,6 +120,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         _visionRouter = visionRouter ?? new VisionRouter(mainHasVision: false, visionClients: null);
         _maxImageBytes = maxImageBytes;
         _initialWorkingDirectory = initialWorkingDirectory;
+        _maxBackgroundTasks = Math.Max(1, maxBackgroundTasks);
         if (!string.IsNullOrEmpty(user) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             throw new PlatformNotSupportedException("user（sudo 模式）仅支持 Linux");
@@ -307,6 +311,12 @@ public class TerminalToolSet : ToolSet, IDisposable
     private string StartBackground(string command, string? cwd, int? timeout, bool disableTimeout, string? description)
     {
         CleanupExpiredTasks();
+        // 运行中后台任务数上限：每个后台任务=独立 Terminal 进程，防 LLM 派发进程风暴耗尽系统资源
+        var runningCount = _tasks.Values.Count(t => !t.Task.IsCompleted);
+        if (runningCount >= _maxBackgroundTasks)
+        {
+            return $"后台任务已达上限（{_maxBackgroundTasks} 个运行中），请先等待现有任务完成（task_output 查询）或终止（task_stop）后再启动新任务。";
+        }
         var id = Guid.NewGuid().ToString("N")[..8];
         Terminal? terminal = null;
         try

@@ -34,4 +34,13 @@ public class AgentConfig : IPluginConfig
 
     [ConfigDescription("图片大小上限", "load_image 等工具允许下载的图片大小上限（MB）。")]
     public int MaxImageSizeMb { get; set; } = 10;
+
+    [ConfigDescription("单轮并发工具调用上限", "模型单次迭代中并行执行的工具调用数上限，防止一次请求触发过多并发工具导致资源/成本失控。")]
+    public int MaxConcurrentToolCalls { get; set; } = 4;
+
+    [ConfigDescription("子任务数上限", "同时运行中的子 Agent 任务数上限，防止子任务（每个=一次完整 LLM 调用）无限堆积导致成本失控。")]
+    public int MaxSubagents { get; set; } = 3;
+
+    [ConfigDescription("后台 shell 任务上限", "同时运行中的后台 shell 任务数上限，防止 LLM 派发大量后台进程耗尽系统资源。")]
+    public int MaxBackgroundTasks { get; set; } = 5;
 }
