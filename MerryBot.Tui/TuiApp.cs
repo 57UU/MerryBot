@@ -65,6 +65,10 @@ public sealed class TuiApp : IDisposable
         if (_running) return;
         _running = true;
 
+        // 传统 Windows 控制台(GBK 代码页)下先显式切到 UTF-8 并启用 VT 输出，
+        // 否则 ANSI 序列与 UTF-8 中文会被按本地代码页解码而乱码。
+        // 必须在 EnterAltScreen 之前激活，保证首批 ANSI 序列即被正确解释。
+        ConsoleUtf8.Enable();
         _terminal.EnterAltScreen();
         RawMode.Enable();
 
@@ -129,6 +133,7 @@ public sealed class TuiApp : IDisposable
             _terminal.ShowCursor();
             RawMode.Disable();
             _terminal.LeaveAltScreen();
+            ConsoleUtf8.Disable();
             if (background is not null)
             {
                 try { background.Wait(TimeSpan.FromSeconds(1)); } catch { /* 忽略 */ }
