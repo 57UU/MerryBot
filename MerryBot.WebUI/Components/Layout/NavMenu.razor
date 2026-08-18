@@ -15,52 +15,60 @@
 
 <div class="nav-scrollable" @onclick="CloseNavIfToggled">
     <nav class="nav-column">
+        <div class="nav-group">首页</div>
+
         <NavMenuItem Href="" Match=NavLinkMatch.All Icon="🏠">
             概览
         </NavMenuItem>
 
-        <NavMenuItem Href="statistics" Icon="📊">
-            统计数据
-        </NavMenuItem>
-
-        <NavMenuItem Href="groups" Icon="👥">
-            群聊管理
-        </NavMenuItem>
-
-        <NavMenuItem Href="groupmessages" Icon="💬">
-            群聊消息
-        </NavMenuItem>
-
-        <NavMenuItem Href="aimessages" Icon="🤖">
-            AI 消息
-        </NavMenuItem>
-
-        <NavMenuItem Href="sessionai" Icon="🔎">
-            Session AI
-        </NavMenuItem>
-
-        <NavMenuItem Href="llmproviders" Icon="🧠">
-            LLM 配置
-        </NavMenuItem>
+        <div class="nav-group">配置管理</div>
 
         <NavMenuItem Href="config" Icon="⚙️">
-            配置
+            配置中心
         </NavMenuItem>
 
         <NavMenuItem Href="advanced" Icon="🧪">
             高级配置
         </NavMenuItem>
 
+        <NavMenuItem Href="groups" Icon="👥">
+            群组管理
+        </NavMenuItem>
+
+        <div class="nav-group">AI 服务</div>
+
+        <NavMenuItem Href="llmproviders" Icon="🧠">
+            模型配置
+        </NavMenuItem>
+
         <NavMenuItem Href="skills" Icon="🧩">
-            Skill 管理
+            技能管理
         </NavMenuItem>
 
         <NavMenuItem Href="memories" Icon="🗂️">
             记忆管理
         </NavMenuItem>
 
+        <NavMenuItem Href="sessionai" Icon="🔎">
+            会话快照
+        </NavMenuItem>
+
+        <div class="nav-group">消息审计</div>
+
+        <NavMenuItem Href="statistics" Icon="📊">
+            数据统计
+        </NavMenuItem>
+
+        <NavMenuItem Href="groupmessages" Icon="💬">
+            群聊记录
+        </NavMenuItem>
+
+        <NavMenuItem Href="aimessages" Icon="🤖">
+            AI 记录
+        </NavMenuItem>
+
         <NavMenuItem Href="logs" Icon="📜">
-            日志管理
+            运行日志
         </NavMenuItem>
     </nav>
 
