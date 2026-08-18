@@ -5,6 +5,7 @@ using DataProvider;
 using DataService;
 using MerryBot.WebUI.Api;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
@@ -38,7 +39,11 @@ internal partial class Logic
         historyRecorder = new HistoryRecorder(historyDbPath, historyStoragePath, GetCoreMachineCode());
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
         messageService = new MessageService(botClient.Bot, historyRecorder, logger, ConfigManager.Instance.ResourceSizeLimitMb * 1024 * 1024);
-        webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress);
+        // 上下文快照服务注册进 WebUI DI：组件直接注入读取（与 AgentServicePlugin 同 scope，只读无状态），
+        // 避免页面经 JS 互操作 + HTTP 回调自己的 API——大快照 JSON 超过 SignalR 32KB 默认上限会导致断连/取消
+        var contextSnapshotService = new ContextSnapshotService(PluginStorageDatabase.CreateScope("agent"));
+        webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress,
+            services => services.AddSingleton<IContextSnapshotService>(contextSnapshotService));
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
         // 高级配置面板：原始 BSON 查看/删除插件数据库条目（排查残留数据用）

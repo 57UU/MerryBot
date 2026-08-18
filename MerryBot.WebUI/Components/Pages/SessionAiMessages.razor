@@ -1,6 +1,9 @@
 @page "/sessionai"
 @using CommonLib
+@using DataService
 @rendermode InteractiveServer
+@inject IContextSnapshotService SnapshotService
+@inject HistoryRecorder HistoryRecorder
 @inject IJSRuntime JSRuntime
 
 <PageTitle>会话快照</PageTitle>
@@ -68,7 +71,7 @@
                         <span>请选择一个 session</span>
                     }
                 </div>
-                <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
+                <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" id="snapshot-scroll">
                     @if (LoadError != null && Snapshot is null)
                     {
                         <div class="text-center-custom text-danger-custom mt-5-custom">@LoadError</div>
@@ -145,6 +148,7 @@
     private ContextSnapshotDetail? Snapshot;
     private bool SnapshotLoading;
     private string? LoadError;
+    private bool _scrollToBottomPending;
 
     protected override async Task OnInitializedAsync()
     {
@@ -155,12 +159,42 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 快照渲染完成后滚动到消息最底端（最新消息）；预渲染阶段 JS 不可用时忽略，
+        // 交互式实例初始化时会再次触发
+        if (_scrollToBottomPending)
+        {
+            _scrollToBottomPending = false;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("configApi.scrollToBottom", "snapshot-scroll");
+            }
+            catch
+            {
+                // 忽略（预渲染阶段 JS 互操作不可用）
+            }
+        }
+    }
+
     private async Task LoadSessionsAsync()
     {
         try
         {
             LoadError = null;
-            Sessions = await JSRuntime.InvokeAsync<List<ContextSessionDto>>("configApi.request", "GET", "/api/context/sessions");
+            // 服务端组件直接注入服务读取（不经过 JS 互操作 + HTTP 回调），
+            // 大快照 JSON 不会因 SignalR 32KB 消息上限导致断连/取消
+            var sessions = await SnapshotService.ListSessionsAsync();
+            var names = (await HistoryRecorder.GetAllGroupNamesAsync())
+                .GroupBy(item => item.GroupId)
+                .ToDictionary(g => g.Key, g => g.First().Name);
+            Sessions = sessions
+                .Select(session => new ContextSessionDto(
+                    session.SessionKey,
+                    GetDisplayName(session.SessionKey, names),
+                    session.MessageCount,
+                    session.UpdatedAtUtc))
+                .ToList();
         }
         catch (Exception exception)
         {
@@ -176,9 +210,9 @@
         SnapshotLoading = true;
         try
         {
-            var encoded = Uri.EscapeDataString(sessionKey);
-            Snapshot = await JSRuntime.InvokeAsync<ContextSnapshotDetail>("configApi.request", "GET", $"/api/context/snapshot?sessionKey={encoded}");
+            Snapshot = await SnapshotService.GetSnapshotAsync(sessionKey);
             LoadError = null;
+            _scrollToBottomPending = true;
         }
         catch (Exception exception)
         {
@@ -188,5 +222,17 @@
         {
             SnapshotLoading = false;
         }
+    }
+
+    private static string GetDisplayName(string sessionKey, IReadOnlyDictionary<long, string> names)
+    {
+        var parts = sessionKey.Split('/', StringSplitOptions.None);
+        if (parts is ["qq", "group", var id] && long.TryParse(id, out var groupId))
+        {
+            return names.TryGetValue(groupId, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? $"{name} ({groupId})"
+                : $"群 {groupId}";
+        }
+        return sessionKey;
     }
 }

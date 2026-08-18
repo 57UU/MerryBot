@@ -9,8 +9,9 @@ namespace BotPlugin;
 /// 读取 Agent 当前内存上下文快照（context_histories 集合）。与 ai_messages 审计日志不同：
 /// 上下文会随压缩/重置变化，反映 Agent 当前实际"看到"的对话内容。
 /// 直接以 BsonDocument 读取，避免暴露 DatabaseContextHistory 的私有持久化类型。
+/// 只读无状态；宿主（Logic）可独立创建实例并注册到 WebUI DI，供组件直接注入。
 /// </summary>
-internal sealed class ContextSnapshotService : IContextSnapshotService
+public sealed class ContextSnapshotService : IContextSnapshotService
 {
     private readonly ILiteCollectionAsync<BsonDocument> _snapshots;
 

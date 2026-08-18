@@ -2,6 +2,7 @@ using DataService;
 using MerryBot.WebUI.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MerryBot.WebUI;
 
@@ -14,7 +15,8 @@ public class Program
         var app = CreateApp(historyRecorder);
         await app.RunAsync();
     }
-    public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000")
+    public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000",
+        Action<IServiceCollection>? configureServices = null)
     {
         // 执行数据库 schema 迁移（幂等，已是最新版本时直接返回）
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
@@ -31,6 +33,15 @@ public class Program
             .AddInteractiveServerComponents();
         // data
         builder.Services.AddSingleton(historyRecorder);
+
+        // 调大 JS 互操作的消息上限：上下文快照/日志等大 JSON 经 SignalR 回传时，
+        // 默认 32KB 上限会导致连接被断开（表现为 TaskCanceledException + 断线重连）。
+        // 2MB 足够容纳较大的快照/日志，同时避免无限放宽。
+        builder.Services.Configure<HubOptions>(options =>
+            options.MaximumReceiveMessageSize = 2 * 1024 * 1024);
+
+        // 宿主（Logic）注入的进程内服务（如 IContextSnapshotService）
+        configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
 

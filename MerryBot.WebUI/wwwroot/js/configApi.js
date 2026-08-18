@@ -16,5 +16,9 @@ window.configApi = {
     },
     scrollTo: function (elementId) {
         document.getElementById(elementId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    scrollToBottom: function (elementId) {
+        const el = document.getElementById(elementId);
+        if (el) el.scrollTop = el.scrollHeight;
     }
 };
