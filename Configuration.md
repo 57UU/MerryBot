@@ -1,76 +1,111 @@
-# MerryBot 配置文件说明 (setting.toml)
+# MerryBot 配置说明
 
-`setting.toml` 是 MerryBot 的主配置文件。程序默认会在工作目录下的 `data` 文件夹（或由 `MERRY_BOT` 环境变量指定的目录）中寻找或生成该文件。
+MerryBot 的配置主要存放在 LiteDB 数据库 `plugin_data.db` 中（数据目录由环境变量 `MERRY_BOT` 指定，未设置时默认为程序工作目录下的 `data` 文件夹）。另有少量启动必需项放在 `setting.toml` 文件中。
 
-## 基础配置
+配置分为三类：
 
-```toml
-napcat-server = "ws://localhost:30001"    # Napcat WebSocket 地址
-napcat-token = "xxxxxxxx"                 # Napcat Token
-qq-groups = [                             # 要监听并处理消息的 QQ 群号列表
-    114514,
-    1919810
-]
-authorized-user = 114514                  # 授权用户（Bot 管理员）QQ号，部分插件高危操作会验证此 QQ 号
+- **启动配置**：`setting.toml` 中的启动必需项（目前只有 WebUI 监听地址），**不在 WebUI 中提供修改入口**——避免"WebUI 挂了就改不回来"的引导问题。修改后重启 MerryBot 生效。
+- **核心配置**：连接、群组、机器编号等宿主级设置，由 `ConfigManager` 管理，存储于 `plugin_data.db` 的 `config` 表（`prefix: "core"`）。
+- **插件配置**：每个插件有独立的配置类型，按插件 Id 存储，互不干扰。首次启动时生成默认配置并落库。
+
+核心配置与插件配置都可以在 WebUI「**配置中心**」（`/config`）中查看和修改，每个配置文件单独保存。修改后若页面提示需要重启才能生效，请使用侧边栏底部的「重启程序」按钮。
+
+## 启动配置（setting.toml）
+
+`setting.toml` 位于数据目录（`<data>/setting.toml`），首次启动时自动生成带注释的默认模板。文件内容采用 YAML 语法（由 YamlDotNet 解析，与 `Agent.Tui` 的配置同一套库），目前仅支持 `web-address` 一个键：
+
+```yaml
+# WebUI 监听地址（默认 http://localhost:5000）
+web-address: "http://localhost:5000"
 ```
 
-## 插件配置 (`[variables]`)
+- 支持 `#` 注释、带引号或不带引号的值；未知键会被忽略。
+- 值为非法 URL 或 YAML 解析失败时回退默认 `http://localhost:5000`。
+- 此文件中的配置项不在 WebUI 中显示，修改后需重启 MerryBot 生效。
 
-每个插件在 `setting.toml` 中都有独立的命名空间，表名即为插件的 ID。各插件的配置项相互隔离。
+## 核心配置
 
-### 1. LLM Provider（数据库管理）
+以下为 `Config` 类的字段及默认值：
 
-打开历史后台的“LLM 配置”页，先搜索并选择 models.dev Provider，再从该 Provider 的模型目录中添加所需模型；也可手工维护 OpenAI Chat Completions 兼容的 Provider、模型和默认模型。
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `NapcatServer` | `ws://localhost:3001/` | Napcat WebSocket 服务地址 |
+| `NapcatToken` | `napcat` | 连接 Napcat WebSocket 服务时使用的认证 Token |
+| `QqGroups` | `[]` | 需要接收和处理消息的 QQ 群号列表 |
+| `AuthorizedUser` | `-1` | 拥有管理权限的授权用户 QQ 号；部分高危操作（`/update`、`/reload` 等）会校验此 QQ 号 |
+| `MachineCode` | `-1` | 历史记录使用的机器编号；小于 0 时首次启动自动生成 0–31 的编号 |
+| `ResourceSizeLimitMb` | `20` | 下载并保存的图片/文件大小上限（MB） |
+| `ReconnectIntervalSeconds` | `15` | 消息适配器断开后重试连接的间隔（秒） |
 
-Provider、模型和 API Key 都保存于 `plugin_data.db` 的 `llm-provider` 作用域表中；`setting.toml` 不再保存 Token。Key 写入数据库前会用本机 Data Protection 密钥加密，列表和 API 响应只会显示末四位及指纹，无法读取原文。
+## 插件配置
 
-models.dev 只提供目录元数据，并会缓存在机器人运行目录的 `models.dev-api.json`：平时目录搜索优先使用本地缓存，点击“刷新 models.dev”才联网更新。导入时会带入模型上下文/输出上限和能力标签，但不会覆盖已手工设置的 API 地址、格式或启用状态；请确认 API 地址兼容 OpenAI `/chat/completions` 并填入自己的 Key。
+### 1. Agent 插件（`agent`）
 
-> 如果后台监听在 `0.0.0.0`，请只经受控内网或 HTTPS 反向代理访问“LLM 配置”页。Key 虽不会由页面读回，但写入时仍会通过浏览器提交。
+群聊 AI 机器人，支持工具调用、定时任务、技能（Skills）与记忆。配置类型 `AgentConfig`：
 
-### 2. AI 机器人插件 (`[variables.agent]`)
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `LlmModel` | `opencode-go/deepseek-v4-flash` | Agent 使用的主模型 ID（必须是「LLM 配置」页中已添加并启用的模型） |
+| `AiPrompt` | `你是一个乐于助人、回答简洁的群聊助手。` | 发送给主模型的系统提示词（人设） |
+| `MaxIterations` | `20` | 单次请求允许的最大工具调用迭代次数（实际钳制到 1–150） |
+| `ContextCompactRatio` | `0.7` | 上下文达到模型窗口的该比例后自动压缩（钳制到 0.1–0.9） |
+| `VisionLlmModels` | `[]` | 辅助视觉模型 ID 列表。主模型不具备视觉能力时按顺序逐个尝试，某个失效自动切换下一个；留空则禁用看图 |
+| `VisionPrompt` | `请详细描述这张图片的内容。` | 交给辅助视觉模型的图片描述提示词 |
+| `IdleSessionTimeoutHours` | `12` | 群聊会话空闲超过该时长（小时，支持小数如 0.5）后自动清理释放内存；非正数回退默认值 |
+| `AllowShell` | `false` | 是否注册 bash/终端工具集。**默认关闭**；开启后模型可在常驻 shell 中执行任意命令，请确认信任该群的用户 |
+| `ShellUser` | 空 | `AllowShell` 开启后，shell 命令以该 Linux 用户身份（`sudo -u user`）执行；留空则以机器人进程所属用户执行。仅 Linux 生效 |
+| `MaxImageSizeMb` | `10` | `load_image` 等工具允许下载的图片大小上限（MB） |
+| `MaxConcurrentToolCalls` | `4` | 模型单次迭代中并行执行的工具调用数上限（钳制到 1–64），防止并发工具导致资源/成本失控 |
+| `MaxSubagents` | `3` | 同时运行中的子 Agent 任务数上限（钳制到 1–64） |
+| `MaxBackgroundTasks` | `5` | 同时运行中的后台 shell 任务数上限（钳制到 1–64） |
 
-```toml
-llm-model = "opencode-go/deepseek-v4-flash"   # 主对话模型（默认）
-ai-prompt = "你是一个助人为乐的AI助手"          # AI 的 System Prompt（人设提示词）
-max-iterations = 20                           # 单轮对话最大工具调用迭代次数（1-100）
-context-compact-ratio = 0.7                    # 上下文占用达到该比例时自动压缩（0.1-0.95）
-vision-llm = ""                               # 辅助视觉模型。主模型没有视觉能力时，
-                                              # 用这个模型描述图片（如 qwen-vl / gpt-4o 等）
-vision-prompt = "请详细描述这张图片的内容。"      # 辅助视觉模型的看图提示词
-```
+**交互方式**：@机器人 后直接说话即进入对话；`@机器人 /new [内容]` 或 `#新对话` 清空上下文开新对话（后接内容会作为新对话第一条消息）；`@机器人 /compact [主题]` 手动压缩上下文。
 
-> 💡 **视觉能力说明**：主模型具备 `ImageInput` 能力时（如 GLM-4V、Qwen-VL），
-> 群聊图片会直接注入对话供主模型查看；主模型无视觉能力时（如 DeepSeek），
-> 配置 `vision-llm` 后由辅助模型生成图片描述，未配置则图片工具会提示不可用。
-> 相关工具：`get_message_image`（查看对话消息中的图片）、bash 的 `image_path` 参数（查看命令生成的图片）。
+**内置工具**：查看消息/图片（`get_message_image`）、待办清单、网页搜索/抓取、技能（Skills）、定时任务（cron）、记忆读写、子任务派发；`AllowShell` 开启时额外提供 bash 终端（可用 `image_path` 参数查看命令生成的图片）。每条会话消息（user/assistant/tool）会写入 `ai_messages` 审计记录，仅保存文本，不受上下文压缩影响。
 
-### 3. 存储管理插件 (`[variables.storage-manager]`)
+> 💡 **视觉能力说明**：主模型具备 `ImageInput` 能力时（如 GLM-4V、Qwen-VL），群聊图片会直接注入对话供主模型查看；主模型无视觉能力时（如 DeepSeek），配置 `VisionLlmModels` 后由辅助模型生成图片描述，未配置则图片工具提示不可用。
 
-```toml
-machine-code = 0                          # 机器码（随便填写，如果以后要合并记录，会更方便）
-web-address = "http://0.0.0.0:5000"       # 后台 Web 服务监听地址
-```
+### 2. LLM Provider 插件（`llm-provider`）
 
-### 4. 群刊插件 (`[variables.highlights]`)
+管理可执行 LLM Provider、模型和 API Key。**没有 TOML 配置项**，全部通过 WebUI「LLM 配置」页（`/llmproviders`）维护：
 
-负责整理群聊消息并生成有趣的群刊。
+- Provider、模型和 Key 保存在 `plugin_data.db` 的 `llm-provider` 作用域集合中（providers / models / keys / meta），不在配置表中。
+- **Key 加密**：写入前使用本机 Data Protection 加密，密钥环位于数据目录下的 `llm-provider-key-ring/`；列表和 API 响应只会显示末四位及指纹（`…{末四位} ({SHA256 前 8 位})`），无法读取原文。Key 仅可写入，不会再次显示。
+- **models.dev 目录**：只提供目录元数据，缓存在机器人数据目录的 `models.dev-api.json`（首次自动下载，升级后沿用）。平时目录搜索优先使用本地缓存，点击「刷新 models.dev」才联网更新。导入时会带入模型上下文/输出上限和能力标签，但不会覆盖已手工设置的 API 地址、格式或启用状态。
+- **API 格式**：支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三种；请确认 API 地址与所选格式兼容并填入自己的 Key。
+- 默认模型：可在「LLM 配置」页指定；未指定时取第一个启用的模型。
 
-```toml
-message-count = 500                       # 触发生成群刊的消息数量阈值
-section-count = 3                         # 群刊包含的栏目/章节数量
-llm = "deepseek/deepseek-v4-pro"          # 生成群刊使用的 LLM 模型（留空则使用全局默认模型）
-temperature = 1.3                         # 温度参数，控制生成文本的随机性和创造性
-response-timeout = 120                    # AI 响应超时时间（秒），默认 120 秒
-enable-header = false                     # 是否启用群刊页眉
-enable-footer = true                      # 是否启用群刊页脚
-highlights-prompt = """你是一个有趣的群刊编辑...""" # 群刊 AI 生成的系统提示词（支持多行文本）
-```
+### 3. 自动+1 插件（`auto-increase`）
 
-### 5. Shell 终端插件 (`[variables.run-command]`)
+有刷屏消息时自动 +1。配置类型 `AutoIncreaseConfig`：
 
-提供 Linux Shell 终端功能，仅在 Linux 环境下可用。
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `RepeatTime` | `3` | 相同消息重复出现该次数后触发自动 +1（最小 2，小于 2 会被钳制） |
 
-```toml
-shell-user = "merrybot"                   # Shell 终端使用的 Linux 用户名（默认 merrybot）
-```
+### 4. 版本管理插件（`view-version`）
+
+管理员插件，命令：`/version` 查看当前版本；`/update [-f]` 检测并更新软件（`-f` 强制）；`/reload` 重载程序。`/update` 和 `/reload` 仅 `AuthorizedUser` 可用，其余用户会收到 `401 Unauthorized`。
+
+### 5. 其他简单插件
+
+| 插件 | 命令 | 说明 |
+| --- | --- | --- |
+| `help` | `/help` | 列出已加载插件 |
+| `about` | `/about` | 查看关于信息 |
+| `herui-saying` | `/hr` | 获取一条"锐言锐语"（数据每小时自动更新） |
+
+## WebUI 安全说明
+
+WebUI 默认只监听 `http://localhost:5000`（由启动配置 `setting.toml` 的 `web-address` 控制），**无内置账号体系**。远程访问请使用 SSH 端口转发（`ssh -L 5000:localhost:5000 user@host`），认证与加密交给 SSH。若自行将监听地址改为 `0.0.0.0` 暴露到公网，风险自担——尤其「LLM 配置」页的 Key 虽然不能读回，但写入时仍会通过浏览器提交，请只经受控内网或 HTTPS 反向代理访问。
+
+## 从旧版 `setting.toml` 迁移
+
+旧版基于 `setting.toml` 的配置项已全部并入新架构：
+
+- `napcat-server` / `napcat-token` / `qq-groups` / `authorized-user` → 核心配置（`/config`）
+- `[variables.storage-manager]` 的 `machine-code` → 核心配置 `MachineCode`；`web-address` → 启动配置 `setting.toml` 的 `web-address`
+- `[variables.agent]` → Agent 插件配置（`/config` 中 `plugin:agent`），其中 `vision-llm`（单模型）升级为 `VisionLlmModels`（模型列表，支持逐个降级）
+- `[variables.highlights]`（群刊）、`[variables.run-command]`（Shell 终端）插件已移除；Shell 能力并入 Agent 的 `AllowShell` / `ShellUser`
+
+> 老用户如有旧 `setting.toml`，其内容不会自动导入；请对照上表在 WebUI 配置中心重新填写。旧的 WebUI 监听地址请写入新的启动配置文件（`<data>/setting.toml` 的 `web-address`）。

@@ -135,10 +135,10 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 
 ### WebUI
 
-- Blazor InteractiveServer，与主程序同进程运行，监听 `WebAddress`（默认 `http://localhost:5000`）
+- Blazor InteractiveServer，与主程序同进程运行，监听启动配置 `setting.toml` 的 `web-address`（默认 `http://localhost:5000`）
 - 提供 `/api/...` Minimal API：状态、群组管理、日志、配置编辑、高级配置、LLM Provider/模型/Key 管理、Skill 上传/禁用、记忆管理、上下文快照、更新检测
 - 图片/文件经 `/api/image/{id}`、`/api/file/{id}`、`/api/resource` 由本地存储提供，消息链中的媒体均为 `merrybot://` 本地引用，前端不直连远端 URL
-- **设计决策（by design）**：WebUI **不做内置鉴权**，默认仅绑定 `localhost` —— 这是有意为之，目的是保持配置/管理入口的简洁性，避免引入账号体系与登录复杂度。**远程访问的推荐方式是 SSH 端口转发**（如 `ssh -L 5000:localhost:5000 user@host`），由 SSH 承担认证与加密，WebUI 自身不需要也不应暴露到公网。若用户自行将 `WebAddress` 改为 `0.0.0.0`，则须自行经受控内网或 HTTPS 反向代理保护，风险自担
+- **设计决策（by design）**：WebUI **不做内置鉴权**，默认仅绑定 `localhost` —— 这是有意为之，目的是保持配置/管理入口的简洁性，避免引入账号体系与登录复杂度。**远程访问的推荐方式是 SSH 端口转发**（如 `ssh -L 5000:localhost:5000 user@host`），由 SSH 承担认证与加密，WebUI 自身不需要也不应暴露到公网。若用户自行将 `setting.toml` 的 `web-address` 改为 `0.0.0.0`，则须自行经受控内网或 HTTPS 反向代理保护，风险自担。监听地址不在 WebUI 中提供修改入口（引导问题：WebUI 挂了就改不回来），只能改 `setting.toml` 后重启
 
 ## 数据与存储
 
@@ -155,12 +155,13 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 
 ## 配置
 
-**实际配置全部存放在 `plugin_data.db` 中，不存在 `setting.toml` 文件。**（`README.md` 与 `Configuration.md` 中关于 `setting.toml` 的描述为历史文档，已过时；WebUI 的"配置编辑"页通过 `ConfigRegistry` 读写数据库中的配置对象。）
+**配置主体存放在 `plugin_data.db` 中；仅启动必需项（WebUI 监听地址 `web-address`）在 `<data>/setting.toml`，见下文"启动配置"。**（`README.md` 中关于 `setting.toml` 的描述为历史文档，已过时；`Configuration.md` 已同步当前架构。WebUI 的"配置编辑"页通过 `ConfigRegistry` 读写数据库中的配置对象。）
 
-- 核心配置：`MerryBot/ConfigManager.cs` 中的 `Config` 类（`NapcatServer`、`NapcatToken`、`QqGroups`、`AuthorizedUser`、`MachineCode`、`WebAddress`、`ResourceSizeLimitMb`、`ReconnectIntervalSeconds`），以 `core` 命名空间存入数据库
+- 核心配置：`MerryBot/ConfigManager.cs` 中的 `Config` 类（`NapcatServer`、`NapcatToken`、`QqGroups`、`AuthorizedUser`、`MachineCode`、`ResourceSizeLimitMb`、`ReconnectIntervalSeconds`），以 `core` 命名空间存入数据库
+- 启动配置：`MerryBot/StartupConfig.cs` 加载 `<data>/setting.toml`（当前仅 `web-address`，WebUI 监听地址，默认 `http://localhost:5000`；YAML 语法，YamlDotNet 解析——与 `Agent.Tui` 的 `TuiConfigStore` 同库同版本；文件缺失时生成带注释模板，非法值/解析失败回退默认）。启动必需项不放进 WebUI 可编辑配置，避免引导问题
 - 插件配置：实现 `IPluginConfig` 的类，按插件 Id 存取；通过 `[ConfigDescription]` 标注中文说明，供 WebUI 渲染
 - LLM Provider/模型/Key：由 `llm-provider` 插件管理，存于其 scoped 集合；Key 用 DataProtection 加密，WebUI 不回显明文
-- Agent 配置（`AgentConfig`）：`llm-model`、`ai-prompt`、`max-iterations`、`context-compact-ratio`、`vision-llm`、`vision-prompt`、`allow-shell`、`shell-user`、`idle-session-timeout-hours` 等
+- Agent 配置（`AgentConfig`，`plugins/Agent.Config.cs`）：`LlmModel`、`AiPrompt`、`MaxIterations`、`ContextCompactRatio`、`VisionLlmModels`（列表）、`VisionPrompt`、`AllowShell`、`ShellUser`、`IdleSessionTimeoutHours`、`MaxImageSizeMb`、`MaxConcurrentToolCalls`、`MaxSubagents`、`MaxBackgroundTasks` 等
 
 ## 构建与测试
 
@@ -221,7 +222,7 @@ dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 - **授权校验**：`/update`、`/reload` 等高危操作校验发送者 QQ == `AuthorizedUser`；WebUI 的更新接口同样受 `HostLifecycle` 互斥与授权约束
 - **Shell 工具默认关闭**：`allow-shell` 未开启时 `TerminalToolSet` 不注册（模型无法执行 shell）；开启后仅 Linux 可用，且按 `shell-user` 指定的系统用户执行，需保证该用户权限受控
 - **Shell 工具推荐搭配 `shell-user` 使用**：`bash`/`shell` 工具应始终与 `shell-user` 配置一同设置 —— 让命令以独立低权限系统用户身份执行，实现**用户隔离**（LLM 进程与 shell 进程的权限面分离），而不是以机器人自身用户或 root 运行。推荐为该用途创建专用用户（如 `bot-shell`），仅授予最小所需权限
-- **WebUI 监听地址**：默认仅绑定 `localhost:5000`；远程管理请用 SSH 端口转发（无内置鉴权是设计决策，见"WebUI"一节，**不要**擅自为 WebUI 增加账号/登录体系）。若改为 `0.0.0.0`，须经受控内网或 HTTPS 反向代理访问（尤其 LLM 配置页会经浏览器提交 Key）
+- **WebUI 监听地址**：默认仅绑定 `localhost:5000`，通过 `<data>/setting.toml` 的 `web-address` 设置（不在 WebUI 内可改，避免引导问题）；远程管理请用 SSH 端口转发（无内置鉴权是设计决策，见"WebUI"一节，**不要**擅自为 WebUI 增加账号/登录体系）。若改为 `0.0.0.0`，须经受控内网或 HTTPS 反向代理访问（尤其 LLM 配置页会经浏览器提交 Key）
 - **资源引用**：消息链中的图片/文件一律经 `merrybot://` 本地引用 + 本地 API 提供，前端不直连远端 URL，避免 SSRF/隐私外泄；下载资源受 `ResourceSizeLimitMb` 限制
 - **插件隔离**：`PluginInitializer` 按插件隔离依赖解析失败（单个插件异常不影响其余插件加载）；插件数据库按 scope 隔离，`DropCollectionAsync` 只能删自己 scope 内的表
 - **日志脱敏**：群消息日志只记录群号/发送者/消息链长度摘要，不落完整消息链

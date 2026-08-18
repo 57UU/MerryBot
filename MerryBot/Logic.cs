@@ -38,7 +38,7 @@ internal partial class Logic
         historyRecorder = new HistoryRecorder(historyDbPath, historyStoragePath, GetCoreMachineCode());
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
         messageService = new MessageService(botClient.Bot, historyRecorder, logger, ConfigManager.Instance.ResourceSizeLimitMb * 1024 * 1024);
-        webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, GetCoreWebAddress());
+        webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress);
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
         // 高级配置面板：原始 BSON 查看/删除插件数据库条目（排查残留数据用）
@@ -231,13 +231,6 @@ internal partial class Logic
         ConfigManager.Instance.MachineCode = machineCode;
         ConfigManager.Save().GetAwaiter().GetResult();
         return machineCode;
-    }
-
-    private static string GetCoreWebAddress()
-    {
-        return string.IsNullOrWhiteSpace(ConfigManager.Instance.WebAddress)
-            ? "http://localhost:5000"
-            : ConfigManager.Instance.WebAddress;
     }
 
 }

@@ -133,7 +133,7 @@ public static class ConfigManager
         }
     }
 }
-[ConfigDescription("核心配置", "MerryBot 的连接、群组、运行编号和 WebUI 监听设置。")]
+[ConfigDescription("核心配置", "MerryBot 的连接、群组和运行编号设置。")]
 public class Config
 {
     [ConfigDescription("Napcat 服务地址", "Napcat WebSocket 服务的地址，例如 ws://localhost:3001/")]
@@ -147,9 +147,6 @@ public class Config
 
     [ConfigDescription("机器编号", "历史记录使用的机器编号；小于 0 时首次启动自动生成 0 到 31 的编号。")]
     public int MachineCode { set; get; } = -1;
-
-    [ConfigDescription("WebUI 地址", "WebUI 监听的 HTTP 或 HTTPS 地址。")]
-    public string WebAddress { set; get; } = "http://localhost:5000";
 
     [ConfigDescription("资源大小限制", "下载并保存的图片/文件大小上限（MB）。")]
     public int ResourceSizeLimitMb { set; get; } = 20;

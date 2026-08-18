@@ -21,6 +21,8 @@ if (Utils.CreateDirectory(logFileDir))
 {
     Console.WriteLine($"log directory created:{logFileDir}");
 }
+// 启动配置（setting.toml）：WebUI 监听地址等启动必需项，文件不存在时生成默认模板
+StartupConfig.Load(dataPath);
 var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
 var pluginDb = new PluginStorageDatabase(dbPath);
