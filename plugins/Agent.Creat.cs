@@ -89,7 +89,7 @@ public partial class AgentPlugin : Plugin
             // 审计记录：每条会话消息（user/assistant/tool）落库 ai_messages，仅文本、不受上下文压缩影响
             OnMessageRecorded = (message, usage) => RecordAiAuditMessageAsync(sessionId, message, usage),
         };
-        // 子任务工具：复用父会话同一模型客户端、options 与工具列表（含自身，允许嵌套派生子任务）；
+        // 子任务工具：复用父会话同一模型客户端、options 与工具列表（不含自身，不允许嵌套派生子任务）；
         // 完成/失败时以 stackable 消息注入本会话，主 Agent 拿到结果后继续处理
         tools.Add(new SubAgentToolSet(
             resolved.Client,

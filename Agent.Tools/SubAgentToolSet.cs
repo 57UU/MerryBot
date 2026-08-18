@@ -9,7 +9,7 @@ namespace Agent.Tools;
 /// 子任务工具集：注册 subagent / subagent_output / subagent_stop 三个工具。
 /// 派发子任务时通过 Agent.Agent.Create 构造一个全新上下文（不持久化）的 Agent，
 /// 但复用父会话同一个模型客户端（Client）、AgentOptions 与同一份工具列表
-/// （含本工具集自身，允许嵌套派生子任务），在后台执行。
+/// （不含本工具集自身，因此不允许嵌套派生子任务），在后台执行。
 /// 子任务完成或失败时通过 notifyAsync 回调注入所属主会话
 /// （type: "subagent_result"，stackable 合并同类），主 Agent 可继续处理。
 /// </summary>
