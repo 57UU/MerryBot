@@ -11,12 +11,14 @@ public class AgentSession
 
     private readonly Agent _Agent;
     private readonly Action<string> _defaultMessageChannel;
+    private readonly ISimpleLogger _logger;
     public TokenUsage SessionUsage = TokenUsage.Zero;
 
-    public AgentSession(Agent agent, Action<string> defaultMessageChannel)
+    public AgentSession(Agent agent, Action<string> defaultMessageChannel, ISimpleLogger? logger = null)
     {
         _Agent = agent;
         _defaultMessageChannel = defaultMessageChannel;
+        _logger = logger ?? SimpleLog.Default;
     }
     private readonly SemaphoreSlim _chatMutex = new(1, 1);
 
@@ -192,7 +194,7 @@ public class AgentSession
         catch (Exception exception)
         {
             // 发送失败（如群消息发送异常）只记日志，不中断消息处理流程
-            ConsoleLogger.Instance.Warn($"消息发送失败: {exception.Message}");
+            _logger.Warn($"消息发送失败: {exception.Message}");
         }
         return (response, usage);
     }

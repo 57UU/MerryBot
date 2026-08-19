@@ -1,3 +1,4 @@
+using CommonLib;
 using LlmBackend;
 
 namespace LlmClient;
@@ -46,11 +47,13 @@ public class Client
     private readonly object _sync = new();
     private Backend backend;
     private readonly ClientConfig clientConfig;
+    private readonly ISimpleLogger _logger;
 
-    public Client(Backend backend, ClientConfig clientConfig)
+    public Client(Backend backend, ClientConfig clientConfig, ISimpleLogger? logger = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.clientConfig = clientConfig;
+        _logger = logger ?? SimpleLog.Default;
     }
 
     /// <summary>运行时替换后端（下一次 Generate/GenerateStream 即生效）。</summary>
@@ -101,6 +104,7 @@ public class Client
                         throw ex;
                     }
                     strayRetried = true;
+                    _logger.Warn($"模型把工具调用输出到正文，额外重试一次（第 {attempt} 次尝试）");
                     await Task.Delay(GetDelay(ex, 1), cancellationToken);
                     continue;
                 }
@@ -109,6 +113,8 @@ public class Client
             catch (LlmException e) when (e.Retryable && e is not StrayToolCallMarkupException && attempt < clientConfig.maxAttempt)
             {
                 TimeSpan delay = GetDelay(e, attempt);
+                var retryAfter = e is RateLimitException { RetryAfter: { } ra } ? $"，Retry-After={ra.TotalSeconds:F0} 秒" : "";
+                _logger.Warn(e, $"LLM 请求第 {attempt}/{clientConfig.maxAttempt} 次尝试失败，{delay.TotalSeconds:F1} 秒后重试{retryAfter}: {e.Message}");
                 await Task.Delay(delay, cancellationToken);
             }
         }
@@ -144,8 +150,11 @@ public class Client
             }
             catch (LlmException e) when (e.Retryable && attempt < clientConfig.maxAttempt)
             {
-                sink.OnReset(MapReason(e), e);
-                await Task.Delay(GetDelay(e, attempt), cancellationToken);
+                var reason = MapReason(e);
+                var delay = GetDelay(e, attempt);
+                _logger.Warn(e, $"LLM 流式第 {attempt}/{clientConfig.maxAttempt} 次尝试失败（{reason}），{delay.TotalSeconds:F1} 秒后重建流: {e.Message}");
+                sink.OnReset(reason, e);
+                await Task.Delay(delay, cancellationToken);
             }
         }
     }

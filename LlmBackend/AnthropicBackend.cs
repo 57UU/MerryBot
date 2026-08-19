@@ -431,18 +431,22 @@ public class AnthropicBackend : Backend
         }
         catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Anthropic 流式请求超时: {e.Message}");
             throw new RequestTimeoutException("Anthropic 流式请求超时", e);
         }
         catch (HttpRequestException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Anthropic 网络错误: {e.Message}");
             throw new NetworkException($"Anthropic 网络错误: {e.Message}", e);
         }
         catch (IOException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Anthropic 流读取中断: {e.Message}");
             throw new NetworkException($"Anthropic 流读取中断: {e.Message}", e);
         }
         catch (JsonException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Anthropic 流式响应解析失败: {e.Message}");
             throw new InvalidResponseException($"Anthropic 流式响应解析失败: {e.Message}", e);
         }
     }

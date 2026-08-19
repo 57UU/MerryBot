@@ -1,6 +1,7 @@
 
 
 using DataProvider;
+using CommonLib;
 using MerryBot;
 using NapcatClient;
 using NLog;
@@ -23,28 +24,37 @@ if (Utils.CreateDirectory(logFileDir))
 }
 // 启动配置（setting.toml）：WebUI 监听地址等启动必需项，文件不存在时生成默认模板
 StartupConfig.Load(dataPath);
-var logFilePath = Path.Combine(logFileDir, Utils.GenerateFileNameByCurrentTime());
 
 var pluginDb = new PluginStorageDatabase(dbPath);
 // 打开数据库后先做 schema 迁移（幂等），再初始化配置，保证新旧键格式一致
 await pluginDb.MigrateAsync();
 ConfigManager.Initialize(pluginDb).Wait();
 //init logger
+// 统一 layout：WebUI 日志页的 DetectLevel 正则（\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b）可解析 |LEVEL| 段
+var logLayout = "${longdate}|${level:uppercase=true}|${logger}|${message}${onexception: |${exception:format=tostring}}";
 var nlogConfig = new NLog.Config.LoggingConfiguration();
 var coloredConsole = new NLog.Targets.ColoredConsoleTarget("console")
 {
-    Layout = "${time:format=HH\\:mm\\:ss} ${level:uppercase=true:padding=-5} ${message}${onexception: ${exception:format=tostring}}",
+    Layout = logLayout,
     UseDefaultRowHighlightingRules = true,
 };
 nlogConfig.AddTarget(coloredConsole);
 nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, coloredConsole);
 var fileTarget = new NLog.Targets.FileTarget("file")
 {
-    FileName = $"{logFilePath}.log",
+    // 按天命名 bot-2026-08-19.log，便于 WebUI 按 *.log 枚举浏览历史；单日超 10MB 追加序列号归档
+    FileName = Path.Combine(logFileDir, "bot-${shortdate}.log"),
+    Layout = logLayout,
+    ArchiveEvery = NLog.Targets.FileArchivePeriod.Day,
+    ArchiveAboveSize = 10 * 1024 * 1024,
+    MaxArchiveFiles = 30,
+    ArchiveSuffixFormat = ".{####}",
 };
 nlogConfig.AddTarget(fileTarget);
 nlogConfig.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, fileTarget);
 NLog.LogManager.Configuration = nlogConfig;
+// 统一日志门面：未显式注入 logger 的库（LlmClient/LlmBackend/HistoryRecorder/WebUI mapper 等）汇入 NLog
+SimpleLog.Default = new NLogAdapter("CommonLib");
 var currentLogger = LogManager.GetCurrentClassLogger();
 currentLogger.Debug("program start");
 

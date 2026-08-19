@@ -146,12 +146,20 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 | --- | --- |
 | `plugin_data.db` | 核心配置（`core` 命名空间）、插件配置（`Plugin_Config_Table`）、插件对象数据（`Plugin_Data_Table`）、各插件 scoped 集合（LLM Provider/模型/Key、Agent 会话历史/记忆/定时任务等） |
 | `group_history.db` + `storage/` | 群消息、图片/文件（按 SHA-256 hash 去重）、群事件、转发消息、群名、AI 消息审计（`ai_messages`）、资源引用表 |
-| `log/` | NLog 按时间戳命名的日志文件 |
+| `log/` | NLog 日志，按天命名 `bot-<日期>.log`（按天/10MB 归档、保留 30 份），layout `${longdate}|${level:uppercase=true}|${logger}|${message}`；WebUI `/logs` 页按 `*.log` 枚举浏览历史 |
 | `skills/` | Agent 技能文件（`.md`，可用 `.disable` 标记禁用） |
 | `models.dev-api.json` | models.dev 目录缓存（平时搜索优先本地缓存） |
 | `llm-provider-key-ring/` | ASP.NET DataProtection 密钥环（用于加密 LLM API Key） |
 
 数据库 schema 迁移：`PluginStorageDatabase.MigrateAsync`（幂等，当前版本 1）在 `Entry.cs` 打开数据库后、初始化配置前执行；`HistoryRecorder.MigrateAsync`（幂等，当前版本 3）在启动时执行。
+
+## 日志体系（统一出口 = NLog）
+
+- **统一抽象**：`CommonLib.ISimpleLogger`（`LogLevel`/`ConsoleLogger` 同文件）。接口用 DIM 提供 `Log(level,msg)`、`X(Exception,msg)`、`X(format,args)` 重载；DIM 方法仅在 `ISimpleLogger` 类型变量上可见。
+- **全局门面**：`CommonLib.SimpleLog.Default`，宿主 `Entry.cs` 在 NLog 配置后替换为 `new NLogAdapter("CommonLib")`。库代码规范：实例类用可选构造参数 `ISimpleLogger? logger = null`（体内 `_logger ??= SimpleLog.Default`），静态方法/无注入点用 `SimpleLog.Default`。**禁止再直连 `ConsoleLogger.Instance` 或裸 `Console.WriteLine/Error` 记业务日志**（Tui 终端诊断除外）。
+- **NLog 桥**（宿主 `MerryBot` 内）：`NLogAdapter`（logger 名参数化，默认 `NapcatClient`，给 BotClient/WebSocketAdapter/Actions/BotMessageChannel）；`PluginLoggerAdapter` 的 `PluginLogger(tag)`（logger 名 `plugin:<tag>`，给插件）。NLog 级别规则 Debug~Fatal（Trace 丢弃，供高频诊断如模型增量）。
+- **Agent 引擎事件**：Agent 组（Agent/LlmClient/LlmBackend）不依赖 CommonLib；`AgentOptions.OnLog` 回调由 `plugins/Agent.LogBridge.cs` 桥接到插件 Logger（`Agent.Creat.cs` 已接线），会话/工具调用/压缩/流式重置等事件按级别映射，高频增量落 Trace。
+- **WebUI 日志页**：`LogApiMapper` 的 `/api/logs/current` 支持 `lines/level/keyword/file` 后端过滤（向后多扫），`/api/logs/files` 列历史文件；`Logs.razor`（`/logs`）3 秒轮询、文件下拉切换、搜索防抖。WebUI 内部 ASP.NET ILogger（M.E.L.）通道保留，但与 NLog 文件不互通。
 
 ## 配置
 

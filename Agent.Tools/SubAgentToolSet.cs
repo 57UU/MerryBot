@@ -1,3 +1,4 @@
+using CommonLib;
 using LlmBackend;
 using LlmClient;
 using System.Collections.Concurrent;
@@ -182,6 +183,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
             {
                 return; // 显式终止或取消：不推送"已完成/失败"误导通知
             }
+            SimpleLog.Default.Warn($"子任务 {Label(info)} 执行失败: {ex.Message}");
             message = $"子任务 {Label(info)} 执行失败：{ex.Message}";
         }
 
@@ -189,9 +191,10 @@ public class SubAgentToolSet : ToolSet, IDisposable
         {
             await _notifyAsync(message);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // 通知失败（如会话已关闭）不影响子任务本身，忽略即可
+            SimpleLog.Default.Warn($"子任务 {Label(info)} 完成通知投递失败: {ex.Message}");
         }
     }
 

@@ -109,7 +109,7 @@ public class ResponsesBackend : Backend
                     break;
                 default:
                     // 未知输出类型不静默：记录便于排查，条目本身跳过
-                    Console.Error.WriteLine($"[LlmBackend] Responses API 未知输出类型: {item.Type}");
+                    CommonLib.SimpleLog.Default.Warn($"[LlmBackend] Responses API 未知输出类型: {item.Type}");
                     break;
             }
         }
@@ -286,18 +286,22 @@ public class ResponsesBackend : Backend
         }
         catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Responses 流式请求超时: {e.Message}");
             throw new RequestTimeoutException("Responses 流式请求超时", e);
         }
         catch (HttpRequestException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Responses 网络错误: {e.Message}");
             throw new NetworkException($"Responses 网络错误: {e.Message}", e);
         }
         catch (IOException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Responses 流读取中断: {e.Message}");
             throw new NetworkException($"Responses 流读取中断: {e.Message}", e);
         }
         catch (JsonException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"Responses 流式响应解析失败: {e.Message}");
             throw new InvalidResponseException($"Responses 流式响应解析失败: {e.Message}", e);
         }
     }

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Markdown2Html\Markdown2Html.csproj" />
+    <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
   </ItemGroup>
   
   <ItemGroup>

@@ -72,6 +72,7 @@ public partial class Browser
             {
                 // 清理失败不掩盖超时结果
             }
+            _logger.Warn($"页面加载超时（{browserOptions.Timeout.TotalSeconds:F0} 秒），已关闭浏览器");
             return $"页面加载失败: 页面加载超时（{browserOptions.Timeout.TotalSeconds:F0} 秒）";
         }
 
@@ -81,7 +82,8 @@ public partial class Browser
         }
         catch (Exception ex)
         {
-            // 只回传简短错误信息，不把完整异常/堆栈暴露给 LLM 或用户
+            // 只回传简短错误信息，不把完整异常/堆栈暴露给 LLM 或用户；完整信息落日志
+            _logger.Warn($"页面加载失败: {ex.Message}");
             return $"页面加载失败: {ex.Message}";
         }
     }

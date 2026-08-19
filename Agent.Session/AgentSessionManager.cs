@@ -11,16 +11,19 @@ public class AgentSessionManager : IDisposable
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
 
     private readonly Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> _agentCreator;
+    private readonly ISimpleLogger _logger;
     private readonly ConcurrentDictionary<string, Lazy<Task<AgentSession>>> _agentSessions = new();
     private readonly CancellationTokenSource _cleanupCts = new();
     private readonly Task _cleanupTask;
 
     public AgentSessionManager(
         Func<string, Task<(Agent, Action<string> defaultMessageChannel)>> agentCreator,
-        TimeSpan? idleSessionTimeout = null)
+        TimeSpan? idleSessionTimeout = null,
+        ISimpleLogger? logger = null)
     {
         _agentCreator = agentCreator ?? throw new ArgumentNullException(nameof(agentCreator));
         _idleSessionTimeout = idleSessionTimeout ?? TimeSpan.FromHours(12);
+        _logger = logger ?? SimpleLog.Default;
         if (_idleSessionTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(idleSessionTimeout), "会话空闲淘汰时长必须大于 0。");
@@ -39,11 +42,11 @@ public class AgentSessionManager : IDisposable
 
         var lazySession = _agentSessions.GetOrAdd(
             sessionId,
-            static (id, creator) => new Lazy<Task<AgentSession>>(
+            (id, creator) => new Lazy<Task<AgentSession>>(
                 async () =>
                 {
                     var (agent, defaultMessageChannel) = await creator(id);
-                    return new AgentSession(agent, defaultMessageChannel);
+                    return new AgentSession(agent, defaultMessageChannel, _logger);
                 },
                 LazyThreadSafetyMode.ExecutionAndPublication),
             _agentCreator);
@@ -90,7 +93,7 @@ public class AgentSessionManager : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    ConsoleLogger.Instance.Warn($"会话空闲清理失败: {ex.Message}");
+                    _logger.Warn($"会话空闲清理失败: {ex.Message}");
                 }
             }
         }
@@ -135,7 +138,7 @@ public class AgentSessionManager : IDisposable
             }
             catch (Exception ex)
             {
-                ConsoleLogger.Instance.Warn($"会话压缩失败（{kvp.Key}），仍按空闲清理: {ex.Message}");
+                _logger.Warn($"会话压缩失败（{kvp.Key}），仍按空闲清理: {ex.Message}");
             }
 
             // 压缩期间可能有新消息入队（刷新 LastActiveUtc 或正在处理），再确认一次仍空闲才移除

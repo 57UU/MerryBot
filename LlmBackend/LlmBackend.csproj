@@ -11,4 +11,8 @@
     <InternalsVisibleTo Include="MerryBot.Test" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
+  </ItemGroup>
+
 </Project>

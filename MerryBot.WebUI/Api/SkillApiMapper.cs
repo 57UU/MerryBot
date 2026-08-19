@@ -58,11 +58,16 @@ public static class SkillApiMapper
         });
     }
 
-    private static IResult ToError(Exception exception) => exception switch
+    private static IResult ToError(Exception exception)
     {
-        ArgumentException or ArgumentOutOfRangeException => Results.BadRequest(exception.Message),
-        KeyNotFoundException => Results.NotFound(exception.Message),
-        InvalidOperationException => Results.Conflict(exception.Message),
-        _ => Results.Problem(exception.Message),
-    };
+        // 统一日志出口（NLog）：WebUI API 错误可在 /logs 页查看，避免静默失败
+        CommonLib.SimpleLog.Default.Warn(exception, $"WebUI Skill API 请求失败: {exception.Message}");
+        return exception switch
+        {
+            ArgumentException or ArgumentOutOfRangeException => Results.BadRequest(exception.Message),
+            KeyNotFoundException => Results.NotFound(exception.Message),
+            InvalidOperationException => Results.Conflict(exception.Message),
+            _ => Results.Problem(exception.Message),
+        };
+    }
 }

@@ -19,13 +19,15 @@ public class HistoryRecorder : IDisposable
     private readonly IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
     private readonly IObjectStorage _objectStorage;
+    private readonly ISimpleLogger _logger;
     private const string ImageBucket = "images";
     private const string FileBucket = "files";
 
-    public HistoryRecorder(string dbPath, string storagePath, int machineCode = 0)
+    public HistoryRecorder(string dbPath, string storagePath, int machineCode = 0, ISimpleLogger? logger = null)
     {
         _dbPath = dbPath;
         _objectStorage = new FileSystemObjectStorage(storagePath);
+        _logger = logger ?? SimpleLog.Default;
         database = new LiteDatabaseAsync(dbPath);
         messagesCollection = database.GetCollection<GroupMessage>("messages");
         imageBedCollection = database.GetCollection<ImageEntry>("images");
@@ -67,7 +69,7 @@ public class HistoryRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HistoryRecorder] 部分索引创建失败（查询性能可能下降）: {ex.GetBaseException().Message}");
+            _logger.Warn($"[HistoryRecorder] 部分索引创建失败（查询性能可能下降）: {ex.GetBaseException().Message}");
         }
 
         // hash 唯一索引：已有历史重复数据时创建会失败，只记日志；
@@ -78,7 +80,7 @@ public class HistoryRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HistoryRecorder] images.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+            _logger.Warn($"[HistoryRecorder] images.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
         }
         try
         {
@@ -86,7 +88,7 @@ public class HistoryRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+            _logger.Warn($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
         }
     }
 

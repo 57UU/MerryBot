@@ -204,14 +204,17 @@ public class ChatCompletionBackend : Backend
         }
         catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"ChatCompletion 流式请求超时: {e.Message}");
             throw new RequestTimeoutException("ChatCompletion 流式请求超时", e);
         }
         catch (HttpRequestException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"ChatCompletion 网络错误: {e.Message}");
             throw new NetworkException($"ChatCompletion 网络错误: {e.Message}", e);
         }
         catch (IOException e)
         {
+            CommonLib.SimpleLog.Default.Warn(e, $"ChatCompletion 流读取中断: {e.Message}");
             throw new NetworkException($"ChatCompletion 流读取中断: {e.Message}", e);
         }
     }

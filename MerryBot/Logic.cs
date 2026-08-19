@@ -108,6 +108,11 @@ internal partial class Logic
             }
             else
             {
+                // 断开→连接成功转换只记一次 Info（_reconnectLogged 标记过断线提示）
+                if (_reconnectLogged)
+                {
+                    logger.Info($"消息适配器已连接 {ConfigManager.Instance.NapcatServer}");
+                }
                 _reconnectLogged = false;
                 _hasEverConnected = true;
             }

@@ -55,7 +55,7 @@ public partial class AgentPlugin : Plugin
         // bash 工具门禁：AllowShell 默认关闭，未开启时不注册 TerminalToolSet（模型无法执行 shell）
         var tools = new List<ToolSet>
         {
-            new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024),
+            new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024, Logger),
             new TodoListToolSet(),
             new WebTools(browser),
             new PromptToolSet(dynamicPrompt),
@@ -88,6 +88,8 @@ public partial class AgentPlugin : Plugin
             ReasoningEffort = resolved.Model.ReasoningEffort,
             // 审计记录：每条会话消息（user/assistant/tool）落库 ai_messages，仅文本、不受上下文压缩影响
             OnMessageRecorded = (message, usage) => RecordAiAuditMessageAsync(sessionId, message, usage),
+            // 运行事件（会话/工具调用/压缩/流式重置）桥接到插件日志，WebUI 日志页可见
+            OnLog = e => AgentLogBridge.Log(e, Logger),
         };
         // 子任务工具：复用父会话同一模型客户端、options 与工具列表（不含自身，不允许嵌套派生子任务）；
         // 完成/失败时以 stackable 消息注入本会话，主 Agent 拿到结果后继续处理

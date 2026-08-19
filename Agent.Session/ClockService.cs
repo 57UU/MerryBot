@@ -12,6 +12,7 @@ public sealed class ClockService : IAsyncDisposable
     private readonly IClockStore _store;
     private readonly DelegatingClockExecutor _executor;
     private readonly TimeProvider _timeProvider;
+    private readonly ISimpleLogger _logger;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly SemaphoreSlim _wakeSignal = new(0, 1);
     private readonly CancellationTokenSource _shutdown = new();
@@ -26,11 +27,13 @@ public sealed class ClockService : IAsyncDisposable
     public ClockService(
         IClockStore store,
         DelegatingClockExecutor executor,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ISimpleLogger? logger = null)
     {
         _store = store;
         _executor = executor;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _logger = logger ?? SimpleLog.Default;
     }
 
     /// <summary>调度器持有的执行器；宿主/插件通过设置其 <c>Inner</c> 注册真正的执行逻辑。</summary>
@@ -66,7 +69,7 @@ public sealed class ClockService : IAsyncDisposable
                 catch (Exception ex)
                 {
                     // 单个坏任务不影响其余任务加载：记日志并跳过
-                    ConsoleLogger.Instance.Warn($"加载定时任务失败，已跳过: {loadedTask.Id} - {ex.Message}");
+                    _logger.Warn($"加载定时任务失败，已跳过: {loadedTask.Id} - {ex.Message}");
                     _tasks.Remove(loadedTask.Id);
                 }
             }
@@ -362,7 +365,7 @@ public sealed class ClockService : IAsyncDisposable
             catch (Exception ex)
             {
                 // 调度循环兜底：单次异常（存储/解析等）不杀死调度器，记录后继续下一轮
-                ConsoleLogger.Instance.Error($"调度循环异常: {ex}");
+                _logger.Error($"调度循环异常: {ex}");
             }
         }
     }
@@ -403,7 +406,7 @@ public sealed class ClockService : IAsyncDisposable
             catch (Exception ex)
             {
                 // 单个任务失败（GetNextOccurrence/存储操作）记日志并跳过，循环继续
-                ConsoleLogger.Instance.Warn($"定时任务调度失败，已跳过 {task.Id}: {ex.Message}");
+                _logger.Warn($"定时任务调度失败，已跳过 {task.Id}: {ex.Message}");
             }
         }
     }
@@ -424,7 +427,7 @@ public sealed class ClockService : IAsyncDisposable
         catch (Exception ex)
         {
             // 单个任务异常（GetNextOccurrence/存储操作）记日志并跳过，调度循环继续
-            ConsoleLogger.Instance.Warn($"定时任务领取失败，已跳过 {task.Id}: {ex.Message}");
+            _logger.Warn($"定时任务领取失败，已跳过 {task.Id}: {ex.Message}");
         }
     }
 
@@ -783,7 +786,7 @@ public sealed class ClockService : IAsyncDisposable
             ["Pacific/Honolulu"] = "Hawaiian Standard Time",
         };
 
-    private static TimeZoneInfo ResolveTimeZone(string? timezoneId)
+    private TimeZoneInfo ResolveTimeZone(string? timezoneId)
     {
         var id = NormalizeTimeZoneId(timezoneId);
         try
@@ -804,7 +807,7 @@ public sealed class ClockService : IAsyncDisposable
     /// Windows 缺少 IANA 时区数据时，按常见等价名映射表查找 Windows 时区；
     /// 仍失败则回退 UTC 并记日志。
     /// </summary>
-    private static TimeZoneInfo ResolveTimeZoneByWindowsName(string ianaId)
+    private TimeZoneInfo ResolveTimeZoneByWindowsName(string ianaId)
     {
         if (IanaToWindowsTimeZones.TryGetValue(ianaId, out var windowsId))
         {
@@ -819,7 +822,7 @@ public sealed class ClockService : IAsyncDisposable
             {
             }
         }
-        ConsoleLogger.Instance.Warn($"未找到时区 {ianaId}，回退到 UTC");
+        _logger.Warn($"未找到时区 {ianaId}，回退到 UTC");
         return TimeZoneInfo.Utc;
     }
 
@@ -828,7 +831,7 @@ public sealed class ClockService : IAsyncDisposable
         return string.IsNullOrWhiteSpace(timezoneId) ? "Asia/Shanghai" : timezoneId.Trim();
     }
 
-    private static void ValidateStoredTask(ClockTask task)
+    private void ValidateStoredTask(ClockTask task)
     {
         _ = ClockSchedule.Normalize(task.CronExpression);
         task.ParsedCron = CronExpression.Parse(task.CronExpression, CronFormat.Standard); // 加载时解析一次并缓存

@@ -8,7 +8,7 @@
 <div class="page-header">
     <div>
         <h1>运行日志</h1>
-        <p class="page-header-sub">查看当前启动的 NLog 日志，最新在顶。</p>
+        <p class="page-header-sub">NLog 日志（按天分文件，最新在顶）；级别/关键词过滤在服务端执行，可浏览历史文件。</p>
     </div>
     <div class="page-header-actions">
         <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
@@ -24,6 +24,13 @@
 
 <div class="log-toolbar message-item-custom mb-3-custom">
     <span class="text-muted-custom small-custom">当前日志：@(Data?.File ?? "—")</span>
+    <select class="form-control log-file-select" @bind="SelectedFile" @bind:after="() => LoadAsync()">
+        <option value="">当前日志</option>
+        @foreach (var f in Files)
+        {
+            <option value="@f.Name">@f.Name</option>
+        }
+    </select>
     <select class="form-control log-lines-select" @bind="LineCount" @bind:after="() => LoadAsync()">
         <option value="200">200 行</option>
         <option value="500">500 行</option>
@@ -35,7 +42,7 @@
             <button type="button" class="log-level @(Level == level ? "active" : "")" @onclick="() => SetLevel(level)">@level</button>
         }
     </div>
-    <input class="form-control log-search" placeholder="搜索日志…" @bind="SearchText" @bind:event="oninput" />
+    <input class="form-control log-search" placeholder="搜索日志…" @bind="SearchText" @bind:event="oninput" @bind:after="OnSearchInput" />
     <label class="form-check log-autorefresh">
         <input type="checkbox" class="form-check-input" @bind="AutoRefresh" @bind:after="ToggleAutoRefresh" />
         <span>自动刷新</span>
@@ -53,11 +60,11 @@ else if (Data.Lines.Count == 0)
 else
 {
     <div class="log-viewer">
-        @foreach (var line in FilteredLines)
+        @foreach (var line in Data.Lines)
         {
             <div class="log-line log-line-@DetectLevel(line).ToLowerInvariant()">@line</div>
         }
-        @if (!FilteredLines.Any())
+        @if (!Data.Lines.Any())
         {
             <div class="log-line text-muted-custom">没有匹配的日志行。</div>
         }
@@ -69,35 +76,36 @@ else
     private static readonly Regex LevelRegex = new(@"\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b", RegexOptions.Compiled);
 
     private LogContentPayload? Data;
+    private List<LogFileInfoPayload> Files = new();
     private string? Error;
     private bool IsLoading;
     private int LineCount = 500;
     private string Level = "全部";
     private string SearchText = "";
     private bool AutoRefresh = true;
+    private string? SelectedFile; // null/空 = 当前日志文件
 
     private System.Threading.Timer? _refreshTimer;
+    private System.Threading.Timer? _searchDebounce;
     private bool _initialized;
 
-    private IEnumerable<string> FilteredLines
+    // 请求 URL 统一收敛：级别/关键词/文件过滤由服务端执行
+    private string BuildUrl()
     {
-        get
+        var url = $"/api/logs/current?lines={LineCount}";
+        if (Level != "全部")
         {
-            if (Data == null)
-            {
-                return Enumerable.Empty<string>();
-            }
-            IEnumerable<string> query = Data.Lines;
-            if (Level != "全部")
-            {
-                query = query.Where(line => DetectLevel(line) == Level);
-            }
-            if (!string.IsNullOrWhiteSpace(SearchText))
-            {
-                query = query.Where(line => line.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
-            }
-            return query;
+            url += $"&level={Uri.EscapeDataString(Level)}";
         }
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            url += $"&keyword={Uri.EscapeDataString(SearchText.Trim())}";
+        }
+        if (!string.IsNullOrEmpty(SelectedFile))
+        {
+            url += $"&file={Uri.EscapeDataString(SelectedFile)}";
+        }
+        return url;
     }
 
     // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
@@ -106,6 +114,7 @@ else
         if (firstRender && !_initialized)
         {
             _initialized = true;
+            await LoadFilesAsync();
             await LoadAsync();
             StateHasChanged();
         }
@@ -117,7 +126,7 @@ else
         Error = null;
         try
         {
-            Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", $"/api/logs/current?lines={LineCount}");
+            Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", BuildUrl());
         }
         catch (Exception ex)
         {
@@ -129,9 +138,36 @@ else
         }
     }
 
-    private void SetLevel(string level)
+    private async Task LoadFilesAsync()
+    {
+        try
+        {
+            var files = await JSRuntime.InvokeAsync<List<LogFileInfoPayload>>("configApi.request", "GET", "/api/logs/files");
+            Files = files ?? new List<LogFileInfoPayload>();
+        }
+        catch
+        {
+            // 文件列表加载失败不阻塞日志查看
+            Files = new List<LogFileInfoPayload>();
+        }
+    }
+
+    private async Task SetLevel(string level)
     {
         Level = level;
+        await LoadAsync();
+    }
+
+    /// <summary>搜索框输入防抖：停止输入 400ms 后触发服务端过滤请求。</summary>
+    private async Task OnSearchInput()
+    {
+        _searchDebounce?.Dispose();
+        _searchDebounce = new System.Threading.Timer(
+            async _ => await InvokeAsync(LoadAsync),
+            null,
+            TimeSpan.FromMilliseconds(400),
+            Timeout.InfiniteTimeSpan);
+        await Task.CompletedTask;
     }
 
     private void ToggleAutoRefresh()
@@ -156,7 +192,7 @@ else
                 Error = null;
                 try
                 {
-                    Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", $"/api/logs/current?lines={LineCount}");
+                    Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", BuildUrl());
                     StateHasChanged();
                 }
                 catch (Exception ex)
@@ -187,11 +223,21 @@ else
     {
         _refreshTimer?.Dispose();
         _refreshTimer = null;
+        _searchDebounce?.Dispose();
+        _searchDebounce = null;
     }
 
     private sealed class LogContentPayload
     {
         public string? File { get; set; }
         public List<string> Lines { get; set; } = new();
+    }
+
+    private sealed class LogFileInfoPayload
+    {
+        public string Name { get; set; } = "";
+        public DateTimeOffset LastWriteTimeUtc { get; set; }
+        public long SizeBytes { get; set; }
+        public bool IsCurrent { get; set; }
     }
 }

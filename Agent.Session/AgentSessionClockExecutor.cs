@@ -1,3 +1,4 @@
+using CommonLib;
 using LlmBackend;
 
 namespace Agent.Session;
@@ -10,13 +11,16 @@ public sealed class AgentSessionClockExecutor : IClockExecutor
 {
     private readonly AgentSessionManager _sessionManager;
     private readonly Func<string, string, TokenUsage, Task>? _recordAiMessage;
+    private readonly ISimpleLogger _logger;
 
     public AgentSessionClockExecutor(
         AgentSessionManager sessionManager,
-        Func<string, string, TokenUsage, Task>? recordAiMessage = null)
+        Func<string, string, TokenUsage, Task>? recordAiMessage = null,
+        ISimpleLogger? logger = null)
     {
         _sessionManager = sessionManager;
         _recordAiMessage = recordAiMessage;
+        _logger = logger ?? SimpleLog.Default;
     }
 
     public async Task<ClockExecutionResult> ExecuteAsync(
@@ -31,9 +35,10 @@ public sealed class AgentSessionClockExecutor : IClockExecutor
             {
                 await _recordAiMessage(task.SessionId, response, usage);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 记录失败不影响定时任务执行结果
+                // 记录失败不影响定时任务执行结果，但需落日志便于排查
+                _logger.Warn($"AI 审计记录失败（{task.SessionId}）: {ex.Message}");
             }
         }
         return ClockExecutionResult.Success(response);

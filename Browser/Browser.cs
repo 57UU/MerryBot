@@ -125,11 +125,13 @@ public partial class Browser : IDisposable
     }
     readonly StealthInstanceSettings stealthInstanceSettings = new();
     readonly ResourceCountdown resourceCountdown;
+    private readonly CommonLib.ISimpleLogger _logger;
 
-    public Browser(BrowserOptions? browserOptions = null)
+    public Browser(BrowserOptions? browserOptions = null, CommonLib.ISimpleLogger? logger = null)
     {
         this.browserOptions = browserOptions ?? new BrowserOptions();
         this.browserOptions.AdaptSystem();
+        _logger = logger ?? CommonLib.SimpleLog.Default;
         resourceCountdown = new(CloseBrowser);
 
         ConfigureCommonOptions(options, this.browserOptions);
@@ -141,7 +143,7 @@ public partial class Browser : IDisposable
         bool isLinuxArm64 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
         if (isLinuxArm64)
         {
-            Console.WriteLine("Arch: Linux Arm64;you may need to install chromedriver manually");
+            _logger.Info("Arch: Linux Arm64;you may need to install chromedriver manually");
             stealthInstanceSettings.ChromeDriverPath = "/usr/bin/chromedriver";
         }
 

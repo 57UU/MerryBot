@@ -13,11 +13,6 @@ public static class Utils
         var result = from i in dirInfo.EnumerateFiles() select i.Name;
         return result;
     }
-    public static string GenerateFileNameByCurrentTime()
-    {
-        var t = DateTime.Now;
-        return $"{t.Year}-{t.Month}-{t.Day}_{t.Hour}-{t.Minute}-{t.Second}";
-    }
 
     public static async Task WaitForShutdownAsync(CancellationToken cancellationToken = default)
     {

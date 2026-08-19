@@ -30,8 +30,9 @@ public class MessageTool : ToolSet
     /// <summary>图片下载大小上限（字节），防止超大图片撑爆上下文</summary>
     private readonly int maxImageBytes;
     private readonly ToolSetBridge bridge;
+    private readonly ISimpleLogger _logger;
 
-    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes)
+    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes, ISimpleLogger? logger = null)
     {
         this.messageService = messageService;
         this.channel = channel;
@@ -40,6 +41,7 @@ public class MessageTool : ToolSet
         this.groupId = long.Parse(session.Id);
         this.visionRouter = visionRouter;
         this.maxImageBytes = maxImageBytes;
+        _logger = logger ?? SimpleLog.Default;
 
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
@@ -195,7 +197,7 @@ public class MessageTool : ToolSet
             }
             catch (Exception e)
             {
-                ConsoleLogger.Instance.Warn($"下载图片失败: {reference}: {e.Message}");
+                _logger.Warn($"下载图片失败: {reference}: {e.Message}");
                 return (null, null);
             }
         }
@@ -225,14 +227,14 @@ public class MessageTool : ToolSet
         using var response = await ImageHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: HTTP {(int)response.StatusCode}");
+            _logger.Warn($"下载图片失败: {url}: HTTP {(int)response.StatusCode}");
             return (null, null);
         }
 
         // Content-Length 预检：声明超限直接拒绝，不下载
         if (response.Content.Headers.ContentLength is { } declaredLength && declaredLength > maxImageBytes)
         {
-            ConsoleLogger.Instance.Warn($"下载图片失败: {url}: Content-Length {declaredLength} 超过上限 {maxImageBytes}");
+            _logger.Warn($"下载图片失败: {url}: Content-Length {declaredLength} 超过上限 {maxImageBytes}");
             return (null, null);
         }
 
@@ -251,7 +253,7 @@ public class MessageTool : ToolSet
             total += read;
             if (total > maxImageBytes)
             {
-                ConsoleLogger.Instance.Warn($"下载图片失败: {url}: 实际大小超过上限 {maxImageBytes}，已中断");
+                _logger.Warn($"下载图片失败: {url}: 实际大小超过上限 {maxImageBytes}，已中断");
                 return (null, null);
             }
             buffer.Write(chunk, 0, read);

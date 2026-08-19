@@ -4,34 +4,41 @@ namespace MerryBot;
 
 internal class NLogAdapter : ISimpleLogger
 {
-    private static readonly NLog.Logger logger = NLog.LogManager.GetLogger("NapcatClient");
+    private readonly NLog.Logger _logger;
+
+    /// <param name="loggerName">NLog logger 名；默认 "NapcatClient" 保持既有行为。</param>
+    public NLogAdapter(string loggerName = "NapcatClient")
+    {
+        _logger = NLog.LogManager.GetLogger(loggerName);
+    }
+
     public void Debug(string message)
     {
-        logger.Debug(message);
+        _logger.Debug(message);
     }
 
     public void Error(string message)
     {
-        logger.Error(message);
+        _logger.Error(message);
     }
 
     public void Fatal(string message)
     {
-        logger.Fatal(message);
+        _logger.Fatal(message);
     }
 
     public void Info(string message)
     {
-        logger.Info(message);
+        _logger.Info(message);
     }
 
     public void Trace(string message)
     {
-        logger.Trace(message);
+        _logger.Trace(message);
     }
 
     public void Warn(string message)
     {
-        logger.Warn(message);
+        _logger.Warn(message);
     }
 }
