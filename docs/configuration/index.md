@@ -1,0 +1,30 @@
+---
+title: 配置说明
+has_children: true
+nav_order: 2
+---
+
+MerryBot 的配置主要存放在 LiteDB 数据库 `plugin_data.db` 中（数据目录由环境变量 `MERRY_BOT` 指定，未设置时默认为程序工作目录下的 `data` 文件夹）。另有少量启动必需项放在 `setting.toml` 文件中。
+
+配置分为三类：
+
+- **启动配置**：[`setting.toml`](startup.html) 中的启动必需项（目前只有 WebUI 监听地址），**不在 WebUI 中提供修改入口**——避免"WebUI 挂了就改不回来"的引导问题。修改后重启 MerryBot 生效。
+- **核心配置**：连接、群组、机器编号等宿主级设置，由 `ConfigManager` 管理，存储于 `plugin_data.db` 的 `config` 表（`prefix: "core"`）。
+- **插件配置**：每个插件有独立的配置类型，按插件 Id 存储，互不干扰。首次启动时生成默认配置并落库。
+
+核心配置与插件配置都可以在 WebUI「**配置中心**」（`/config`）中查看和修改，每个配置文件单独保存。修改后若页面提示需要重启才能生效，请使用侧边栏底部的「重启程序」按钮。
+
+## WebUI 安全说明
+
+WebUI 默认只监听 `http://localhost:5000`（由启动配置 `setting.toml` 的 `web-address` 控制），**无内置账号体系**。远程访问请使用 SSH 端口转发（`ssh -L 5000:localhost:5000 user@host`），认证与加密交给 SSH。若自行将监听地址改为 `0.0.0.0` 暴露到公网，风险自担——尤其「LLM 配置」页的 Key 虽然不能读回，但写入时仍会通过浏览器提交，请只经受控内网或 HTTPS 反向代理访问。
+
+## 从旧版 `setting.toml` 迁移
+
+旧版基于 `setting.toml` 的配置项已全部并入新架构：
+
+- `napcat-server` / `napcat-token` / `qq-groups` / `authorized-user` → 核心配置（`/config`）
+- `[variables.storage-manager]` 的 `machine-code` → 核心配置 `MachineCode`；`web-address` → 启动配置 `setting.toml` 的 `web-address`
+- `[variables.agent]` → Agent 插件配置（`/config` 中 `plugin:agent`），其中 `vision-llm`（单模型）升级为 `VisionLlmModels`（模型列表，支持逐个降级）
+- `[variables.highlights]`（群刊）、`[variables.run-command]`（Shell 终端）插件已移除；Shell 能力并入 Agent 的 `AllowShell` / `ShellUser`
+
+> 老用户如有旧 `setting.toml`，其内容不会自动导入；请对照上表在 WebUI 配置中心重新填写。旧的 WebUI 监听地址请写入新的启动配置文件（`<data>/setting.toml` 的 `web-address`）。

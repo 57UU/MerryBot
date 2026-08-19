@@ -28,4 +28,4 @@ nav_order: 0
 
 - [GitHub 仓库](https://github.com/57UU/MerryBot)
 - [README（部署与配置说明）](https://github.com/57UU/MerryBot/blob/master/README.md)
-- [配置说明](Configuration.html)
+- [配置说明](configuration/)

@@ -14,5 +14,7 @@ defaults:
     values:
       layout: default
 
+# 侧栏页脚：内容在 docs/_includes/nav_footer_custom.html（桌面端显示于左侧导航底部，移动端显示于页面底部）
+
 # 可选：深色模式（取消注释启用）
 # color_scheme: dark

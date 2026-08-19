@@ -4,16 +4,10 @@ MerryBot 是基于 [NapCat](https://napcat.napneko.icu/) 上游的 QQ 机器人�
 
 主程序通过 WebSocket 连接 NapCat（OneBot 协议实现），监听 QQ 群消息并分发到内置插件；内置基于 LLM 的 AI 机器人插件（Agent），支持工具调用、定时任务、技能与记忆系统；内嵌 Blazor WebUI 历史后台。
 
-> 📖 项目文档站：<https://57UU.github.io/MerryBot/>
+
 
 ## 文档
-
-| 文档 | 说明 |
-| --- | --- |
-| [快速开始](docs/quickstart.md) | 从零部署、配置并验证 |
-| [配置说明](docs/Configuration.md) | 启动 / 核心 / 插件配置详解 |
-| [插件开发](docs/plugin-development.md) | 插件 API、事件、存储与示例 |
-| [AGENTS.md](AGENTS.md) | 架构与开发约定（面向 AI 编码代理） |
+请参阅 docs/ 或 [项目文档站](https://57UU.github.io/MerryBot/)
 
 ## 快速开始
 
@@ -48,4 +42,4 @@ Agent 内置工具：消息读取（转发 / 回复 / 群历史）、图片查�
 
 ## 插件开发
 
-编写插件需继承 `Plugin` 抽象类、构造函数注入 `PluginInterop`，并以 `PluginTag` 属性标记；主程序通过反射自动加载 `plugins` 项目下的插件类。详细 API 与示例见 [插件开发](docs/plugin-development.md)。
+编写插件需继承 `Plugin` 抽象类、构造函数注入 `PluginInterop`，并以 `PluginTag` 属性标记；主程序通过反射自动加载 `plugins` 项目下的插件类。详细 API 与示例见 [插件开发](docs/plugin-development/)。
