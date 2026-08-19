@@ -12,7 +12,7 @@ namespace Agent.Tools;
 /// 但复用父会话同一个模型客户端（Client）与 AgentOptions，并为每个子任务复制工具列表
 /// （不含本工具集自身，因此不允许嵌套派生子任务），在后台执行。
 /// 子任务完成或失败时通过 notifyAsync 回调注入所属主会话
-/// （type: "subagent_result"，stackable 合并同类），主 Agent 可继续处理。
+/// （type: "subagent_result"，stackable 合并同类），正文使用 &lt;SUBAGENT_RESULT&gt; XML 标签，主 Agent 可继续处理。
 /// </summary>
 public class SubAgentToolSet : ToolSet, IDisposable
 {
@@ -194,7 +194,12 @@ public class SubAgentToolSet : ToolSet, IDisposable
             {
                 return;
             }
-            message = $"子任务 {Label(info)} 已完成：\n{CapResult(result)}";
+            message = global::Agent.AgentEventMessageFormatter.Format(
+                "SUBAGENT_RESULT",
+                ("task_id", info.Id),
+                ("status", "completed"),
+                ("task", info.TaskText),
+                ("output", CapResult(result)));
         }
         catch (Exception ex)
         {
@@ -203,7 +208,12 @@ public class SubAgentToolSet : ToolSet, IDisposable
                 return; // 显式终止或取消：不推送"已完成/失败"误导通知
             }
             SimpleLog.Default.Warn($"子任务 {Label(info)} 执行失败: {ex.Message}");
-            message = $"子任务 {Label(info)} 执行失败：{ex.Message}";
+            message = global::Agent.AgentEventMessageFormatter.Format(
+                "SUBAGENT_RESULT",
+                ("task_id", info.Id),
+                ("status", "failed"),
+                ("task", info.TaskText),
+                ("error", ex.Message));
         }
 
         try

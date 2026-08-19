@@ -10,7 +10,8 @@ namespace Agent.Session;
 /// 终端工具集：注册 bash / task_list / task_output / task_stop 四个工具，效果对齐内置 Bash 工具。
 /// bash 进程懒加载——构造时不启动，首次前台调用时才创建共享常驻终端，之后跨调用保留 shell 状态（如 cd）。
 /// user 构造参数非空时以 sudo -u user 运行 bash；后台任务各自使用独立终端实例。
-/// 后台任务完成时通过 sessionManager 主动通知所属 session 的 Agent（stackable 类型，避免积压）。
+/// 后台任务完成时通过 sessionManager 主动通知所属 session 的 Agent（stackable 类型，避免积压），
+/// 消息正文使用 &lt;TERMINAL_TASK_RESULT&gt; XML 标签包裹。
 /// </summary>
 public class TerminalToolSet : ToolSet, IDisposable
 {
@@ -369,7 +370,12 @@ public class TerminalToolSet : ToolSet, IDisposable
             {
                 return; // 任务已被 task_stop 等显式终止，不推送"已完成"误导通知
             }
-            message = $"后台任务 {Label(info)} 已完成：\n{CapResult(result)}";
+            message = global::Agent.AgentEventMessageFormatter.Format(
+                "TERMINAL_TASK_RESULT",
+                ("task_id", info.Id),
+                ("status", "completed"),
+                ("description", info.Description),
+                ("output", CapResult(result)));
         }
         catch (Exception ex)
         {
@@ -377,7 +383,12 @@ public class TerminalToolSet : ToolSet, IDisposable
             {
                 return;
             }
-            message = $"后台任务 {Label(info)} 执行失败：{ex.Message}";
+            message = global::Agent.AgentEventMessageFormatter.Format(
+                "TERMINAL_TASK_RESULT",
+                ("task_id", info.Id),
+                ("status", "failed"),
+                ("description", info.Description),
+                ("error", ex.Message));
         }
 
         try
