@@ -1,4 +1,4 @@
-remote_theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs@v0.12.0
 
 title: MerryBot
 description: 基于 NapCat 的 QQ 机器人框架，使用 C# 编写，支持插件化开发
