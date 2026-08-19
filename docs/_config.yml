@@ -14,6 +14,11 @@ defaults:
     values:
       layout: default
 
+# Mermaid 图表支持（流程图/时序图，代码块 ```mermaid 渲染）
+# 版本需匹配 jsDelivr 上可用的 mermaid 版本；v10+ 以 ESM 模块方式加载
+mermaid:
+  version: "10.9.0"
+
 # 侧栏页脚：内容在 docs/_includes/nav_footer_custom.html（桌面端显示于左侧导航底部，移动端显示于页面底部）
 
 # 可选：深色模式（取消注释启用）
