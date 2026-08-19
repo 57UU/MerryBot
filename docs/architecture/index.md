@@ -10,15 +10,23 @@ nav_order: 4
 
 ```mermaid
 flowchart LR
-    N["NapCat<br/>(OneBot WebSocket)"]
-    subgraph Host["MerryBot 宿主"]
-        B["BotClient"] --> L["Logic<br/>(宿主装配)"]
-        L --> P["plugins"]
-        L --> C["存储核心<br/>(LiteDB + 对象存储)"]
-        L --> K["时钟服务<br/>(cron 调度)"]
-        L --> W["WebUI<br/>(Blazor 后台)"]
+    N["NapCat<br/>OneBot WebSocket"] --> B["BotClient"]
+
+    subgraph H["MerryBot 宿主"]
+        B --> L["Logic<br/>装配、重连与分发"]
+        L -->|"入站群消息"| M["MessageService<br/>本地化、入库与预取"]
+        M -->|"MessageIngress"| P["插件系统<br/>加载、配置与依赖注入"]
+        L -.->|"启动时装配"| P
+        L --> C["ClockService<br/>持久化 cron 调度"]
+        L --> W["WebUI<br/>Blazor 管理后台"]
+        M --> S["LiteDB + storage/"]
+        P --> S
+        C --> S
     end
-    N --> B
+
+    P --> A["AgentPlugin"]
+    A -->|"读取历史/资源、写 AI 审计"| M
+    A --> G["Agent 引擎<br/>LLM、工具与会话"]
 ```
 
 ## 模块划分
