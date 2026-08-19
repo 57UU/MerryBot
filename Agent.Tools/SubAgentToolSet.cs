@@ -9,7 +9,7 @@ namespace Agent.Tools;
 /// <summary>
 /// 子任务工具集：注册 subagent / subagent_output / subagent_stop 三个工具。
 /// 派发子任务时通过 Agent.Agent.Create 构造一个全新上下文（不持久化）的 Agent，
-/// 但复用父会话同一个模型客户端（Client）、AgentOptions 与同一份工具列表
+/// 但复用父会话同一个模型客户端（Client）与 AgentOptions，并为每个子任务复制工具列表
 /// （不含本工具集自身，因此不允许嵌套派生子任务），在后台执行。
 /// 子任务完成或失败时通过 notifyAsync 回调注入所属主会话
 /// （type: "subagent_result"，stackable 合并同类），主 Agent 可继续处理。
@@ -39,7 +39,8 @@ public class SubAgentToolSet : ToolSet, IDisposable
     }
 
     /// <summary>
-    /// 创建子任务工具集。llmClient / options / tools 均为父会话同一实例（模型与工具复用）；
+    /// 创建子任务工具集。llmClient / options / tools 均来自父会话；
+    /// 子任务执行时通过 ToolSet.Copy() 隔离带状态的工具；
     /// notifyAsync 由宿主注入：通常为"向所属主会话 Chat 注入消息（type: subagent_result, stackable: true）"；
     /// shutdownToken 在宿主（插件）生命周期结束时取消全部运行中的子任务。
     /// </summary>
@@ -149,14 +150,32 @@ public class SubAgentToolSet : ToolSet, IDisposable
 
     /// <summary>
     /// 构造全新上下文（contextHistory 传 null，不持久化）的子 Agent 并执行任务，
-    /// task 即首个用户消息；复用父会话的模型客户端、options 与工具列表。
+    /// task 即首个用户消息；复用父会话的模型客户端与 options，工具集使用隔离副本。
     /// </summary>
     private async Task<string> RunSubagentAsync(string taskText, AgentOptions options, CancellationToken cancellationToken)
     {
+        IList<ToolSet> childTools = _tools.Select(static tool => tool.Copy()).ToList();
         // 命名空间 Agent.Tools 内 "Agent" 会被类 Agent 遮蔽，需 global:: 前缀（与 Agent.Tui 一致）
-        var agent = await global::Agent.Agent.Create(null, _llmClient, _tokenLimit, options, _tools);
-        var (result, _) = await agent.Chat(taskText, cancellationToken);
-        return result;
+        try
+        {
+            var agent = await global::Agent.Agent.Create(null, _llmClient, _tokenLimit, options, childTools);
+            var (result, _) = await agent.Chat(taskText, cancellationToken);
+            return result;
+        }
+        finally
+        {
+            for (int i = 0; i < childTools.Count; i++)
+            {
+                if (ReferenceEquals(childTools[i], _tools[i]))
+                {
+                    continue;
+                }
+                if (childTools[i] is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+        }
     }
 
     /// <summary>

@@ -162,6 +162,16 @@ public class TerminalToolSet : ToolSet, IDisposable
         => bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
     public override string? Prompt() => bridge.Prompt();
 
+    /// <summary>复制终端配置但不共享常驻 shell 或后台任务。</summary>
+    public override ToolSet Copy() => new TerminalToolSet(
+        _sessionManager,
+        _sessionId,
+        user,
+        _visionRouter,
+        _maxImageBytes,
+        _initialWorkingDirectory,
+        _maxBackgroundTasks);
+
     /// <summary>工具参数：bash</summary>
     private class BashArgs
     {

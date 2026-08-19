@@ -39,6 +39,32 @@ public partial class Agent
             RecordMessage(systemMessage, TokenUsage.Zero);
         }
     }
+
+    /// <summary>
+    /// 将 ToolSet 的动态状态插入当前用户输入前面。SystemPrompt 在 Agent 创建后保持不变；
+    /// 动态状态作为用户消息的一部分进入上下文，并随该轮输入持久化。
+    /// </summary>
+    private string BuildUserInput(string userInput)
+    {
+        StringBuilder prefix = new();
+        foreach (ToolSet toolSet in toolSets!)
+        {
+            string? injection = toolSet.IterationPromptInjection();
+            if (!string.IsNullOrWhiteSpace(injection))
+            {
+                prefix.AppendLine(injection);
+            }
+        }
+
+        if (prefix.Length == 0)
+        {
+            return userInput;
+        }
+
+        prefix.AppendLine();
+        prefix.Append(userInput);
+        return prefix.ToString();
+    }
     public static async Task<Agent> Create(
         ContextHistory? contextHistory,
         Client llmClient,
@@ -116,7 +142,7 @@ public partial class Agent
             var messages = contextManager.context.Messages;
             if (!string.IsNullOrWhiteSpace(userInput))
             {
-                var userMessage = Message.User(userInput);
+                var userMessage = Message.User(BuildUserInput(userInput));
                 messages.Add(userMessage);
                 RecordMessage(userMessage, TokenUsage.Zero);
             }
@@ -238,6 +264,10 @@ public partial class Agent
     /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>
     public async Task ResetAsync()
     {
+        foreach (ToolSet toolSet in toolSets!)
+        {
+            toolSet.Reset();
+        }
         contextManager.context.Messages = new List<Message>();
         contextManager.context.TokenUsed = 0;
         if (contextManager.contextHistory is not null)

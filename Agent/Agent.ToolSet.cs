@@ -15,6 +15,25 @@ public abstract class ToolSet
     public abstract IList<ToolDef> Tools();
     public abstract Task<string> InvokeAsync(CancellationToken cancellationToken, ToolCall toolCall, Action<Message> onIterationAdd);
     public abstract string? Prompt();
+
+    /// <summary>
+    /// 返回追加到当前用户输入前的动态提示。默认不注入任何内容；
+    /// 有会话状态的 ToolSet 可覆盖此方法提供当前状态快照。
+    /// </summary>
+    public virtual string? IterationPromptInjection() => null;
+
+    /// <summary>
+    /// 为新的 Agent 复制 ToolSet。默认复用无状态实例；持有可变会话状态的 ToolSet
+    /// 应覆盖此方法，返回状态隔离的新实例。
+    /// </summary>
+    public virtual ToolSet Copy() => this;
+
+    /// <summary>
+    /// 清理 ToolSet 的会话级状态。默认无操作，供 Agent.ResetAsync 调用。
+    /// </summary>
+    public virtual void Reset()
+    {
+    }
 }
 /// <summary>
 /// 提供系统提示的工具集，不包含任何工具。
@@ -257,4 +276,3 @@ public class ToolSetBridge : ToolSet
         }
     }
 }
-
