@@ -3,12 +3,12 @@ title: 快速开始
 nav_order: 1
 ---
 
-从零开始把 MerryBot 跑起来并接入 QQ 群，大约需要 15 分钟。
+从零开始把 MerryBot 跑起来并接入 QQ 群。
 
 ## 环境要求
 
-- 一台 Linux 服务器（推荐）或 Windows 机器
-- [.NET 10](https://dotnet.microsoft.com/) SDK 或运行时
+- Linux 服务器（推荐）或 Windows 开发机
+- [.NET 10](https://dotnet.microsoft.com/) SDK（源码运行与 Linux 发布脚本均需要）
 - [NapCat](https://napcat.napneko.icu/)（QQ 机器人协议端，负责与 QQ 通信）
 - 一个用于机器人的 QQ 号
 - Chrome / Edge 浏览器（可选，网页搜索、Markdown 渲染等网络类工具需要，可用 `CHROME_BIN` 环境变量指定路径）
@@ -19,7 +19,9 @@ nav_order: 1
 2. 配置 **WebSocket 服务**并启动，记下**地址** 与 **Token**
 
 
-## 第 2 步：获取并构建 MerryBot
+## 第 2 步：获取并启动 MerryBot
+
+Linux 服务器使用仓库自带的双槽启动脚本：
 
 ```bash
 git clone https://github.com/57UU/MerryBot.git
@@ -29,10 +31,18 @@ cd MerryBot
 
 `launch.sh` 首次运行会自动执行 `build.sh` 完成编译并启动程序。
 
+Windows 仅建议用于开发或调试，直接运行：
+
+```powershell
+dotnet run --project MerryBot/MerryBot.csproj
+```
+
+部署、重建和更新机制见[运行维护](operations/index.html)。
+
 ## 第 3 步：启动并配置核心连接
 
 1. 程序启动后自动创建数据目录（默认工作目录下的 `data/`，可用环境变量 `MERRY_BOT` 指定其他位置），并生成启动配置文件 `<data>/setting.toml`
-2. 浏览器打开 WebUI：**http://localhost:5000**（监听地址由 `<data>/setting.toml` 的 `web-address` 控制，默认仅绑定本机，远程访问推荐使用SSH隧道转发避免安全风险）
+2. 浏览器打开 WebUI：**http://localhost:5000**（监听地址由 `<data>/setting.toml` 的 `web-address` 控制，默认仅绑定本机）
 3. 进入「**配置中心**」，填写核心配置：
 
    | 配置项           | 说明                                                                |
@@ -42,7 +52,7 @@ cd MerryBot
    | `QqGroups`       | 要监听的 QQ 群号列表（可以转到'群聊管理页面'页面可视化编辑）        |
    | `AuthorizedUser` | 授权用户 QQ 号（Bot 管理员，`/update`、`/reload` 等高危操作会校验） |
 
-4. 保存后按提示使用侧边栏底部的「**重载程序**」按钮重启生效
+4. 保存后按提示使用侧边栏底部的「**重载程序**」或「**重启程序**」生效
 
 > 核心配置存储在数据库 `plugin_data.db` 中，`setting.toml` 只保留启动必需项（目前仅 `web-address`）。
 
@@ -57,7 +67,7 @@ cd MerryBot
 ### 配置 Agent 插件
 打开配置中心-> Agent:
 
-可以设置主模型、外挂视觉模型、shell等功能。
+选择已启用的主模型；可按需配置视觉模型和 Shell。完整字段见[插件配置](configuration/plugins.html)。
 
 ## 第 5 步：在群里验证
 
@@ -67,7 +77,7 @@ cd MerryBot
 
 常用命令：
 
-- `@机器人 /new [内容]` 或 `#新对话` — 清空上下文开新对话
+- `@机器人 /new [内容]` 或 `@机器人 #新对话 [内容]` — 清空上下文开新对话
 - `@机器人 /compact [主题]` — 手动压缩上下文
 - `/help` — 查看已加载插件
 - `/version` — 查看当前版本
@@ -81,7 +91,7 @@ cd MerryBot
 `AllowShell` 默认关闭（安全考虑）。需在 Agent 插件配置中开启；开启后命令以 `ShellUser` 指定的 Linux 用户（`sudo -u user`）执行，留空则以机器人进程所属用户执行。仅 Linux 生效。
 
 **如何远程访问 WebUI？**
-WebUI 无内置账号体系，默认只监听本机。远程访问请使用 SSH 端口转发：
+WebUI 没有登录或 API 鉴权，配置、重启和更新接口都只应暴露给可信本机用户。远程访问请使用 SSH 端口转发：
 
 ```bash
 ssh -L 5000:localhost:5000 user@host
@@ -108,3 +118,5 @@ sudo fc-cache -fv
 
 **如何更新版本？**
 管理员在群里执行 `@机器人 /update`，或直接使用 WebUI 左下角的「更新版本」按钮。
+
+WebUI 访问边界、日志和更新流程见[运行维护](operations/index.html)。

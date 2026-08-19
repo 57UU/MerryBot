@@ -26,6 +26,7 @@ flowchart LR
 | 模块 | 文档 | 职责 |
 | --- | --- | --- |
 | 核心宿主 | [核心宿主](core.html) | 启动流程、组件装配（`Logic`）、配置管理、生命周期、消息处理链、统一日志 |
+| 消息与 NapCat | [消息与 NapCat](messages.html) | OneBot 入站消息、消息链、本地资源引用与插件分发 |
 | 存储 | [存储](storage.html) | 插件数据（`plugin_data.db`）与历史记录（`group_history.db` + 对象存储）两大存储体系 |
 | 插件子系统 | [插件子系统](plugins.html) | `Plugin` 抽象、互操作接口、内置插件一览 |
 | WebUI 子系统 | [WebUI 子系统](webui.html) | Blazor 历史后台、Minimal API、安全模型 |
@@ -36,8 +37,8 @@ flowchart LR
 
 ## 与 Agent 架构的关系
 
-- Agent 插件（`plugins/AgentServicePlugin.cs`）是一个**普通插件**，通过插件接口接入宿主的消息分发；其内部是完整的 [Agent 架构](../agent/index.html)。
-- 宿主提供定时任务调度器（[时钟](../agent/index.html)），Agent 只注册执行器。
+- `AgentPlugin` 是接收群消息的普通插件；`AgentServicePlugin` 为 Agent 和 WebUI 提供 Skills、记忆和上下文快照服务。
+- 宿主提供定时任务调度器，Agent 只注册执行器；调度器的会话边界见 [定时任务](../agent/clock.html)。
 - 宿主负责 LLM Provider/Key 的存储与加密，Agent 通过 `LlmClient`/`LlmBackend` 发起请求。
 
 ## 相关页面

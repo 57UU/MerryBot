@@ -234,9 +234,12 @@ sequenceDiagram
 | ToolSet | 项目 | 工具 |
 | --- | --- | --- |
 | `WebTools` | `Agent.Tools/` | web_search / web_fetch（Bing） |
+| `MessageTool` | `plugins/` | get_forward / get_reply / get_group_context / send_markdown；可用视觉模型时提供 load_image |
 | `SkillToolSet` | `Agent.Tools/` | 技能（Skills）调用 |
+| `Cron` | `Agent.Session/` | 当前会话的 clock_create / list / get / update / delete / log |
+| `MemoryToolSet` | `plugins/` | 当前会话的持久记忆读写 |
 | `SubAgentToolSet` | `Agent.Tools/` | 子任务代理 |
-| `TimeToolSet` | `Agent.Tools/` | 时间工具 |
+| `TimeToolSet` | `Agent.Tools/` | 可复用时间工具；当前 `AgentPlugin` 未注册 |
 | `TodoListToolSet` | `Agent.Tools/` | 待办清单（会话状态 + 动态注入示例） |
 | `TerminalToolSet` | `Agent.Session/` | shell 工具（常驻 bash 进程，同步/异步；后台任务完成主动通知主模型） |
 | `PromptToolSet` | `Agent/` | 纯系统提示，无工具 |

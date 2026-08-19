@@ -1,7 +1,7 @@
 ---
 title: WebUI 子系统
 parent: 框架核心
-nav_order: 4
+nav_order: 5
 ---
 
 # WebUI 子系统
@@ -30,15 +30,14 @@ WebUI 是内嵌的 **Blazor 历史后台**（`MerryBot.WebUI/` 项目），用�
 | `SkillApiMapper` | 技能（Skills）管理 |
 | `MemoryApiMapper` | 记忆管理 |
 | `ContextSnapshotApiMapper` | 上下文快照 |
-| `ConfigRegistry` | 配置注册表（`RegisterConfig("core", ...)` 等） |
-| `ModelsDevCatalogService` | models.dev 模型目录查询 |
+| `ConfigRegistry` / `ModelsDevCatalogService` | 配置注册表与 models.dev 目录查询服务 |
 
 页面位于 `Components/Pages/`：群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、配置编辑、高级配置、日志、群管理、转发消息等。
 
 ## 安全模型
 
-- **无内置账号体系**：WebUI 默认仅监听 `localhost:5000`（`setting.toml` 的 `web-address`，修改 `0.0.0.0` 暴露公网风险自担）。远程访问推荐 SSH 端口转发（`ssh -L 5000:localhost:5000 user@host`），认证与加密交给 SSH
-- **高危操作鉴权**：`/update`、`/reload` 等校验请求者 QQ == `AuthorizedUser`（核心配置字段）
+- **无内置账号体系或 API 鉴权**：WebUI 默认仅监听 `localhost:5000`。配置、重启、重载和更新 API 也不识别 QQ 身份；修改为 `0.0.0.0` 即会把管理能力暴露给可访问该端口的人
+- **远程访问**：推荐 SSH 端口转发（`ssh -L 5000:localhost:5000 user@host`）。如必须经网络访问，应由受控内网或带鉴权的 HTTPS 反向代理保护
 - **API Key 保护**：LLM API Key 用 DataProtection 加密存储（密钥环 `<data>/llm-provider-key-ring/`），WebUI 只回显末四位与指纹，不可读回
 - **日志脱敏**：群消息日志只保留群号/发送者/链长摘要，避免完整消息链导致日志膨胀与隐私泄露
 

@@ -59,7 +59,7 @@ flowchart TD
 
 - 提供版本检测（git）、编译槽、重启、重载、退出能力
 - `CommonLib` 定义 `ExitCode`：101/102/103 等，宿主按退出码决定是否重启
-- `/update`、`/reload` 等高危操作在 WebUI 侧校验 `QQ == AuthorizedUser`（见 [WebUI 子系统](webui.html)）
+- 群聊中的 `/update`、`/reload` 由 `ViewVersion` 校验 `AuthorizedUser`；WebUI 不携带 QQ 身份，相关 API **没有内置鉴权**，只能监听可信地址（见 [WebUI 子系统](webui.html)）
 
 ## 消息处理链
 
@@ -79,7 +79,7 @@ flowchart TD
 
 ## 插件加载（`PluginInitializer`）
 
-- `Logic.Plugins.cs` 负责插件发现与加载（反射扫描 `plugins` 目录程序集）
+- `Logic.Plugins.cs` 从 `typeof(Plugin).Assembly` 反射发现带 `[PluginTag]` 且未忽略的类型
 - `PluginInitializer` 完成插件依赖注入与拓扑排序（`PluginInterop` 构造注入）
 - 详见[插件子系统](plugins.html)
 

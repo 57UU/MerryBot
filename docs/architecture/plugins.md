@@ -1,87 +1,51 @@
 ---
 title: 插件子系统
 parent: 框架核心
-nav_order: 3
+nav_order: 4
 ---
 
 # 插件子系统
 
-MerryBot 通过反射加载插件，插件之间独立隔离。所有内置插件位于 `plugins/` 目录（`RootNamespace` 为 `BotPlugin`）。
+MerryBot 从 `Plugin` 所在程序集反射发现带 `[PluginTag]` 的类型。每个插件有独立的配置和数据 scope；单个插件的构造或依赖失败不会阻止其他插件加载。
 
 ## 基础设施
 
 | 文件 | 内容 |
 | --- | --- |
-| `_pluginBase.cs` | `Plugin` 抽象基类 |
-| `_interface.cs` | `PluginInterop` / `PluginTag` / `PluginStorage` |
-| `_common.cs` | `MessageContext` / `SessionKey` |
-| `_interface.event.cs` | 事件注册接口 |
+| `_pluginBase.cs` | `Plugin` 抽象基类和消息生命周期 |
+| `_interface.cs` | `PluginTag`、`PluginInterop`、`PluginStorage`、命令和拦截器 |
+| `_common.cs` | `MessageContext`、`SessionKey` |
+| `_interface.event.cs` | OneBot 通知事件订阅 |
 
-### Plugin 抽象基类
+`Plugin` 暴露 `Logger`、`GroupId`、`Interop` 和 `Channel`。`OnMessageAsync` 接收 @ 状态、已解析的 `/` 命令、克隆后的消息链和 `MessageContext`；`OnLoaded` 用于依赖其他插件的初始化；`Dispose` 在关闭时按依赖逆序调用。当前没有运行时停用入口，`IsEnable` 默认始终为 `true`。
 
-所有插件必须继承 `Plugin`：
+## 互操作与生命周期
 
-```csharp
-public abstract class Plugin : IDisposable
-{
-    public bool IsEnable { get; internal set; } = true; // 恒为 true（无停用机制）
-    protected readonly IEnumerable<long> GroupId;        // 工作 QQ 群范围
-    protected readonly ISimpleLogger Logger;             // 日志（统一日志体系）
-    protected readonly PluginInterop Interop;            // 与宿主的互操作
-    protected readonly MessageChannel Channel;           // 群消息发送通道
-
-    public Plugin(PluginInterop interop) { ... }
-
-    public virtual Task OnMessageAsync(bool isMentioned, Command? command,
-        IReadOnlyList<TypedMessage> messageChain, MessageContext context);
-    public virtual Task OnLoaded();
-    public virtual void Dispose();
-}
-```
-
-- `OnMessageAsync`：群消息入口（`isMentioned` 是否被 @、`command` 为 `/` 开头的命令、`messageChain` 为消息链、`context` 为发送者上下文）
-- `IsEnable` 为 false 时 `OnMessageAsync` 永不被调用；当前无停用机制，恒为 true
-- `OnLoaded`：插件加载完成回调；`Dispose`：卸载清理
-
-### 互操作（`PluginInterop`）
-
-`PluginInterop` 在构造时由宿主注入（`PluginInitializer` 负责 DI 与拓扑排序），向插件暴露：
-
-- `Logger`（统一日志）、`GroupId`（群范围）、`Channel`（消息通道）
-- 存储能力（`PluginStorage`：经 [存储](storage.html) 的 `PluginDatabaseScope` 隔离读写）
-
-### 消息上下文（`MessageContext` / `SessionKey`）
-
-- `SessionKey("qq", "group", groupId)`：会话唯一标识（Agent 会话、`ai_messages` 审计均以此键关联）
-- `MessageContext`：携带发送者 QQ、昵称（优先群名片）、机器人自身 QQ
-
-## 插件生命周期
+`PluginInterop` 由宿主构造，提供日志、群范围、消息通道、消息服务、事件注册、生命周期服务、时钟服务、数据目录和授权 QQ。`PluginStorage` 提供对象读写及当前插件的 `PluginDatabaseScope`。
 
 ```
-发现（反射扫描 plugins 目录）
-  → 实例化（PluginInitializer 拓扑排序 + 依赖注入 PluginInterop）
-  → OnLoaded()（初始化）
-  → 消息分发（宿主按插件逐个调用 OnMessageAsync，支持拦截器）
-  → Dispose()（Shutdown 时卸载）
+发现 → 构造依赖图 → 拓扑实例化 → OnLoaded → 消息分发 → 逆序 Dispose
 ```
 
-## 内置插件一览
+构造函数可注入 `PluginInterop`、其他插件实例和 `IPluginConfig` 实现。不要在构造函数中调用依赖其他插件的互操作能力；所有插件加入列表后才会触发 `OnLoaded`。
 
-| 插件 | 职责 |
-| --- | --- |
-| `AgentServicePlugin`（`Agent*.cs` 多文件） | **LLM Agent 插件**：对话循环、工具调用、定时任务、技能与记忆；内含 `DatabaseContextHistory`（`Agent.ContextHistory.cs`）持久化会话、`Agent.LogBridge.cs` 事件桥接、`ContextSnapshotService` 快照服务、`MemoryManagementService` |
-| `About` | 版本/仓库信息 |
-| `Help` | 帮助菜单 |
-| `ViewVersion` | 查看版本 |
-| `AutoIncrease` | 自动回复（简单关键字回复） |
-| `HeruiSaying` | 贺瑞语录（示例/娱乐插件） |
-| `LlmProviderPlugin` | LLM Provider / 模型 / Key 维护（加密存储，供 WebUI 与 Agent 使用） |
-| `MessageService` | 消息服务插件（与宿主 `MessageService` 配合） |
+## 内置插件
+
+| Id | 类型 | 职责 |
+| --- | --- | --- |
+| `agent` | `AgentPlugin` | 接收 @ 群消息，维护 Agent 会话、工具和限流 |
+| `agent-service` | `AgentServicePlugin` | 向 Agent 与 WebUI 提供 Skills、记忆和上下文快照；与 `agent` 共享数据 scope |
+| `llm-provider` | `LlmProviderPlugin` | Provider、模型和加密 API Key 管理 |
+| `view-version` | `ViewVersion` | `/version`、`/update`、`/reload` |
+| `auto-increase` | `AutoIncrease` | 刷屏自动 +1（后台插件） |
+| `help` | `Help` | `/help` |
+| `about`、`herui-saying` | `About`、`HeruiSaying` | 默认忽略的示例/娱乐插件 |
 
 > 插件开发入门见[插件开发](../plugin-development/index.html)，API 参考见[插件 API](../plugin-development/api.html)，存储用法见[存储与工具](../plugin-development/storage.html)。
 
 ## 相关页面
 
 - [核心宿主](core.html) — 插件加载与消息分发
+- [消息与 NapCat](messages.html) — `OnMessageAsync` 的输入来源
 - [存储](storage.html) — 插件数据隔离（PluginDatabaseScope）
 - [Agent 架构](../agent/index.html) — Agent 插件的内部设计

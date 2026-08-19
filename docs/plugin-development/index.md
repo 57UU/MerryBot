@@ -4,35 +4,13 @@ has_children: true
 nav_order: 3
 ---
 
-编写一个插件需要满足以下条件：
+插件位于 `plugins/` 项目，宿主会从该程序集反射发现标记为 `[PluginTag]` 的类型。一个插件必须继承 `Plugin`，且只能有一个公开构造函数；构造函数必须接收 `PluginInterop`，其余参数只能是其他插件实例或 `IPluginConfig` 实现。
 
-1. 一个插件应当放在 `plugins` 项目的一个文件中
-2. 应当继承于 `Plugin` 抽象类
-3. 有且只有一个构造函数，存在类型为 `PluginInterop` 的参数；插件之间不再依赖消息记录器或存储管理器
-4. 在类前面使用属性 `PluginTag(string id, string name, string description, [bool isIgnore=false], [PluginType type=PluginType.Interactive])`
+| 文档 | 内容 |
+| --- | --- |
+| [生命周期与配置](lifecycle.html) | 标签、构造注入、配置、`OnLoaded` 和卸载 |
+| [示例与事件](example.html) | 最小消息插件与通知事件 |
+| [API 参考](api.html) | `Plugin`、`PluginInterop` 和拦截器 |
+| [存储与工具](storage.html) | 对象存储、scoped 数据库与日志 |
 
-主程序会通过反射加载 `plugins` 项目下的所有插件类，因此需要满足上述条件。
-
-## PluginTag 类属性标签
-
-构造函数为 `(string id, string name, string description, bool isIgnore=false, PluginType type=PluginType.Interactive)`
-
-参数说明：
-
-- `id` - 插件标识符（英文），用于配置文件命名空间隔离
-- `name` - 插件名称（可中文），用于显示
-- `description` - 插件描述
-- `isIgnore` - 是否忽略加载
-- `type` - 插件类型
-
-当 `isIgnore==true` 时，插件不会被加载。
-
-`PluginType` 可选值：
-
-- `Interactive` - 交互式插件（默认）
-- `Background` - 后台插件
-- `Admin` - 管理员插件
-
-## Note
-
-如果插件不可用（如不支持当前平台），请在构造函数中抛出 `PluginNotUsableException` 异常。
+`PluginTag(id, name, description, isIgnore, type)` 中，`id` 是配置和数据库的隔离键；`isIgnore=true` 时不加载。`PluginType` 为 `Interactive`、`Background` 或 `Admin`，当前主要用于插件分类。

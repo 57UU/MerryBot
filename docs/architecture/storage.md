@@ -1,7 +1,7 @@
 ---
 title: 存储
 parent: 框架核心
-nav_order: 2
+nav_order: 3
 ---
 
 # 存储
@@ -37,7 +37,7 @@ MerryBot 有两套独立的存储体系，都基于 **LiteDB**（本地 NoSQL，
 
 `CreateScope(pluginId, prefix = "plugin")` 返回按插件隔离的**集合视图**（`PluginDatabaseScope`）：只允许访问该插件名下的集合，防止插件越界读写其他插件的数据。
 
-核心用法示例：`PluginStorageDatabase.CreateScope("clock", prefix: "core")`（时钟存储）、`CreateScope("agent")`（Agent 上下文快照）。
+核心用法示例：`PluginStorageDatabase.CreateScope("clock", prefix: "core")`（时钟存储）、`CreateScope("agent")`（Agent 上下文快照、记忆）。`agent-service` 有意复用 `agent` scope，避免管理服务与 Agent 看到不同的数据。
 
 ## 历史记录（`DataService` 项目）
 

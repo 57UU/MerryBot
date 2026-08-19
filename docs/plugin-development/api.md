@@ -1,7 +1,7 @@
 ---
 title: API 参考
 parent: 插件开发
-nav_order: 2
+nav_order: 3
 ---
 
 ## 父类 API / 属性
@@ -28,12 +28,14 @@ nav_order: 2
 | `FindPlugin<T>()` | `internal T?` | 查找类型为 T 的插件实例（返回 null 表示未找到）；推荐直接在构造函数中注入其他插件实例 |
 | `PluginInfoGetter` | `PluginInfoGetter` | 获取所有插件的 `PluginInfo` |
 | `PluginStorage` | `PluginStorage` | 插件存储（object 级读写），见「存储与工具」 |
+| `PathPrefix` | `string` | 数据目录路径；文件型插件数据应放在其下 |
 | `ClockService` | `ClockService` | core 拥有的定时任务调度器（生命周期归宿主，插件不负责创建/释放） |
 | `Interceptors` | `List<MessageInterceptor>` | 拦截器列表，拦截特定消息被本插件处理 |
 | `Lifecycle` | `IHostLifecycle` | core 生命周期回调：检测更新 / 请求更新（fetch+merge+编译备用槽+切槽重启）/ 重启 / 重载 |
 | `AuthorizedUser` | `long` | 授权用户的 QQ 号 |
 | `MessageService` | `IMessageService` | 消息持久化与资源（图片/文件）读取 |
 | `EventRegister` | `EventRegister` | 通知类事件订阅（`OnXxxReceived += handler`），见下 |
+| `Channel` | `MessageChannel` | 当前插件的消息发送通道（基类也以 `Channel` 字段提供） |
 
 **定时任务执行器**：通过 `Interop.ClockService.Executor`（`DelegatingClockExecutor`）注册——Agent 插件初始化时执行 `Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(...)` 接管定时任务投递。
 
