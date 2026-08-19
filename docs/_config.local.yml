@@ -1,0 +1,7 @@
+# 本地预览专用配置（覆盖 docs/_config.yml）
+# 用途：remote_theme 每次构建都要从 GitHub 拉取主题仓库，本地网络受限时会失败；
+#       这里改用已通过 bundle 安装的本地 gem 主题，避免依赖 GitHub 访问。
+# 启动方式：bundle exec jekyll serve --config _config.yml,_config.local.yml
+# 注意：GitHub Actions 部署不使用本文件（CI 用 remote_theme，环境内置 jekyll-remote-theme）。
+theme: just-the-docs
+remote_theme: ""

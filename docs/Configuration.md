@@ -1,4 +1,7 @@
-# MerryBot 配置说明
+---
+title: 配置说明
+nav_order: 2
+---
 
 MerryBot 的配置主要存放在 LiteDB 数据库 `plugin_data.db` 中（数据目录由环境变量 `MERRY_BOT` 指定，未设置时默认为程序工作目录下的 `data` 文件夹）。另有少量启动必需项放在 `setting.toml` 文件中。
 

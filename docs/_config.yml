@@ -1,0 +1,18 @@
+remote_theme: just-the-docs
+
+title: MerryBot
+description: 基于 NapCat 的 QQ 机器人框架，使用 C# 编写，支持插件化开发
+
+# 站点 URL（部署后由 GitHub Pages 决定，本地预览无需填写）
+# url: "https://57uu.github.io"
+# baseurl: "/MerryBot"
+
+# 所有页面默认使用 just-the-docs 布局
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+# 可选：深色模式（取消注释启用）
+# color_scheme: dark
