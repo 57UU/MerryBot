@@ -58,8 +58,8 @@ flowchart TD
 ## 生命周期（`HostLifecycle`）
 
 - 提供版本检测（git）、编译槽、重启、重载、退出能力
-- `CommonLib` 定义 `ExitCode`：101/102/103 等，宿主按退出码决定是否重启
-- 群聊中的 `/update`、`/reload` 由 `ViewVersion` 校验 `AuthorizedUser`；WebUI 不携带 QQ 身份，相关 API **没有内置鉴权**，只能监听可信地址（见 [WebUI 子系统](webui.html)）
+- `CommonLib` 定义 `ExitCode`：101/102/103 等；`launch.sh` 按退出码决定重建、重载或切槽
+- 群聊中的 `@机器人 /update`、`@机器人 /reload` 由 `ViewVersion` 校验 `AuthorizedUser`；WebUI 不携带 QQ 身份，相关 API **没有内置鉴权**，只能监听可信地址（见 [WebUI 子系统](webui.html)）
 
 ## 消息处理链
 
@@ -72,10 +72,10 @@ flowchart TD
     I --> E["ExtractMessage<br/>(提取文本 + 是否被 @)"]
     E --> P["ParseCommand<br/>(/ 开头的命令解析)"]
     P --> M["OnMessage<br/>(Logic.Message.cs)"]
-    M --> PL["按插件逐个调用 OnMessageAsync<br/>(支持拦截器)"]
+    M --> PL["按加载顺序投递 OnMessageAsync<br/>(支持拦截器，回调异步执行)"]
 ```
 
-群消息日志只保留 `群号|发送者|chain 长度` 摘要，避免完整消息链导致日志膨胀与隐私泄露。
+`Ingest` 立即返回本地化快照，并在后台入库；宿主投递插件回调后再异步预取回复、转发和媒体资源。两者都不阻塞消息分发。群消息日志只保留 `群号|发送者|chain 长度` 摘要，避免完整消息链导致日志膨胀与隐私泄露。
 
 ## 插件加载（`PluginInitializer`）
 

@@ -34,13 +34,13 @@ nav_order: 3
 
 ## 2. LLM Provider 插件（`llm-provider`）
 
-管理可执行 LLM Provider、模型和 API Key。**没有 TOML 配置项**，全部通过 WebUI「LLM 配置」页（`/llmproviders`）维护：
+管理可执行 LLM Provider、模型和 API Key。它没有 `IPluginConfig` 配置对象，全部通过 WebUI「LLM 配置」页（`/llmproviders`）维护：
 
 - Provider、模型和 Key 保存在 `plugin_data.db` 的 `llm-provider` 作用域集合中（providers / models / keys / meta），不在配置表中。
 - **Key 加密**：写入前使用本机 Data Protection 加密，密钥环位于数据目录下的 `llm-provider-key-ring/`；列表和 API 响应只会显示末四位及指纹（`…{末四位} ({SHA256 前 8 位})`），无法读取原文。Key 仅可写入，不会再次显示。
 - **models.dev 目录**：只提供目录元数据，缓存在机器人数据目录的 `models.dev-api.json`（首次自动下载，升级后沿用）。平时目录搜索优先使用本地缓存，点击「刷新 models.dev」才联网更新。导入时会带入模型上下文/输出上限和能力标签，但不会覆盖已手工设置的 API 地址、格式或启用状态。
 - **API 格式**：支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三种；请确认 API 地址与所选格式兼容并填入自己的 Key。
-- 默认模型：可在「LLM 配置」页指定；未指定时取第一个启用的模型。
+- 默认模型：可在「LLM 配置」页指定；未指定时取第一个启用的模型。Agent 始终优先使用自身 `LlmModel`，只有未传模型 ID 的调用才会使用此默认值。
 
 ## 3. 自动+1 插件（`auto-increase`）
 
@@ -52,12 +52,12 @@ nav_order: 3
 
 ## 4. 版本管理插件（`view-version`）
 
-管理员插件，命令：`/version` 查看当前版本；`/update [-f]` 检测并更新软件（`-f` 强制）；`/reload` 重载程序。`/update` 和 `/reload` 仅 `AuthorizedUser` 可用，其余用户会收到 `401 Unauthorized`。
+管理员插件。群聊命令均需 @机器人：`@机器人 /version` 查看当前版本；`@机器人 /update [-f]` 检测并更新软件（`-f` 即使无代码更新也继续构建）；`@机器人 /reload` 重载程序。`/update` 和 `/reload` 仅 `AuthorizedUser` 可用，其余用户会收到 `401 Unauthorized`。
 
 ## 5. 其他简单插件
 
 | 插件 | 命令 | 说明 |
 | --- | --- | --- |
-| `help` | `/help` | 列出已加载插件 |
-| `about` | `/about` | 查看关于信息 |
-| `herui-saying` | `/hr` | 获取一条"锐言锐语"（数据每小时自动更新） |
+| `help` | `@机器人 /help` | 列出已加载插件 |
+| `about` | 默认不加载 | 查看关于信息 |
+| `herui-saying` | 默认不加载 | 获取一条"锐言锐语"（数据每小时自动更新） |

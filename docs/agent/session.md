@@ -66,7 +66,7 @@ sequenceDiagram
 
 - **并发共享**：同一会话的并发调用共享同一个创建任务（`Lazy` + `ExecutionAndPublication`），只创建一次
 - **失败可重试**：初始化抛异常时移除缓存条目，下次调用重新走 creator
-- **`/new` → 重建**：`RebuildSessionAsync` 移除会话并**重新执行 create 回调**——重建 LLM 客户端与工具集（配置/技能变化即时生效），配合 `ResetAsync` 从空历史开始
+- **`@机器人 /new` → 重建**：`RebuildSessionAsync` 移除会话并**重新执行 create 回调**——重建 LLM 客户端与工具集（配置/技能变化即时生效），配合 `ResetAsync` 从空历史开始
 
 ## 会话恢复
 

@@ -13,17 +13,19 @@ flowchart LR
     N[NapCat] --> B[BotClient]
     B --> L[Logic]
     L --> I[MessageService.Ingest]
-    I --> D[消息入库与本地引用]
-    D --> P[按插件分发]
+    I --> D[MessageIngress 本地消息快照]
+    D --> P[解析并投递插件]
+    P --> R[MessageService.Prefetch 异步预取]
 ```
 
 ## 入站处理
 
 1. `BotClient` 收到群消息后触发 `OnGroupMessageReceived`。
 2. `Logic` 先检查群号是否在核心配置 `QqGroups` 中；未监听的群直接忽略。
-3. `MessageService.Ingest` 保存消息快照，提取图片、文件和合并转发的本地资源描述，并异步持久化。
+3. `MessageService.Ingest` 创建本地消息快照，提取图片、文件和合并转发的资源描述，并异步持久化。
 4. `ExtractMessage` 识别 @ 机器人的 `AtData`；`ParseCommand` 仅解析以 `/` 开头的文本。
-5. 宿主按加载顺序调用每个启用插件。某插件的拦截器返回 `true` 时，只跳过该插件本次处理。
+5. 宿主按加载顺序向每个启用插件投递异步回调。某插件的拦截器返回 `true` 时，只跳过该插件本次处理；插件异常不会影响其他插件。
+6. 分发后，`PrefetchAsync` 异步读取回复、合并转发和媒体资源；预取失败只记日志。
 
 插件收到的是克隆后的 `IReadOnlyList<TypedMessage>`，因此不应依赖对消息链的就地修改影响其他插件。
 

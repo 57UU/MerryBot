@@ -6,13 +6,13 @@ nav_order: 8
 
 # 能力管理
 
-`AgentPlugin` 在创建会话时组装工具；`AgentServicePlugin` 复用同一份 Skills、记忆和上下文快照服务给 Agent 与 WebUI。配置或 Skill 变化后执行 `/new` 会重建该会话并加载最新工具集。
+`AgentPlugin` 在创建会话时组装工具；`AgentServicePlugin` 复用同一份 Skills、记忆和上下文快照服务给 Agent 与 WebUI。配置变化后，可执行 `@机器人 /new` 重建该群会话并加载最新工具集。
 
 ## Skills
 
 Skills 位于 `<data>/skills/`。可上传单个 `.md`，或包含唯一 `SKILL.md` 的目录型 ZIP；WebUI 支持查看、上传、禁用和删除。禁用时入口文件追加 `.disable`，模型的 `skill_list` 与 `skill_read` 不会看到它。
 
-技能名称列表进入系统提示词；模型需显式调用 `skill_read` 读取内容。单次读取最多返回 20,000 个字符，避免占满上下文。
+创建会话时，启用技能名称列表会进入系统提示词；模型需显式调用 `skill_read` 读取内容。`skill_list` 与 `skill_read` 每次调用都会刷新技能快照，因此新上传或切换状态的技能无需重启即可读取；单次读取最多返回 20,000 个字符。
 
 ## 持久记忆与上下文
 

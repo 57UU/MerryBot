@@ -14,8 +14,9 @@ flowchart LR
 
     subgraph H["MerryBot 宿主"]
         B --> L["Logic<br/>装配、重连与分发"]
-        L -->|"入站群消息"| M["MessageService<br/>本地化、入库与预取"]
-        M -->|"MessageIngress"| P["插件系统<br/>加载、配置与依赖注入"]
+        L -->|"入站群消息"| M["MessageService<br/>本地化与异步入库"]
+        M --> I["MessageIngress<br/>本地消息快照"]
+        I -->|"同步分发"| P["插件系统<br/>加载、配置与依赖注入"]
         L -.->|"启动时装配"| P
         L --> C["ClockService<br/>持久化 cron 调度"]
         L --> W["WebUI<br/>Blazor 管理后台"]
@@ -47,7 +48,7 @@ flowchart LR
 
 - `AgentPlugin` 是接收群消息的普通插件；`AgentServicePlugin` 为 Agent 和 WebUI 提供 Skills、记忆和上下文快照服务。
 - 宿主提供定时任务调度器，Agent 只注册执行器；调度器的会话边界见 [定时任务](../agent/clock.html)。
-- 宿主负责 LLM Provider/Key 的存储与加密，Agent 通过 `LlmClient`/`LlmBackend` 发起请求。
+- `LlmProviderPlugin` 负责 Provider/Key 的存储与加密；Agent 通过 `LlmClient`/`LlmBackend` 发起请求。
 
 ## 相关页面
 

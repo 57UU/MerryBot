@@ -14,11 +14,11 @@ Linux 部署以 `launch.sh` 为入口。它是常驻父进程，负责运行发�
 | --- | --- | --- |
 | 正常启动 | `./launch.sh` | 启动活动槽；首次运行会先构建 |
 | 强制重建 | `./launch.sh -f` | 重建活动槽后启动 |
-| 不编译重启 | WebUI「重载程序」或群聊 `/reload` | 当前槽直接再次启动 |
+| 不编译重启 | WebUI「重载程序」或群聊 `@机器人 /reload` | 当前槽直接再次启动 |
 | 编译后重启 | WebUI「重启程序」 | 重建当前槽后启动 |
-| 拉取并更新 | WebUI「更新版本」或授权用户执行 `/update [-f]` | 构建备用槽并切换 |
+| 拉取并更新 | WebUI「更新版本」或授权用户执行 `@机器人 /update [-f]` | 构建备用槽并切换 |
 
-群聊的 `/update`、`/reload` 会校验 `AuthorizedUser`。WebUI 没有身份鉴别，只能由可信本机用户访问；访问边界见[日志与数据](logs-data.html)。
+群聊的 `@机器人 /update`、`@机器人 /reload` 会校验 `AuthorizedUser`。WebUI 没有身份鉴别，只能由可信本机用户访问；访问边界见[日志与数据](logs-data.html)。
 
 ## `launch.sh` 做什么
 
@@ -75,7 +75,7 @@ stateDiagram-v2
 ## 边界
 
 
-`/update [-f]` 与 WebUI 更新共用 `HostLifecycle`：获取 git 更新、构建备用槽、切换活动槽并请求 103 重启。`-f` 传给更新逻辑，用于强制执行更新流程。
+`@机器人 /update [-f]` 与 WebUI 更新共用 `HostLifecycle`：获取 git 更新、构建备用槽、切换活动槽并请求 103 重启。`-f` 传给更新逻辑，即使未拉到新提交也继续构建和切槽。
 
 ## 相关页面
 

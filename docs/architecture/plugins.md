@@ -6,7 +6,7 @@ nav_order: 4
 
 # 插件子系统
 
-MerryBot 从 `Plugin` 所在程序集反射发现带 `[PluginTag]` 的类型。每个插件有独立的配置和数据 scope；单个插件的构造或依赖失败不会阻止其他插件加载。
+MerryBot 从 `Plugin` 所在程序集反射发现带 `[PluginTag]` 的类型。插件可声明独立配置，且各自拥有数据 scope；单个插件的构造或依赖失败不会阻止其他插件加载。
 
 ## 基础设施
 
@@ -17,7 +17,7 @@ MerryBot 从 `Plugin` 所在程序集反射发现带 `[PluginTag]` 的类型。�
 | `_common.cs` | `MessageContext`、`SessionKey` |
 | `_interface.event.cs` | OneBot 通知事件订阅 |
 
-`Plugin` 暴露 `Logger`、`GroupId`、`Interop` 和 `Channel`。`OnMessageAsync` 接收 @ 状态、已解析的 `/` 命令、克隆后的消息链和 `MessageContext`；`OnLoaded` 用于依赖其他插件的初始化；`Dispose` 在关闭时按依赖逆序调用。当前没有运行时停用入口，`IsEnable` 默认始终为 `true`。
+`Plugin` 暴露 `Logger`、`GroupId`、`Interop` 和 `Channel`。`OnMessageAsync` 接收 @ 状态、已解析的 `/` 命令、克隆后的消息链和 `MessageContext`；宿主按加载顺序投递回调，但不等待前一插件完成。`OnLoaded` 用于依赖其他插件的初始化；`Dispose` 在关闭时按依赖逆序调用。当前没有运行时停用入口，`IsEnable` 默认始终为 `true`。
 
 ## 互操作与生命周期
 
@@ -30,6 +30,8 @@ MerryBot 从 `Plugin` 所在程序集反射发现带 `[PluginTag]` 的类型。�
 构造函数可注入 `PluginInterop`、其他插件实例和 `IPluginConfig` 实现。不要在构造函数中调用依赖其他插件的互操作能力；所有插件加入列表后才会触发 `OnLoaded`。
 
 ## 内置插件
+
+下表中的群聊命令均需 @机器人；`about` 和 `herui-saying` 标记为忽略，默认不会加载。
 
 | Id | 类型 | 职责 |
 | --- | --- | --- |

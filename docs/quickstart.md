@@ -49,7 +49,7 @@ dotnet run --project MerryBot/MerryBot.csproj
    | ---------------- | ------------------------------------------------------------------- |
    | `NapcatServer`   | NapCat WebSocket 地址                                               |
    | `NapcatToken`    | NapCat 认证 Token                                                   |
-   | `QqGroups`       | 要监听的 QQ 群号列表（可以转到'群聊管理页面'页面可视化编辑）        |
+   | `QqGroups`       | 要监听的 QQ 群号列表（也可在「群聊管理」页可视化维护）               |
    | `AuthorizedUser` | 授权用户 QQ 号（Bot 管理员，`/update`、`/reload` 等高危操作会校验） |
 
 4. 保存后按提示使用侧边栏底部的「**重载程序**」或「**重启程序**」生效
@@ -79,8 +79,8 @@ dotnet run --project MerryBot/MerryBot.csproj
 
 - `@机器人 /new [内容]` 或 `@机器人 #新对话 [内容]` — 清空上下文开新对话
 - `@机器人 /compact [主题]` — 手动压缩上下文
-- `/help` — 查看已加载插件
-- `/version` — 查看当前版本
+- `@机器人 /help` — 查看已加载插件
+- `@机器人 /version` — 查看当前版本
 
 ## 常见问题
 
@@ -117,6 +117,6 @@ sudo fc-cache -fv
 ```
 
 **如何更新版本？**
-管理员在群里执行 `@机器人 /update`，或直接使用 WebUI 左下角的「更新版本」按钮。
+管理员在群里执行 `@机器人 /update [-f]`，或直接使用 WebUI 左下角的「更新版本」按钮。
 
 WebUI 访问边界、日志和更新流程见[运行维护](operations/index.html)。
