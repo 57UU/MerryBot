@@ -1,7 +1,7 @@
 ---
 title: API 参考
 parent: 插件开发
-nav_order: 3
+nav_order: 4
 ---
 
 ## 父类 API / 属性

@@ -1,7 +1,7 @@
 ---
 title: 存储与工具
 parent: 插件开发
-nav_order: 4
+nav_order: 5
 ---
 
 ## 插件存储 - PluginStorage

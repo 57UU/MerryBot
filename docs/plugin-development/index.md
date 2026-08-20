@@ -8,7 +8,8 @@ nav_order: 3
 
 | 文档 | 内容 |
 | --- | --- |
-| [生命周期与配置](lifecycle.html) | 标签、构造注入、配置、`OnLoaded` 和卸载 |
+| [生命周期](lifecycle.html) | 标签、构造注入、`OnLoaded` 和卸载 |
+| [配置与 WebUI](configuration.html) | 自动配置加载、反射表单与保存语义 |
 | [示例与事件](example.html) | 最小消息插件与通知事件 |
 | [API 参考](api.html) | `Plugin`、`PluginInterop` 和拦截器 |
 | [存储与工具](storage.html) | 对象存储、scoped 数据库与日志 |

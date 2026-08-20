@@ -1,7 +1,7 @@
 ---
 title: 示例与事件
 parent: 插件开发
-nav_order: 2
+nav_order: 3
 ---
 
 ## 示例

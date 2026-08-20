@@ -48,4 +48,5 @@ dotnet run --project MerryBot/MerryBot.csproj
 
 - [快速开始](../quickstart.html) — 首次连接和模型配置
 - [核心配置](../configuration/core.html) — 连接与资源限制
-- [更新、日志与数据](maintenance.html) — 维护操作
+- [更新与重启](maintenance.html) — 双槽更新与维护操作
+- [日志与数据](logs-data.html) — 日志、备份与访问边界
