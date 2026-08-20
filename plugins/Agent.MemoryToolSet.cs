@@ -33,7 +33,7 @@ public sealed class MemoryToolSet : ToolSet
 
     private static string BuildPrompt(string? promptInjection)
     {
-        var builder = new StringBuilder("你拥有当前会话独立的持久记忆。遇到值得在后续对话中保留的用户偏好、重要事实或进度时，使用 save_memory 保存；需要具体内容时，使用 query_memory 按 key 读取。index 中的内容仅供参考，不可修改。");
+        var builder = new StringBuilder("你拥有当前会话独立的持久记忆。遇到值得在后续对话中保留的用户偏好、重要事实或进度时，使用 save_memory 保存；需要具体内容时，使用 query_memory 按 key 读取。");
         if (!string.IsNullOrWhiteSpace(promptInjection))
         {
             builder.AppendLine();

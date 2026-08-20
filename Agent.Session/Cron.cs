@@ -31,7 +31,7 @@ public sealed class Cron : ToolSet
         _sessionId = sessionId;
         _service = service ?? throw new ArgumentNullException(nameof(service));
 
-        var builder = new ToolSetBridge.Builder(BuildPrompt());
+        var builder = new ToolSetBridge.Builder();
         builder.AddFunction<ClockCreateArgs>(
             "clock_create",
             "创建定时任务。cron 使用 Linux 五字段格式：分 时 日 月 周；run_once=true 时只执行下一次匹配。",
@@ -65,7 +65,7 @@ public sealed class Cron : ToolSet
         => _bridge.InvokeAsync(cancellationToken, toolCall, onIterationAdd);
 
     public override string? Prompt() =>
-        "clock工具属于当前会话；cron 使用 Linux 五字段格式（分 时 日 月 周），默认时区为 Asia/Shanghai，默认超时为 600 秒。";
+        "clock 工具属于当前会话；cron 使用 Linux 五字段格式（分 时 日 月 周），如不指定 timezone 则按 Asia/Shanghai 解析，默认超时 600 秒。clock_update 只修改实际传入的字段，未传入的保持不变；clock_log 的状态可使用 running、succeeded、timedOut、failed、skipped、cancelled。";
 
     private async Task<string> CreateAsync(ClockCreateArgs args)
     {
@@ -159,9 +159,6 @@ public sealed class Cron : ToolSet
 
     private static string Serialize(object value) => JsonSerializer.Serialize(value, JsonOptions);
 
-    private static string BuildPrompt() =>
-        "clock_update 只修改实际传入的字段；clock_log 的状态可使用 running、succeeded、timedOut、failed、skipped、cancelled。";
-
     private sealed class ClockCreateArgs
     {
         [Description("Linux 五字段 Cron 表达式：分 时 日 月 周，例如 0 9 * * 1-5")]
@@ -207,7 +204,7 @@ public sealed class Cron : ToolSet
         [Description("新的触发对象")]
         public ClockTrigger? trigger { get; set; }
 
-        [Description("新的时区")]
+        [Description("新的时区，如不指定则保持原有时区")]
         public string? timezone { get; set; }
 
         [Description("是否只执行下一次匹配")]
