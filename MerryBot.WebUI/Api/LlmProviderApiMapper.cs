@@ -56,7 +56,8 @@ public static class LlmProviderApiMapper
                 (LlmModelCapabilities)request.Capabilities,
                 request.Enabled,
                 request.ReasoningEffort,
-                request.EnablePromptCache), cancellationToken);
+                request.EnablePromptCache,
+                request.ReasoningOptions?.Select(o => new LlmReasoningOption(o.Type, o.Values)).ToList()), cancellationToken);
             return Results.NoContent();
         });
         // 模型 ID 可能含 "/"（catch-all 不支持后跟字面量），删除走 query 参数（服务端自动解码）
@@ -107,7 +108,8 @@ public static class LlmProviderApiMapper
             source.Enabled,
             source.CatalogUpdatedAtUtc,
             source.ReasoningEffort,
-            source.EnablePromptCache);
+            source.EnablePromptCache,
+            source.ReasoningOptions?.Select(o => new LlmReasoningOptionDto(o.Type, o.Values)).ToList());
 
     private static LlmKeyDto ToDto(LlmProviderConfigurationKey source)
         => new(source.Id, source.Name, source.Fingerprint, source.Priority, source.Enabled, source.UpdatedAtUtc);

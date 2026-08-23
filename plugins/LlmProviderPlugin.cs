@@ -13,11 +13,8 @@ namespace BotPlugin;
 /// 外部模型目录由 WebUI 查询；插件只保存已解析的本地配置。
 /// </summary>
 [PluginTag("llm-provider", "LLM Provider", "管理 LLM Provider、模型和 Key", type: PluginType.Background)]
-public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProviderManagementService
+public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProviderManagementService
 {
-    private const string DefaultModelMetaId = "default-model";
-    private const string SchemaVersionMetaId = "schema-version";
-    private const string SchemaVersion = "1";
     private readonly ILiteCollectionAsync<ProviderRecord> providers;
     private readonly ILiteCollectionAsync<ModelRecord> models;
     private readonly ILiteCollectionAsync<KeyRecord> keys;
@@ -110,22 +107,6 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
         return new ResolvedLlmClient(ToDescriptor(model), client);
     }
 
-    private async Task EnsureIndexesAsync()
-    {
-        await providers.EnsureIndexAsync(item => item.Id);
-        await models.EnsureIndexAsync(item => item.ProviderId);
-        await keys.EnsureIndexAsync(item => item.ProviderId);
-        var schema = await meta.FindByIdAsync(SchemaVersionMetaId);
-        if (schema == null)
-        {
-            await meta.UpsertAsync(new MetaRecord { Id = SchemaVersionMetaId, Value = SchemaVersion });
-        }
-        else if (schema.Value != SchemaVersion)
-        {
-            throw new InvalidOperationException($"llm-provider 数据库版本不受支持: {schema.Value}");
-        }
-    }
-
     public async Task<LlmProviderConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -155,7 +136,8 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
                         model.Enabled,
                         model.CatalogUpdatedAtUtc,
                         model.ReasoningEffort,
-                        model.EnablePromptCache))
+                        model.EnablePromptCache,
+                        ToContractOptions(model.ReasoningOptions)))
                     .ToList(),
                 allKeys.Where(key => key.ProviderId == provider.Id)
                     .OrderBy(key => key.Priority)
@@ -213,6 +195,7 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
         model.CatalogProviderId = catalogProviderId;
         model.CatalogModelId = catalogModelId;
         model.CatalogUpdatedAtUtc = command.CatalogUpdatedAtUtc;
+        model.ReasoningOptions = NormalizeReasoningOptions(command.ReasoningOptions);
         model.Enabled = command.Enabled ?? model.Enabled || model.CreatedAtUtc == now;
         model.UpdatedAtUtc = now;
         await models.UpsertAsync(model);
@@ -267,7 +250,8 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
         model.ContextLength = command.ContextLength;
         model.MaxOutputTokens = command.MaxOutputTokens;
         model.Capabilities = command.Capabilities;
-        model.ReasoningEffort = NormalizeReasoningEffort(command.ReasoningEffort);
+        model.ReasoningOptions = NormalizeReasoningOptions(command.ReasoningOptions);
+        model.ReasoningEffort = NormalizeReasoningEffort(command.ReasoningEffort, model.ReasoningOptions);
         model.EnablePromptCache = command.EnablePromptCache;
         model.Enabled = command.Enabled;
         model.UpdatedAtUtc = now;
@@ -370,7 +354,39 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
     }
 
     private static LlmModelDescriptor ToDescriptor(ModelRecord source)
-        => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort);
+        => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort, ToContractOptions(source.ReasoningOptions));
+
+    private static IReadOnlyList<LlmReasoningOption>? ToContractOptions(List<StoredReasoningOption>? source)
+        => source == null || source.Count == 0
+            ? null
+            : source.Select(item => new LlmReasoningOption(item.Type, item.Values == null || item.Values.Count == 0 ? null : item.Values.ToList())).ToList();
+
+    private static List<StoredReasoningOption> NormalizeReasoningOptions(IReadOnlyList<LlmReasoningOption>? source)
+    {
+        if (source == null || source.Count == 0) return [];
+        var result = new List<StoredReasoningOption>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in source)
+        {
+            if (item == null) continue;
+            var type = item.Type?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(type) || (type != "toggle" && type != "effort")) continue;
+            if (!seen.Add(type)) continue;
+            List<string>? values = null;
+            if (item.Values != null && item.Values.Count > 0)
+            {
+                var normalized = item.Values
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Select(v => v.Trim().ToLowerInvariant())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (normalized.Count > 0) values = normalized;
+            }
+            if (type == "toggle") values = null;
+            result.Add(new StoredReasoningOption { Type = type, Values = values });
+        }
+        return result;
+    }
 
     private static string MakeLocalModelId(string providerId, string modelId)
         => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
@@ -394,10 +410,19 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
         throw new NotSupportedException($"不支持的 API 格式: {value}");
     }
 
-    private static string? NormalizeReasoningEffort(string? value)
+    private static string? NormalizeReasoningEffort(string? value, List<StoredReasoningOption>? options = null)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var normalized = value.Trim().ToLowerInvariant();
+        // 若模型声明了 effort 的可选档位，则强制在 Values 内
+        if (options != null && options.Count > 0)
+        {
+            var effort = options.FirstOrDefault(o => o.Type == "effort");
+            if (effort?.Values != null && effort.Values.Count > 0)
+            {
+                return effort.Values.Any(v => string.Equals(v, normalized, StringComparison.OrdinalIgnoreCase)) ? normalized : null;
+            }
+        }
         return normalized is "low" or "medium" or "high" ? normalized : null;
     }
 
@@ -430,58 +455,6 @@ public sealed class LlmProviderPlugin : Plugin, ILlmProviderRegistry, ILlmProvid
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret))).ToLowerInvariant();
         var tail = secret.Length <= 4 ? secret : secret[^4..];
         return $"…{tail} ({hash[..8]})";
-    }
-
-    private sealed class ProviderRecord
-    {
-        [BsonId] public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string BaseUrl { get; set; } = string.Empty;
-        public LlmApiFormat ApiFormat { get; set; }
-        public bool Enabled { get; set; } = true;
-        public string? CatalogProviderId { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public DateTimeOffset UpdatedAtUtc { get; set; }
-    }
-
-    private sealed class ModelRecord
-    {
-        [BsonId] public string Id { get; set; } = string.Empty;
-        public string ProviderId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string RemoteModelId { get; set; } = string.Empty;
-        public int ContextLength { get; set; }
-        public int MaxOutputTokens { get; set; }
-        public LlmModelCapabilities Capabilities { get; set; }
-        /// <summary>深度思考档位（low/medium/high），空表示不开启；agent 生成时透传 LlmOptions.ReasoningEffort</summary>
-        public string? ReasoningEffort { get; set; }
-        /// <summary>anthropic 格式启用显式 prompt 缓存（cache_control 断点）；其他格式忽略</summary>
-        public bool EnablePromptCache { get; set; }
-        public bool Enabled { get; set; } = true;
-        public string? CatalogProviderId { get; set; }
-        public string? CatalogModelId { get; set; }
-        public DateTimeOffset? CatalogUpdatedAtUtc { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public DateTimeOffset UpdatedAtUtc { get; set; }
-    }
-
-    private sealed class KeyRecord
-    {
-        [BsonId] public string Id { get; set; } = string.Empty;
-        public string ProviderId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string ProtectedSecret { get; set; } = string.Empty;
-        public string Fingerprint { get; set; } = string.Empty;
-        public int Priority { get; set; }
-        public bool Enabled { get; set; } = true;
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public DateTimeOffset UpdatedAtUtc { get; set; }
-    }
-
-    private sealed class MetaRecord
-    {
-        [BsonId] public string Id { get; set; } = string.Empty;
-        public string Value { get; set; } = string.Empty;
     }
 
 }

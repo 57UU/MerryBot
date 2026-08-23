@@ -91,7 +91,7 @@
                 {
                     <div class="table-scroll">
                         <table class="table">
-                            <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th></th></tr></thead>
+                            <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th>推理选项</th><th></th></tr></thead>
                             <tbody>
                             @foreach (var model in CatalogModels)
                             {
@@ -100,6 +100,7 @@
                                     <td>@FormatLimit(model.ContextLength)</td>
                                     <td>@FormatLimit(model.MaxOutputTokens)</td>
                                     <td>@model.Capabilities</td>
+                                    <td><small>@FormatReasoningOptions(model.ReasoningOptions)</small></td>
                                     <td>
                                         <button class="btn btn-primary" @onclick="() => ImportAsync(model)">添加模型</button>
                                         <button class="btn btn-secondary" @onclick="() => FillManualFormAsync(model)">填入下方表格</button>
@@ -173,14 +174,31 @@
                     <input class="form-check-input" type="checkbox" id="editModelEnabled" @bind="EditModelEnabled" />
                     <label class="form-label" for="editModelEnabled" style="margin-bottom:0">启用此模型</label>
                 </div>
+                <label class="mt-2">推理选项（Reasoning Options）</label>
+                <small class="text-muted-custom d-block">直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
+                @for (var _roIdx = 0; _roIdx < EditReasoningOptions.Count; _roIdx++)
+                {
+                    var _ro = EditReasoningOptions[_roIdx];
+                    var _idx = _roIdx;
+                    <div class="d-flex gap-2 mt-1" @key="_idx">
+                        <select class="form-control" style="max-width:160px" value="@_ro.Type" @onchange="e => OnReasoningOptionTypeChanged(_idx, e.Value?.ToString())">
+                            <option value="toggle">toggle（开关）</option>
+                            <option value="effort">effort（档位）</option>
+                        </select>
+                        <input class="form-control" placeholder="可选值，逗号分隔，如 low, medium, high" value="@_ro.ValuesText" @oninput="e => OnReasoningOptionValuesChanged(_idx, e.Value?.ToString())" disabled="@(_ro.Type == "toggle")" />
+                        <button type="button" class="btn btn-danger" @onclick="() => RemoveReasoningOption(_idx)">删除</button>
+                    </div>
+                }
+                <button type="button" class="btn btn-secondary mt-1" @onclick="AddReasoningOption">添加推理选项</button>
                 <label class="mt-2">思维强度（Reasoning Effort）</label>
                 <select class="form-control" @bind="EditModelReasoningEffort">
                     <option value="">不开启</option>
-                    <option value="low">低</option>
-                    <option value="medium">中</option>
-                    <option value="high">高</option>
+                    @foreach (var _eff in GetReasoningEffortOptions())
+                    {
+                        <option value="@_eff">@FormatReasoningEffort(_eff)</option>
+                    }
                 </select>
-                <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort</small>
+                <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
                     <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
@@ -251,6 +269,7 @@
                                     <code>@model.Id</code> → <code>@model.RemoteModelId</code>
                                     （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
                                     <small class="text-muted-custom ms-2">@FormatCapabilities(model.Capabilities)</small>
+                                    <small class="text-muted-custom ms-2">@FormatReasoningOptions(model.ReasoningOptions)</small>
                                     @if (!model.Enabled)
                                     {
                                         <span class="badge ms-2">禁用</span>
@@ -319,6 +338,12 @@
     private bool EditModelReasoningCap { get; set; }
     private bool EditModelStructuredOutput { get; set; }
     private bool EditModelEnabled { get; set; } = true;
+    private List<EditReasoningOption> EditReasoningOptions { get; set; } = [];
+    private sealed class EditReasoningOption
+    {
+        public string Type { get; set; } = "toggle";
+        public string ValuesText { get; set; } = string.Empty;
+    }
     private string EditModelReasoningEffort { get; set; } = string.Empty;
     private bool EditModelEnablePromptCache { get; set; }
     private ElementReference ManualFormSection;
@@ -524,6 +549,7 @@
         EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
         ApplyCapabilitiesFromString(model.Capabilities);
         EditModelEnabled = true;
+        ApplyReasoningOptions(model.ReasoningOptions);
         EditModelReasoningEffort = string.Empty;
         EditModelEnablePromptCache = false;
         await ScrollToManualFormAsync();
@@ -540,6 +566,7 @@
         EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
         ApplyCapabilitiesFromString(model.Capabilities);
         EditModelEnabled = model.Enabled;
+        ApplyReasoningOptions(model.ReasoningOptions);
         EditModelReasoningEffort = model.ReasoningEffort ?? string.Empty;
         EditModelEnablePromptCache = model.EnablePromptCache;
         await ScrollToManualFormAsync();
@@ -611,7 +638,7 @@
             Error = null;
             await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, BuildCapabilities(), EditModelEnabled, EditModelReasoningEffort, EditModelEnablePromptCache));
+                    EditModelContextLength, EditModelMaxOutput, BuildCapabilities(), EditModelEnabled, EditModelReasoningEffort, EditModelEnablePromptCache, BuildReasoningOptions()));
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -703,6 +730,89 @@
             .Replace("ToolCalls", "工具")
             .Replace("Reasoning", "推理")
             .Replace("StructuredOutput", "结构化");
+    }
+
+    private void AddReasoningOption()
+    {
+        if (EditReasoningOptions.Count >= 2) return;
+        var hasToggle = EditReasoningOptions.Any(o => o.Type == "toggle");
+        var hasEffort = EditReasoningOptions.Any(o => o.Type == "effort");
+        if (!hasToggle) EditReasoningOptions.Add(new EditReasoningOption { Type = "toggle" });
+        else if (!hasEffort) EditReasoningOptions.Add(new EditReasoningOption { Type = "effort" });
+    }
+
+    private void RemoveReasoningOption(int index)
+    {
+        if (index < 0 || index >= EditReasoningOptions.Count) return;
+        EditReasoningOptions.RemoveAt(index);
+    }
+
+    private void OnReasoningOptionTypeChanged(int index, string? value)
+    {
+        if (index < 0 || index >= EditReasoningOptions.Count) return;
+        var normalized = value?.Trim().ToLowerInvariant() == "effort" ? "effort" : "toggle";
+        if (EditReasoningOptions.Where((o, i) => i != index).Any(o => o.Type == normalized)) return;
+        EditReasoningOptions[index].Type = normalized;
+        if (normalized == "toggle") EditReasoningOptions[index].ValuesText = string.Empty;
+    }
+
+    private void OnReasoningOptionValuesChanged(int index, string? value)
+    {
+        if (index < 0 || index >= EditReasoningOptions.Count) return;
+        EditReasoningOptions[index].ValuesText = value ?? string.Empty;
+    }
+
+    private void ApplyReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
+    {
+        EditReasoningOptions = [];
+        if (options == null || options.Count == 0) return;
+        foreach (var o in options)
+        {
+            if (o == null || string.IsNullOrWhiteSpace(o.Type)) continue;
+            var type = o.Type.Trim().ToLowerInvariant();
+            if (type != "toggle" && type != "effort") continue;
+            if (EditReasoningOptions.Any(x => x.Type == type)) continue;
+            var valuesText = o.Values == null || o.Values.Count == 0 ? string.Empty : string.Join(", ", o.Values);
+            EditReasoningOptions.Add(new EditReasoningOption { Type = type, ValuesText = type == "toggle" ? string.Empty : valuesText });
+        }
+    }
+
+    private IReadOnlyList<LlmReasoningOptionDto>? BuildReasoningOptions()
+    {
+        if (EditReasoningOptions.Count == 0) return null;
+        var result = new List<LlmReasoningOptionDto>();
+        foreach (var o in EditReasoningOptions)
+        {
+            var type = o.Type?.Trim().ToLowerInvariant();
+            if (type != "toggle" && type != "effort") continue;
+            IReadOnlyList<string>? values = null;
+            if (type == "effort")
+            {
+                var parsed = (o.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (parsed.Count > 0) values = parsed;
+            }
+            result.Add(new LlmReasoningOptionDto(type, values));
+        }
+        return result.Count == 0 ? null : result;
+    }
+
+    private IEnumerable<string> GetReasoningEffortOptions()
+    {
+        var effort = EditReasoningOptions.FirstOrDefault(o => o.Type == "effort");
+        if (effort != null)
+        {
+            var parsed = (effort.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (parsed.Count > 0) return parsed;
+        }
+        return ["low", "medium", "high"];
+    }
+
+    private static string FormatReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
+    {
+        if (options == null || options.Count == 0) return "—";
+        return string.Join(" · ", options.Select(o => o.Type == "toggle" ? "toggle" : $"effort: {string.Join(", ", o.Values ?? [])}"));
     }
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";

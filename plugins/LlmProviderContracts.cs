@@ -11,6 +11,8 @@ public enum LlmApiFormat
     AnthropicMessages,
 }
 
+public sealed record LlmReasoningOption(string Type, IReadOnlyList<string>? Values);
+
 /// <summary>本地模型配置的安全描述，不包含任何 API Key。</summary>
 public sealed record LlmModelDescriptor(
     string Id,
@@ -21,7 +23,8 @@ public sealed record LlmModelDescriptor(
     int MaxOutputTokens,
     LlmModelCapabilities Capabilities,
     bool Enabled,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    IReadOnlyList<LlmReasoningOption>? ReasoningOptions = null);
 
 /// <summary>由 Provider 与模型配置解析出的可直接使用客户端。</summary>
 public sealed record ResolvedLlmClient(
@@ -80,7 +83,8 @@ public sealed record LlmProviderConfigurationModel(
     bool Enabled,
     DateTimeOffset? CatalogUpdatedAtUtc,
     string? ReasoningEffort,
-    bool EnablePromptCache);
+    bool EnablePromptCache,
+    IReadOnlyList<LlmReasoningOption>? ReasoningOptions = null);
 
 public sealed record LlmProviderConfigurationKey(
     string Id,
@@ -107,7 +111,8 @@ public sealed record LlmProviderCatalogImportCommand(
     string? BaseUrl,
     string? ApiFormat,
     string? ApiKey,
-    bool? Enabled);
+    bool? Enabled,
+    IReadOnlyList<LlmReasoningOption>? ReasoningOptions = null);
 
 public sealed record LlmProviderSaveCommand(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
 
@@ -120,6 +125,7 @@ public sealed record LlmModelSaveCommand(
     LlmModelCapabilities Capabilities,
     bool Enabled,
     string? ReasoningEffort = null,
-    bool EnablePromptCache = false);
+    bool EnablePromptCache = false,
+    IReadOnlyList<LlmReasoningOption>? ReasoningOptions = null);
 
 public sealed record LlmProviderKeySaveCommand(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);

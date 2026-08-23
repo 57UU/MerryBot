@@ -105,7 +105,8 @@ internal sealed class ModelsDevCatalogService
             request.BaseUrl,
             request.ApiFormat,
             request.ApiKey,
-            request.Enabled);
+            request.Enabled,
+            ToPluginReasoningOptions(model));
     }
 
     private async Task EnsureCatalogAsync(bool force, CancellationToken cancellationToken)
@@ -220,7 +221,8 @@ internal sealed class ModelsDevCatalogService
             model.Limit?.Output ?? 0,
             ToCapabilities(model).ToString(),
             model.ToolCall,
-            model.Reasoning);
+            model.Reasoning,
+            ToReasoningOptions(model));
 
     private static LlmModelCapabilities ToCapabilities(ModelInfo model)
     {
@@ -236,6 +238,24 @@ internal sealed class ModelsDevCatalogService
         if (model.StructuredOutput)
             capabilities |= LlmModelCapabilities.StructuredOutput;
         return capabilities;
+    }
+
+    private static IReadOnlyList<LlmReasoningOptionDto>? ToReasoningOptions(ModelInfo model)
+    {
+        if (model.ReasoningOptions == null || model.ReasoningOptions.Count == 0) return null;
+        return model.ReasoningOptions
+            .Where(o => o != null && !string.IsNullOrWhiteSpace(o.Type))
+            .Select(o => new LlmReasoningOptionDto(o.Type.Trim().ToLowerInvariant(), o.Values == null || o.Values.Count == 0 ? null : o.Values.Select(v => v.Trim().ToLowerInvariant()).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
+            .ToList();
+    }
+
+    private static IReadOnlyList<LlmReasoningOption>? ToPluginReasoningOptions(ModelInfo model)
+    {
+        if (model.ReasoningOptions == null || model.ReasoningOptions.Count == 0) return null;
+        return model.ReasoningOptions
+            .Where(o => o != null && !string.IsNullOrWhiteSpace(o.Type))
+            .Select(o => new LlmReasoningOption(o.Type.Trim().ToLowerInvariant(), o.Values == null || o.Values.Count == 0 ? null : o.Values.Select(v => v.Trim().ToLowerInvariant()).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
+            .ToList();
     }
 
     private static string RequireId(string value, string parameterName)

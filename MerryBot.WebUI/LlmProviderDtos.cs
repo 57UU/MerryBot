@@ -11,6 +11,7 @@ public sealed record LlmProviderDto(
     string? CatalogProviderId,
     IReadOnlyList<LlmModelDto> Models,
     IReadOnlyList<LlmKeyDto> Keys);
+public sealed record LlmReasoningOptionDto(string Type, IReadOnlyList<string>? Values);
 public sealed record LlmModelDto(
     string Id,
     string ProviderId,
@@ -22,7 +23,8 @@ public sealed record LlmModelDto(
     bool Enabled,
     DateTimeOffset? CatalogUpdatedAtUtc,
     string? ReasoningEffort,
-    bool EnablePromptCache);
+    bool EnablePromptCache,
+    IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions);
 public sealed record LlmKeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
 public sealed record LlmCatalogModelDto(
     string ProviderId,
@@ -34,11 +36,12 @@ public sealed record LlmCatalogModelDto(
     int MaxOutputTokens,
     string Capabilities,
     bool ToolCall,
-    bool Reasoning);
+    bool Reasoning,
+    IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions);
 public sealed record LlmCatalogProviderDto(string Id, string Name, string? SuggestedBaseUrl, int ModelCount);
 public sealed record LlmCatalogStatusDto(string Source, DateTimeOffset? UpdatedAtUtc, string? RefreshError);
 
 public sealed record LlmCatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
 public sealed record LlmSaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
 public sealed record LlmSaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-public sealed record LlmSaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false);
+public sealed record LlmSaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false, IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions = null);
