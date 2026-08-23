@@ -71,6 +71,15 @@
                     <small class="text-muted-custom">默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。</small>
                 </div>
                 <div class="mb-3-custom">
+                    <label>API 格式</label>
+                    <select class="form-control" @bind="ImportApiFormat">
+                        <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
+                        <option value="openai-responses">OpenAI Responses（/responses）</option>
+                        <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
+                    </select>
+                    <small class="text-muted-custom">按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small>
+                </div>
+                <div class="mb-3-custom">
                     <label>添加模型时一并保存的 API Key（可留空，随后单独添加）</label>
                     <input class="form-control" type="password" @bind="ImportApiKey" autocomplete="new-password" />
                 </div>
@@ -138,6 +147,32 @@
                 <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
                 <label class="mt-2">最大输出</label>
                 <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
+                <label class="mt-2">能力（Capabilities）</label>
+                <small class="text-muted-custom d-block">Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="capImageInput" @bind="EditModelImageInput" />
+                    <label class="form-label" for="capImageInput" style="margin-bottom:0">视觉输入（ImageInput）</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="capAttachment" @bind="EditModelAttachmentInput" />
+                    <label class="form-label" for="capAttachment" style="margin-bottom:0">附件输入（AttachmentInput）</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="capToolCalls" @bind="EditModelToolCalls" />
+                    <label class="form-label" for="capToolCalls" style="margin-bottom:0">工具调用（ToolCalls）</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="capReasoning" @bind="EditModelReasoningCap" />
+                    <label class="form-label" for="capReasoning" style="margin-bottom:0">推理（Reasoning）</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="capStructured" @bind="EditModelStructuredOutput" />
+                    <label class="form-label" for="capStructured" style="margin-bottom:0">结构化输出（StructuredOutput）</label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="editModelEnabled" @bind="EditModelEnabled" />
+                    <label class="form-label" for="editModelEnabled" style="margin-bottom:0">启用此模型</label>
+                </div>
                 <label class="mt-2">思维强度（Reasoning Effort）</label>
                 <select class="form-control" @bind="EditModelReasoningEffort">
                     <option value="">不开启</option>
@@ -215,6 +250,11 @@
                                 <li @key="model.Id">
                                     <code>@model.Id</code> → <code>@model.RemoteModelId</code>
                                     （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
+                                    <small class="text-muted-custom ms-2">@FormatCapabilities(model.Capabilities)</small>
+                                    @if (!model.Enabled)
+                                    {
+                                        <span class="badge ms-2">禁用</span>
+                                    }
                                     @if (!string.IsNullOrEmpty(model.ReasoningEffort))
                                     {
                                         <span class="badge ms-2">思维 @FormatReasoningEffort(model.ReasoningEffort)</span>
@@ -254,6 +294,7 @@
     private string CatalogModelQuery { get; set; } = string.Empty;
     private string ImportApiKey { get; set; } = string.Empty;
     private string ImportBaseUrl { get; set; } = string.Empty;
+    private string ImportApiFormat { get; set; } = "openai-chat-completions";
     private string KeyProviderId { get; set; } = string.Empty;
     private string KeyName { get; set; } = "API Key";
     private string KeySecret { get; set; } = string.Empty;
@@ -272,6 +313,12 @@
     private string EditModelRemoteId { get; set; } = string.Empty;
     private int EditModelContextLength { get; set; } = 32_768;
     private int EditModelMaxOutput { get; set; } = 4_096;
+    private bool EditModelImageInput { get; set; }
+    private bool EditModelAttachmentInput { get; set; }
+    private bool EditModelToolCalls { get; set; }
+    private bool EditModelReasoningCap { get; set; }
+    private bool EditModelStructuredOutput { get; set; }
+    private bool EditModelEnabled { get; set; } = true;
     private string EditModelReasoningEffort { get; set; } = string.Empty;
     private bool EditModelEnablePromptCache { get; set; }
     private ElementReference ManualFormSection;
@@ -412,6 +459,9 @@
         CatalogModels = [];
         HasSearchedModels = false;
         ImportBaseUrl = provider.SuggestedBaseUrl ?? string.Empty;
+        ImportApiFormat = provider.Id.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+            ? "anthropic-messages"
+            : "openai-chat-completions";
         await LoadModelsAsync();
     }
 
@@ -450,14 +500,10 @@
         try
         {
             Error = null;
-            // 按 models.dev 的 provider 约定自动识别 API 格式；其余默认 OpenAI Chat Completions
-            var apiFormat = model.ProviderId.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
-                ? "anthropic-messages"
-                : "openai-chat-completions";
             Config = await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
                 new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
                     string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
-                    apiFormat, ImportApiKey, true));
+                    ImportApiFormat, ImportApiKey, true));
             ImportApiKey = string.Empty;
             KeyProviderId = model.ProviderId;
         }
@@ -476,6 +522,8 @@
         EditModelRemoteId = model.ModelId;
         EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
         EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
+        ApplyCapabilitiesFromString(model.Capabilities);
+        EditModelEnabled = true;
         EditModelReasoningEffort = string.Empty;
         EditModelEnablePromptCache = false;
         await ScrollToManualFormAsync();
@@ -490,6 +538,8 @@
         EditModelRemoteId = model.RemoteModelId;
         EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
         EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
+        ApplyCapabilitiesFromString(model.Capabilities);
+        EditModelEnabled = model.Enabled;
         EditModelReasoningEffort = model.ReasoningEffort ?? string.Empty;
         EditModelEnablePromptCache = model.EnablePromptCache;
         await ScrollToManualFormAsync();
@@ -561,7 +611,7 @@
             Error = null;
             await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, 1, true, EditModelReasoningEffort, EditModelEnablePromptCache));
+                    EditModelContextLength, EditModelMaxOutput, BuildCapabilities(), EditModelEnabled, EditModelReasoningEffort, EditModelEnablePromptCache));
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -611,6 +661,49 @@
 
     private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
         => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
+
+    private int BuildCapabilities()
+        => 1
+            | (EditModelImageInput ? 2 : 0)
+            | (EditModelAttachmentInput ? 4 : 0)
+            | (EditModelToolCalls ? 8 : 0)
+            | (EditModelReasoningCap ? 16 : 0)
+            | (EditModelStructuredOutput ? 32 : 0);
+
+    private void ApplyCapabilitiesFromString(string? caps)
+    {
+        EditModelImageInput = false;
+        EditModelAttachmentInput = false;
+        EditModelToolCalls = false;
+        EditModelReasoningCap = false;
+        EditModelStructuredOutput = false;
+        if (string.IsNullOrWhiteSpace(caps)) return;
+        if (int.TryParse(caps.Trim(), out var numeric))
+        {
+            EditModelImageInput = (numeric & 2) != 0;
+            EditModelAttachmentInput = (numeric & 4) != 0;
+            EditModelToolCalls = (numeric & 8) != 0;
+            EditModelReasoningCap = (numeric & 16) != 0;
+            EditModelStructuredOutput = (numeric & 32) != 0;
+            return;
+        }
+        EditModelImageInput = caps.Contains("ImageInput", StringComparison.OrdinalIgnoreCase);
+        EditModelAttachmentInput = caps.Contains("AttachmentInput", StringComparison.OrdinalIgnoreCase);
+        EditModelToolCalls = caps.Contains("ToolCalls", StringComparison.OrdinalIgnoreCase);
+        EditModelReasoningCap = caps.Contains("Reasoning", StringComparison.OrdinalIgnoreCase);
+        EditModelStructuredOutput = caps.Contains("StructuredOutput", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatCapabilities(string? caps)
+    {
+        if (string.IsNullOrWhiteSpace(caps)) return "未知";
+        return caps.Replace("Text", "文本")
+            .Replace("ImageInput", "视觉")
+            .Replace("AttachmentInput", "附件")
+            .Replace("ToolCalls", "工具")
+            .Replace("Reasoning", "推理")
+            .Replace("StructuredOutput", "结构化");
+    }
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
     private static string FormatReasoningEffort(string effort) => effort switch
