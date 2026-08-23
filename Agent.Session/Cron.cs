@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Unicode;
 using LlmBackend;
 
 namespace Agent.Session;
@@ -16,6 +18,8 @@ public sealed class Cron : ToolSet
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        // 默认编码器会把非 ASCII 字符（中文）转义成 \uXXXX，工具结果可读性差且浪费 token；放开为原样输出
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
 
     private readonly string _sessionId;
