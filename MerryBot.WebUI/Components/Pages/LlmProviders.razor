@@ -195,7 +195,7 @@
                     <option value="">不开启</option>
                     @foreach (var _eff in GetReasoningEffortOptions())
                     {
-                        <option value="@_eff">@FormatReasoningEffort(_eff)</option>
+                        <option value="@_eff">@_eff</option>
                     }
                 </select>
                 <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
@@ -276,7 +276,7 @@
                                     }
                                     @if (!string.IsNullOrEmpty(model.ReasoningEffort))
                                     {
-                                        <span class="badge ms-2">思维 @FormatReasoningEffort(model.ReasoningEffort)</span>
+                                        <span class="badge ms-2">思维 @model.ReasoningEffort</span>
                                     }
                                     @if (model.EnablePromptCache)
                                     {
@@ -816,13 +816,6 @@
     }
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
-    private static string FormatReasoningEffort(string effort) => effort switch
-    {
-        "low" => "低",
-        "medium" => "中",
-        "high" => "高",
-        _ => effort,
-    };
     private static string FormatCatalogSource(string source) => source switch
     {
         "local-cache" => "本地缓存",
