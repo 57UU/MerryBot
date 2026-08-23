@@ -71,8 +71,8 @@ public partial class AgentPlugin : Plugin
                 TextData textData => textData.Text,
                 // @Bot 只是唤醒标记，不应作为用户输入再交给模型。
                 AtData atData when atData.Qq == selfId.ToString() => string.Empty,
-                AtData atData => atData.Qq == "all" ? "[@全体成员]" : $"[@{atData.Qq}]",
-                ReplyData replyData => $"[回复消息 {replyData.Id}]",
+                AtData atData => string.Empty,// atData.Qq == "all" ? "[@全体成员]" : $"[@{atData.Qq}]",
+                ReplyData replyData => $"[引用消息 {replyData.Id}]",
                 FaceData faceData => $"[表情: {faceData.ToChinese()}]",
                 MfaceData mfaceData => $"[商城表情: {mfaceData.Summary ?? mfaceData.EmojiId}]",
                 DiceData diceData => $"[骰子: {diceData.Result}点]",

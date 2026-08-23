@@ -45,7 +45,7 @@ public class MessageTool : ToolSet
 
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
-        builder.AddFunction<MessageArgs>("get_reply", "获取被回复消息的完整内容", args => GetReplyMessage(args.messageId));
+        builder.AddFunction<MessageArgs>("get_refer", "获取被引用消息的完整内容", args => GetReferMessage(args.messageId));
         builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按时间倒序，第 1 页为最近的消息", args => GetGroupContextAsync(args));
         // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
         if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
@@ -106,7 +106,7 @@ public class MessageTool : ToolSet
     /// <summary>
     /// 读取被回复消息的完整内容。支持消息 ID 或处理链提供的本地 URI。
     /// </summary>
-    private async Task<string> GetReplyMessage(string messageId)
+    private async Task<string> GetReferMessage(string messageId)
     {
         var message = await messageService.GetReplyAsync(groupId, messageId);
         if (message == null)
