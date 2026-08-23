@@ -306,7 +306,7 @@ public partial class AgentPlugin : Plugin
 
         var chain = replyTargets
             .Select(target => (TypedMessage)AtData.FromAt(target.ToString()))
-            .Append(TextData.FromText(reply))
+            .Append(TextData.FromText($" {reply}"))
             .ToList();
         // Channel 内部已捕获异常并记录日志（含插件 id），不会抛出
         _ = Channel.SendMessage(new SessionKey("qq", "group", groupId.ToString()), chain);
