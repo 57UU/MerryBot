@@ -43,4 +43,12 @@ public class AgentConfig : IPluginConfig
 
     [ConfigDescription("后台 shell 任务上限", "同时运行中的后台 shell 任务数上限，防止 LLM 派发大量后台进程耗尽系统资源。")]
     public int MaxBackgroundTasks { get; set; } = 5;
+
+    private int _maxReferenceDepth = 3;
+    [ConfigDescription("引用消息自动展开深度", "自动将引用/转发消息内容展开到上下文并以 <reference> 包裹；0 表示关闭，默认 3，范围 0-10。")]
+    public int MaxReferenceDepth
+    {
+        get => _maxReferenceDepth;
+        set => _maxReferenceDepth = Math.Clamp(value, 0, 10);
+    }
 }

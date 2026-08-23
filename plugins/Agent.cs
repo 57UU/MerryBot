@@ -6,7 +6,6 @@ using CommonLib;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Concurrent;
-using System.Text;
 
 namespace BotPlugin;
 
@@ -61,38 +60,7 @@ public partial class AgentPlugin : Plugin
         Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager);
         persistenceStartTask = InitializePersistenceAsync();
     }
-    private static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
-    {
-        StringBuilder sb = new();
-        foreach (var message in messageChain)
-        {
-            var text = message switch
-            {
-                TextData textData => textData.Text,
-                // @Bot 只是唤醒标记，不应作为用户输入再交给模型。
-                AtData atData when atData.Qq == selfId.ToString() => string.Empty,
-                AtData atData => string.Empty,// atData.Qq == "all" ? "[@全体成员]" : $"[@{atData.Qq}]",
-                ReplyData replyData => $"[引用消息 {replyData.Id}]",
-                FaceData faceData => $"[表情: {faceData.ToChinese()}]",
-                MfaceData mfaceData => $"[商城表情: {mfaceData.Summary ?? mfaceData.EmojiId}]",
-                DiceData diceData => $"[骰子: {diceData.Result}点]",
-                RpsData rpsData => $"[猜拳: {rpsData.Result switch { "1" => "石头", "2" => "剪刀", _ => "布" }}]",
-                PokeData pokeData => "[戳一戳]",
-                ImageData imageData => $"[图片: {imageData.Summary ?? imageData.File}]",
-                RecordData recordData => "[语音]",
-                VideoData videoData => $"[视频: {videoData.File}]",
-                FileData fileData => $"[文件: {fileData.File}]",
-                JsonData jsonData => $"[卡片消息: {jsonData.Data}]",
-                MusicData musicData => $"[音乐: {musicData.Title ?? musicData.Id ?? musicData.Url}]",
-                ForwardData forwardData => $"[转发消息 {forwardData.Id}]",
-                // 新增消息类型：若实现了有意义的 ToString 则直接采用，否则输出可读占位符
-                _ => message.ToString(),
-            };
-            sb.Append(text);
-        }
-        return sb.ToString();
 
-    }
 
     private async Task InitializePersistenceAsync()
     {
@@ -101,16 +69,26 @@ public partial class AgentPlugin : Plugin
     }
 
 
-    public override Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
+    public override async Task OnMessageAsync(bool isMentioned, Command? command, IReadOnlyList<TypedMessage> messageChain, MessageContext context)
     {
         if (!isMentioned)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var sessionId = context.Session.ToString();
         var groupId = long.Parse(context.Session.Id);
-        var rawText = BuildMessage(messageChain, context.SelfId).Trim();
+        string rawText;
+        try
+        {
+            var depth = Math.Clamp(agentConfig.MaxReferenceDepth, 0, 10);
+            rawText = (await AgentMessageExtract.BuildMessageWithReference(messageChain, context.SelfId, depth, Interop.MessageService, groupId)).Trim();
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"展开引用消息失败，回退为原文: {ex.Message}");
+            rawText = AgentMessageExtract.BuildMessage(messageChain, context.SelfId).Trim();
+        }
 
         // 控制命令：@机器人 /new、/compact（其余命令保持原行为，不进入 agent）
         if (command != null)
@@ -123,7 +101,7 @@ public partial class AgentPlugin : Plugin
             };
             if (kind == ControlKind.None)
             {
-                return Task.CompletedTask;
+                return;
             }
             var args = string.Join(' ', command.Args);
             Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, string.Empty, kind,
@@ -133,7 +111,7 @@ public partial class AgentPlugin : Plugin
             {
                 Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, args));
             }
-            return Task.CompletedTask;
+            return;
         }
 
         // 关键字触发：#新对话 → 清空上下文；若关键字后还有内容，作为新对话第一条消息
@@ -145,16 +123,15 @@ public partial class AgentPlugin : Plugin
             {
                 Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, rest));
             }
-            return Task.CompletedTask;
+            return;
         }
 
         if (string.IsNullOrWhiteSpace(rawText))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, rawText));
-        return Task.CompletedTask;
     }
 
     /// <summary>入队消息并确保调度器运行：控制命令与普通消息共用同一队列，保证串行互斥。</summary>
