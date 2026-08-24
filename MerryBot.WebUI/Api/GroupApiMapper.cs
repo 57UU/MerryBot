@@ -76,7 +76,7 @@ public static class GroupApiMapper
             }
 
             var messageCounts = await Task.WhenAll(allIds.Select(historyRecorder.GetMessageCountByGroupIdAsync));
-            var aiMessageCounts = await Task.WhenAll(allIds.Select(gid => historyRecorder.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid))));
+            var aiMessageCounts = await Task.WhenAll(allIds.Select(gid => historyRecorder.AiMessages.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid))));
 
             var entries = new List<GroupEntryDto>(allIds.Count);
             for (var i = 0; i < allIds.Count; i++)

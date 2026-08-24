@@ -41,9 +41,9 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
   - 其他：`ConfigManager`（核心配置）、`HostLifecycle`（版本/更新/重启/重载/退出）、`PluginInitializer`（插件依赖注入与拓扑排序）、`MessageService`（消息持久化与资源引用）、`BotMessageChannel`、`ClockStore.cs`（内含 `internal CoreClockStore`，定时任务持久化）、`Utils`、`NLogAdapter`、`PluginLoggerAdapter`
 - **`NapcatClient/`** — NapCat 客户端库。`BotClient`（连接与事件分发）、`WebSocketAdapter`、`Actions`（发消息等 API）、`Event.cs`、`EventType.cs`（各通知事件类型，单文件）、`MessageType.cs`（`TypedMessage` 层次：TextData/AtData/ImageData/ReplyData/ForwardData 等，含 `MessageTypeString.cs`/`TypedJsonConverter.cs` 序列化）、`Msg.cs`、`BotUtils`、`QqFace`、`AdapterState`
 - **`DataProvider/`** — 插件存储数据库 `PluginStorageDatabase`（LiteDB 封装，`plugin_data.db`；`PluginStorageDatabase.Migrations.cs` 提供 schema 迁移，当前版本 1，启动时 `MigrateAsync()` 执行）与 `PluginDatabaseScope`（按插件 Id 隔离的集合视图）
-- **`DataService/`** — 历史记录 `HistoryRecorder`（`group_history.db` + `storage/` 对象存储）、`ObjectStorage`/`FileSystemObjectStorage`、`HistoryModel`、`IdGenConfig`
+- **`DataService/`** — 历史记录 `HistoryRecorder`（`group_history.db` + `storage/` 对象存储：群消息/图片床/文件床/群事件等）+ `AiMessageStore`（ai_messages 集合与 token 用量聚合；与 HistoryRecorder 共享同一数据库，由其构造组合、统一负责迁移与生命周期）、`ObjectStorage`/`FileSystemObjectStorage`、`HistoryModel`、`TokenUsageAggregator`（ai_messages token 用量分桶/按会话聚合的 internal 纯函数）、`IdGenConfig`
 - **`plugins/`** — 内置插件（`RootNamespace` 为 `BotPlugin`）。包含插件基础设施（`_pluginBase.cs` 的 `Plugin` 抽象类、`_interface.cs` 的 `PluginInterop`/`PluginTag`/`PluginStorage`、`_common.cs` 的 `MessageContext`/`SessionKey`、`_interface.event.cs` 的事件注册）与具体插件（见下文"内置插件"）
-- **`MerryBot.WebUI/`** — Blazor 历史后台。`Program.CreateApp(historyRecorder, webAddress)` 由宿主在进程内调用（也支持独立 `Main` 运行）；`Api/` 下为各功能区的 Minimal API mapper（`ConfigApiMapper`、`AdvancedConfigApiMapper`、`StatusApiMapper`、`GroupApiMapper`、`LogApiMapper`、`UpdateApiMapper`、`LlmProviderApiMapper`、`SkillApiMapper`、`MemoryApiMapper`、`ContextSnapshotApiMapper`、`ConfigRegistry`、`ModelsDevCatalogService`）；`Components/Pages/` 为页面（群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、配置编辑、高级配置、日志、群管理、转发消息等）
+- **`MerryBot.WebUI/`** — Blazor 历史后台。`Program.CreateApp(historyRecorder, webAddress)` 由宿主在进程内调用（也支持独立 `Main` 运行）；`Api/` 下为各功能区的 Minimal API mapper（`ConfigApiMapper`、`AdvancedConfigApiMapper`、`StatusApiMapper`、`GroupApiMapper`、`LogApiMapper`、`UpdateApiMapper`、`LlmProviderApiMapper`、`SkillApiMapper`、`MemoryApiMapper`、`ContextSnapshotApiMapper`、`ConfigRegistry`、`ModelsDevCatalogService`）；`Components/Pages/` 为页面（群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、Token 用量、配置编辑、高级配置、日志、群管理、转发消息等）
 
 ### Agent 组
 
@@ -55,13 +55,13 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - **`Browser/`** — Selenium 无头浏览器封装（`BrowserService` 命名空间）：Chrome/Edge 自动探测与反检测（`StealthService`）、`Browser.Actions.cs`/`Browser.Helpers.cs`/`BrowserUtility.cs`；供 `MessageTool`/`WebTools` 做网页搜索/抓取与 Markdown 渲染
 - **`Markdown2Html/`** — Markdig 封装的 `MarkdownConverter`（Markdown → HTML）
 - **`LlmClient/`** — LLM 客户端：`Client`（重试：限速避让/指数退避；流式基于 reset 语义——任何可重试失败含中途断流，预算内回调 `IResettableStreamSink.OnReset` 后重建流，消费者丢弃该段增量；正文检出工具调用标记走同一 reset 重试；后端可运行时替换 `UpdateBackend`）、`ClientConfig`、`IResettableStreamSink`/`StreamResetReason`、`StrayToolCallDetector`（正文开头/结尾窗口的结构化检测：DSML 特殊 token / XML 工具标签 / JSON 工具调用结构，仅携带工具的请求启用）
-- **`LlmBackend/`** — LLM 后端抽象：`Backend` 接口（流式为推送式 `IStreamSink` 回调：OnTextDelta/OnReasoningDelta/OnCompleted，中途异常归一化为 LlmException）、`ChatCompletionBackend`（OpenAI 兼容 `/chat/completions`）、`AnthropicBackend`、`ResponsesBackend`、`LlmOptions`（含 `WithoutTools()`）、`Message`/`ToolCall`/`TokenUsage`、`Tools.cs`（`ToolDef`/`FunctionDef`）、`MimeTypes`、`LlmDefaults`（超时默认值）、`Errors`/`BackendErrors`
+- **`LlmBackend/`** — LLM 后端抽象：`Backend` 接口（流式为推送式 `IStreamSink` 回调：OnTextDelta/OnReasoningDelta/OnCompleted，中途异常归一化为 LlmException）、`ChatCompletionBackend`（OpenAI 兼容 `/chat/completions`）、`AnthropicBackend`、`ResponsesBackend`、`LlmOptions`（含 `WithoutTools()`）、`Message`/`ToolCall`/`TokenUsage`（归一化约定：所有后端 `promptUsage` = 含缓存命中的完整输入，`cachedUsage ⊆ promptUsage`；Anthropic 的 cache_read/cache_creation 在构造时并入 prompt）、`Tools.cs`（`ToolDef`/`FunctionDef`）、`MimeTypes`、`LlmDefaults`（超时默认值）、`Errors`/`BackendErrors`
 - **`ModelsDev.Sdk/`** — 独立的 models.dev 模型目录 SDK（`net8.0`），含 `ModelsDevClient`、`ModelQueryBuilder` 与模型/Provider 元数据类型
 - **`CommonLib/`** — 公共契约库：`ISimpleLogger`/`ConsoleLogger`/`LogLevel`、`ExitCode`（101/102/103）、`HostLifecycleContracts`（`IHostLifecycle`/`UpdateCheckResult`）、`ContextSnapshotContracts`/`MemoryManagementContracts`/`SkillManagementContracts`、`ConfigDescriptionAttribute`、`RequestCaching`、`Format`
 
 ### 测试项目
 
-- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
+- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
 - **`ModelsDev.Sdk.Test/`** — xunit 测试（SDK 序列化/查询）
 - **`Browser.Test/`** — 浏览器手工测试台（Exe，非自动化测试）
 - **`Test/`** — 手工测试台（Exe，非自动化测试，通常不需要维护）
@@ -145,7 +145,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 | 路径（相对数据目录） | 内容 |
 | --- | --- |
 | `plugin_data.db` | 核心配置（`core` 命名空间）、插件配置（`Plugin_Config_Table`）、插件对象数据（`Plugin_Data_Table`）、各插件 scoped 集合（LLM Provider/模型/Key、Agent 会话历史/记忆/定时任务等） |
-| `group_history.db` + `storage/` | 群消息、图片/文件（按 SHA-256 hash 去重）、群事件、转发消息、群名、AI 消息审计（`ai_messages`）、资源引用表 |
+| `group_history.db` + `storage/` | 群消息、图片/文件（按 SHA-256 hash 去重）、群事件、转发消息、群名、AI 消息审计（`ai_messages`，assistant 行带 token 用量：InputTokens/OutputTokens/CachedTokens，供 WebUI Token 用量页聚合）、资源引用表 |
 | `log/` | NLog 日志，按天命名 `bot-<日期>.log`（按天/10MB 归档、保留 30 份），layout `${longdate}|${level:uppercase=true}|${logger}|${message}`；WebUI `/logs` 页按 `*.log` 枚举浏览历史 |
 | `skills/` | Agent 技能文件（`.md`，可用 `.disable` 标记禁用） |
 | `models.dev-api.json` | models.dev 目录缓存（平时搜索优先本地缓存） |
@@ -207,7 +207,7 @@ dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 
 - 单元测试用 xunit；时间敏感逻辑使用 `Microsoft.Extensions.Time.Testing.FakeTimeProvider`（真实时间断言不稳定，如 `ClockServiceTests` 只用 `FakeClockStore`/`RecordingExecutor`/`TestClock`，绝不依赖真实时钟）
 - 需要访问被测项目 `internal` 成员时，在被测项目加 `InternalsVisibleTo`（`MerryBot`/`LlmBackend`/`LlmClient`/`Browser` → `MerryBot.Test`），不要改 public 面
-- 测试覆盖重点是调度器（ClockService）、上下文压缩（AgentCompaction）、并发上限（AgentConcurrencyLimit）、配置注册（ConfigRegistry）、流式解析（LlmBackendStreamTests）、流式 reset 重试（StrayToolCallRetryTests）、请求缓存（RequestCaching）、视觉路由（VisionRouter）、工具失败语义（ToolSetFailureTests）、浏览器探测（ChromeDetectionTests）
+- 测试覆盖重点是调度器（ClockService）、上下文压缩（AgentCompaction）、并发上限（AgentConcurrencyLimit）、配置注册（ConfigRegistry）、token 用量聚合（TokenUsageAggregatorTests）、流式解析（LlmBackendStreamTests）、流式 reset 重试（StrayToolCallRetryTests）、请求缓存（RequestCaching）、视觉路由（VisionRouter）、工具失败语义（ToolSetFailureTests）、浏览器探测（ChromeDetectionTests）
 
 ## 内置插件一览（当前代码中实际存在）
 

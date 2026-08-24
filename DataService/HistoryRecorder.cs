@@ -14,7 +14,6 @@ public class HistoryRecorder : IDisposable
     readonly ILiteCollectionAsync<GroupEvent> eventsCollection;
     readonly ILiteCollectionAsync<ForwardMessageEntry> forwardMessagesCollection;
     readonly ILiteCollectionAsync<GroupNameEntry> groupNameCollection;
-    readonly ILiteCollectionAsync<AiMessageEntry> aiMessagesCollection;
     readonly ILiteCollectionAsync<ResourceReference> resourceReferencesCollection;
     private readonly IdGen.IdGenerator idGenerator;
     private readonly string _dbPath;
@@ -35,14 +34,18 @@ public class HistoryRecorder : IDisposable
         eventsCollection = database.GetCollection<GroupEvent>("events");
         forwardMessagesCollection = database.GetCollection<ForwardMessageEntry>("forward_messages");
         groupNameCollection = database.GetCollection<GroupNameEntry>("group_names");
-        aiMessagesCollection = database.GetCollection<AiMessageEntry>("ai_messages");
         resourceReferencesCollection = database.GetCollection<ResourceReference>("resource_references");
 
         idGenerator = new(machineCode, IdGenConfig.idGeneratorOptions);
 
         // 同步等待索引创建完成：避免 fire-and-forget 产生未观察异常，也保证首个查询即命中索引
         EnsureIndexesAsync().GetAwaiter().GetResult();
+        // AI 消息存储共享同一数据库连接，由本类组合并负责其生命周期
+        AiMessages = new AiMessageStore(database, idGenerator, _logger);
     }
+
+    /// <summary>AI 消息审计存储（ai_messages 集合），与群消息历史同库。</summary>
+    public AiMessageStore AiMessages { get; }
 
     /// <summary>
     /// 创建全部索引（含图片/文件 hash 唯一索引）；失败只记日志不抛出，避免历史数据问题导致启动失败。
@@ -60,7 +63,6 @@ public class HistoryRecorder : IDisposable
             eventsCollection.EnsureIndexAsync(x => x.Time),
             forwardMessagesCollection.EnsureIndexAsync(x => x.SourceGroupId),
             groupNameCollection.EnsureIndexAsync(x => x.UpdatedTime),
-            aiMessagesCollection.EnsureIndexAsync(x => x.SessionKey),
             resourceReferencesCollection.EnsureIndexAsync(x => x.Kind),
         };
         try
@@ -743,40 +745,6 @@ public class HistoryRecorder : IDisposable
             document.Remove("GroupId");
             await collection.UpdateAsync(document);
         }
-    }
-
-    public async Task<bool> RecordAiMessageAsync(string sessionKey, string messageType, string content, int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
-    {
-        var entry = new AiMessageEntry(GenerateId(), sessionKey, messageType, content, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), inputTokens, outputTokens, totalTokens);
-        await aiMessagesCollection.InsertAsync(entry);
-        return true;
-    }
-
-    public async Task<List<AiMessageEntry>> GetAiMessagesBySessionKeyAsync(string sessionKey, int page = 1, int pageSize = 50)
-    {
-        page = Math.Max(1, page);
-        var skip = (page - 1) * pageSize;
-        return await aiMessagesCollection.Query()
-            .Where(x => x.SessionKey == sessionKey)
-            .OrderByDescending(x => x.Id)
-            .Skip(skip)
-            .Limit(pageSize)
-            .ToListAsync();
-    }
-
-    public async Task<int> GetAiMessageCountBySessionKeyAsync(string sessionKey)
-    {
-        return await aiMessagesCollection.CountAsync(x => x.SessionKey == sessionKey);
-    }
-
-    /// <summary>按 session 聚合全部 AI 消息：返回有 AI 消息记录的 session 汇总（消息数、最后消息时间），按最后时间倒序。</summary>
-    public async Task<List<AiMessageSessionSummary>> ListAiMessageSessionsAsync()
-    {
-        var all = await aiMessagesCollection.FindAllAsync();
-        return all.GroupBy(x => x.SessionKey, StringComparer.Ordinal)
-            .Select(group => new AiMessageSessionSummary(group.Key, group.Count(), group.Max(x => x.Time)))
-            .OrderByDescending(summary => summary.LastTime)
-            .ToList();
     }
 
     public async Task<int> GetMessageCountByGroupIdAsync(long groupId)

@@ -146,7 +146,7 @@ public class AnthropicBackend : Backend
             reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
             thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
         var usage = json.Usage ?? new AnthropicUsage();
-        return (result, new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens));
+        return (result, new TokenUsage(usage.TotalTokens, usage.TotalInputTokens, usage.OutputTokens, usage.CachedTokens));
     }
 
     /// <summary>
@@ -421,7 +421,7 @@ public class AnthropicBackend : Backend
                 thinkingBlocks.Count > 0 ? JsonSerializer.Serialize(thinkingBlocks) : null);
             var tokenUsage = usage is null
                 ? TokenUsage.Zero
-                : new TokenUsage(usage.TotalTokens, usage.InputTokens, usage.OutputTokens, usage.CachedTokens);
+                : new TokenUsage(usage.TotalTokens, usage.TotalInputTokens, usage.OutputTokens, usage.CachedTokens);
             sink.OnCompleted(result, tokenUsage);
         }
         catch (LlmException)
@@ -763,8 +763,15 @@ internal class AnthropicUsage
     [JsonPropertyName("cache_creation_input_tokens")]
     public int CacheCreationInputTokens { get; set; }
 
+    // 归一化约定：所有后端的 TokenUsage.promptUsage = 含缓存命中的完整输入（cachedUsage ⊆ promptUsage）。
+    // Anthropic 原生 input_tokens 不含 cache（cache_read/cache_creation 单独上报），此处统一合并，
+    // 使 uncached input = promptUsage - cachedUsage 在三种后端下语义一致；
+    // 同时让 Agent 以 promptUsage 估算上下文大小时不会漏掉 cache 部分。
     [JsonIgnore]
-    public int TotalTokens => InputTokens + OutputTokens;
+    public int TotalInputTokens => InputTokens + CacheReadInputTokens + CacheCreationInputTokens;
+
+    [JsonIgnore]
+    public int TotalTokens => TotalInputTokens + OutputTokens;
 
     [JsonIgnore]
     public int CachedTokens => CacheReadInputTokens + CacheCreationInputTokens;

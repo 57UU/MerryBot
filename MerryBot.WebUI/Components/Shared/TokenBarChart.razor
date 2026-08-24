@@ -1,0 +1,142 @@
+@using DataService
+
+@* Token 用量堆叠柱状图：纯 SVG 渲染，无第三方依赖。
+    Buckets 须为覆盖整个时间范围的完整序列（空桶补零，由页面负责），
+    每根柱子自下而上依次为 未缓存输入 / 缓存命中 / 输出。 *@
+<div class="token-chart-wrapper">
+    <div class="token-chart-legend">
+        <span class="legend-item"><span class="legend-swatch" style="background:@UncachedColor;"></span>未缓存输入</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:@CachedColor;"></span>缓存命中</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:@OutputColor;"></span>输出</span>
+    </div>
+    @if (Buckets.Count == 0)
+    {
+        <div class="text-muted-custom p-4 text-center">该时间范围内暂无用量数据</div>
+    }
+    else
+    {
+        <svg viewBox="0 0 820 300" preserveAspectRatio="xMidYMid meet" class="token-chart-svg">
+            @{
+                var plotLeft = 60;
+                var plotTop = 12;
+                var plotBottom = 270;
+                var plotRight = 810;
+                var plotHeight = plotBottom - plotTop;
+                var plotWidth = plotRight - plotLeft;
+                var maxTotal = Buckets.Max(bucket => bucket.TotalTokens);
+                // Y 轴上限向上取整到刻度步长，避免柱顶贴边
+                var step = NiceStep(maxTotal <= 0 ? 1 : maxTotal);
+                var yMax = Math.Max(1, (long)Math.Ceiling((double)maxTotal / step) * step);
+            }
+            @for (var tick = 0; tick <= 4; tick++)
+            {
+                var value = yMax / 4 * tick;
+                var y = plotBottom - (int)((double)plotHeight * tick / 4);
+                <line x1="@plotLeft" y1="@y" x2="@plotRight" y2="@y" stroke="rgba(148,163,184,0.25)" stroke-width="1" />
+                @* Razor 会把 <text> 解析为转义标记，SVG 文本元素须经 MarkupString 输出 *@
+                @((MarkupString)$"<text x=\"{plotLeft - 6}\" y=\"{y + 4}\" text-anchor=\"end\" font-size=\"11\" fill=\"#94a3b8\">{FormatTokens(value)}</text>")
+            }
+            @{
+                var count = Buckets.Count;
+                var slot = (double)plotWidth / count;
+                var barWidth = Math.Max(2, slot * 0.68);
+            }
+            @for (var i = 0; i < count; i++)
+            {
+                var bucket = Buckets[i];
+                var x = plotLeft + slot * i + (slot - barWidth) / 2;
+                var scale = (double)plotHeight / yMax;
+                // 自下而上：未缓存输入 → 缓存 → 输出
+                var uncachedH = bucket.UncachedInputTokens * scale;
+                var cachedH = bucket.CachedTokens * scale;
+                var outputH = bucket.OutputTokens * scale;
+                var yOutput = plotBottom - outputH;
+                var yCached = yOutput - cachedH;
+                var yUncached = yCached - uncachedH;
+                var labelEvery = count > 16 ? 4 : (count > 8 ? 2 : 1);
+                <g>
+                    @if (bucket.UncachedInputTokens > 0)
+                    {
+                        <rect x="@x" y="@yUncached" width="@barWidth" height="@uncachedH" fill="@UncachedColor">
+                            <title>@BucketTitle(bucket)</title>
+                        </rect>
+                    }
+                    @if (bucket.CachedTokens > 0)
+                    {
+                        <rect x="@x" y="@yCached" width="@barWidth" height="@cachedH" fill="@CachedColor">
+                            <title>@BucketTitle(bucket)</title>
+                        </rect>
+                    }
+                    @if (bucket.OutputTokens > 0)
+                    {
+                        <rect x="@x" y="@yOutput" width="@barWidth" height="@outputH" fill="@OutputColor">
+                            <title>@BucketTitle(bucket)</title>
+                        </rect>
+                    }
+                    @if (bucket.TotalTokens == 0)
+                    {
+                        // 空桶画一条底线占位，保持时间轴连续感
+                        <rect x="@x" y="@(plotBottom - 1)" width="@barWidth" height="1" fill="rgba(148,163,184,0.35)">
+                            <title>@BucketTitle(bucket)</title>
+                        </rect>
+                    }
+                    @if (i % labelEvery == 0)
+                    {
+                        @((MarkupString)$"<text x=\"{x + barWidth / 2}\" y=\"{plotBottom + 16}\" text-anchor=\"middle\" font-size=\"10\" fill=\"#94a3b8\">{BucketLabel(bucket.BucketStart)}</text>")
+                    }
+                </g>
+            }
+        </svg>
+    }
+</div>
+
+@code {
+    /// <summary>完整的时间桶序列（含空桶），按起始时间升序。</summary>
+    [Parameter]
+    public IReadOnlyList<TokenUsageBucket> Buckets { get; set; } = Array.Empty<TokenUsageBucket>();
+
+    /// <summary>桶长度（秒）：3600 按小时标注 HH:mm；86400 按天标注 MM-dd。</summary>
+    [Parameter]
+    public long BucketSeconds { get; set; } = 3600;
+
+    private static string UncachedColor => "#0891b2";
+    private static string CachedColor => "#059669";
+    private static string OutputColor => "#7c3aed";
+
+    private string BucketLabel(long bucketStart)
+    {
+        var time = DateTimeOffset.FromUnixTimeSeconds(bucketStart).ToLocalTime();
+        return BucketSeconds >= 86400
+            ? time.ToString("MM-dd")
+            : time.ToString("HH:mm");
+    }
+
+    private string BucketTitle(TokenUsageBucket bucket)
+    {
+        var time = DateTimeOffset.FromUnixTimeSeconds(bucket.BucketStart).ToLocalTime();
+        return $"{time:yyyy-MM-dd HH:mm}\n缓存 {bucket.CachedTokens} · 未缓存输入 {bucket.UncachedInputTokens} · 输出 {bucket.OutputTokens}\n合计 {bucket.TotalTokens}";
+    }
+
+    /// <summary>把任意正数取到 1/2/5×10^n 的“好看”刻度步长。</summary>
+    private static long NiceStep(double max)
+    {
+        var exponent = (long)Math.Floor(Math.Log10(max));
+        var magnitude = (long)Math.Pow(10, exponent);
+        foreach (var multiple in new[] { 1L, 2L, 5L, 10L })
+        {
+            if (max <= magnitude * multiple)
+            {
+                return magnitude * multiple;
+            }
+        }
+        return magnitude * 10;
+    }
+
+    /// <summary>大数缩写：1234 → 1.2k，2000000 → 2M。</summary>
+    private static string FormatTokens(long value)
+    {
+        if (value >= 1_000_000) return $"{(double)value / 1_000_000:0.#}M";
+        if (value >= 10_000) return $"{(double)value / 1000:0.#}k";
+        return value.ToString();
+    }
+}

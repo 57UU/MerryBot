@@ -237,9 +237,11 @@ public class AiMessageEntry
     public string MessageType { get; set; }
     public string Content { get; set; }
     public long Time { get; set; }
+    /// <summary>输入 token 数（归一化约定：含缓存命中的完整输入，cached ⊆ input）。</summary>
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
-    public int TotalTokens { get; set; }
+    /// <summary>缓存命中的输入 token 数。LiteDB 无 schema，旧文档读出为 0。</summary>
+    public int CachedTokens { get; set; }
 
     public AiMessageEntry()
     {
@@ -249,7 +251,7 @@ public class AiMessageEntry
     }
 
     public AiMessageEntry(long id, string sessionKey, string messageType, string content, long time,
-        int inputTokens = 0, int outputTokens = 0, int totalTokens = 0)
+        int inputTokens = 0, int outputTokens = 0, int cachedTokens = 0)
     {
         Id = id;
         SessionKey = sessionKey;
@@ -258,11 +260,20 @@ public class AiMessageEntry
         Time = time;
         InputTokens = inputTokens;
         OutputTokens = outputTokens;
-        TotalTokens = totalTokens;
+        CachedTokens = cachedTokens;
     }
 }
 
-/// <summary>某个 session 的 AI 消息汇总，用于 WebUI 会话列表展示。</summary>
-public sealed record AiMessageSessionSummary(string SessionKey, int MessageCount, long LastTime);
+/// <summary>单个时间桶的 token 用量；uncached 已在聚合层算好（max(0, input - cached)）。</summary>
+public sealed record TokenUsageBucket(long BucketStart, long CachedTokens, long UncachedInputTokens, long OutputTokens)
+{
+    public long TotalTokens => CachedTokens + UncachedInputTokens + OutputTokens;
+}
+
+/// <summary>时间范围内单会话的 token 用量汇总。</summary>
+public sealed record TokenSessionSummary(string SessionKey, long CachedTokens, long UncachedInputTokens, long OutputTokens, int MessageCount, long LastTime)
+{
+    public long TotalTokens => CachedTokens + UncachedInputTokens + OutputTokens;
+}
 
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。

@@ -37,9 +37,9 @@
                             </div>
                             <div class="message-content-custom">
                                 <div>@message.Content</div>
-                                @if (message.TotalTokens > 0)
+                                @if (message.InputTokens > 0 || message.OutputTokens > 0)
                                 {
-                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @message.TotalTokens</div>
+                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @(message.InputTokens + message.OutputTokens)</div>
                                 }
                             </div>
                         </div>
@@ -71,5 +71,5 @@
     }
 
     private Task<List<AiMessageEntry>> LoadAiMessagesPage(int page, int pageSize)
-        => HistoryRecorder.GetAiMessagesBySessionKeyAsync(SessionKey.ToString(SelectedAiGroupId), page, pageSize);
+        => HistoryRecorder.AiMessages.GetAiMessagesBySessionKeyAsync(SessionKey.ToString(SelectedAiGroupId), page, pageSize);
 }

@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="MerryBot.Test" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
   </ItemGroup>
 

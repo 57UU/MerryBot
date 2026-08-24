@@ -1218,3 +1218,37 @@ textarea.form-control {
         padding: 1rem 1rem 2.5rem;
     }
 }
+/* ===== Token 用量页（TokenUsage.razor / TokenBarChart.razor）===== */
+.token-chart-wrapper {
+    background: var(--panel-bg, #fff);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.token-chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.token-chart-legend {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}

@@ -100,7 +100,7 @@
             AiMessageCount = 0;
             foreach (var gid in GroupIds)
             {
-                AiMessageCount += await HistoryRecorder.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid));
+                AiMessageCount += await HistoryRecorder.AiMessages.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid));
             }
 
             ImageCount = await HistoryRecorder.GetImageCountAsync();

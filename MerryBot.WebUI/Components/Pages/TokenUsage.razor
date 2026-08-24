@@ -1,0 +1,187 @@
+@page "/tokenusage"
+@rendermode InteractiveServer
+@using DataService
+@using Microsoft.Extensions.Logging
+@inject HistoryRecorder HistoryRecorder
+@inject ILogger<TokenUsage> Logger
+
+<PageTitle>Token 用量</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Token 用量</h1>
+        <p class="page-header-sub">AI 会话 token 消耗统计，数据来自消息审计的 AI 消息。</p>
+    </div>
+</div>
+
+<div class="stat-row mb-3-custom">
+    @foreach (var range in Ranges)
+    {
+        var kind = range;
+        <button class="btn btn-sm @(Selected == kind ? "btn-primary" : "btn-secondary")" @onclick="() => SelectRangeAsync(kind)">@Describe(kind)</button>
+    }
+</div>
+
+@if (IsLoading)
+{
+    <p class="text-muted-custom">加载中…</p>
+}
+else
+{
+    <h2 class="page-title">用量汇总（@Describe(Selected)）</h2>
+    <div class="stat-row">
+        <StatCard Title="总输入" Value="@FormatTokens(TotalInput)" Icon="📥" IconBg="rgba(6,182,212,0.12)" IconColor="#0891b2" />
+        <StatCard Title="缓存命中" Value="@FormatTokens(TotalCached)" Icon="⚡" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
+        <StatCard Title="缓存命中率" Value="@FormatRate(TotalCached, TotalUncached)" Icon="🎯" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
+        <StatCard Title="未缓存输入" Value="@FormatTokens(TotalUncached)" Icon="🔤" IconBg="rgba(99,102,241,0.12)" IconColor="#4f46e5" />
+        <StatCard Title="输出" Value="@FormatTokens(TotalOutput)" Icon="📤" IconBg="rgba(139,92,246,0.12)" IconColor="#7c3aed" />
+        <StatCard Title="总计 / 消息数" Value="@($"{FormatTokens(TotalAll)} / {MessageCount}")" Icon="🤖" IconBg="rgba(245,158,11,0.14)" IconColor="#d97706" />
+    </div>
+
+    <h2 class="page-title">@GranularityTitle 柱状图</h2>
+    <TokenBarChart Buckets="PaddedBuckets" BucketSeconds="BucketSeconds" />
+
+    <h2 class="page-title">会话明细</h2>
+    @if (Sessions.Count == 0)
+    {
+        <p class="text-muted-custom">该时间范围内没有 AI 消息记录</p>
+    }
+    else
+    {
+        <div class="container-custom">
+            <table class="table">
+                <thead>
+                <tr><th>会话</th><th>消息数</th><th>缓存命中</th><th>未缓存输入</th><th>输出</th><th>命中率</th><th>合计</th><th>最后活动</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var session in Sessions)
+                {
+                    <tr @key="session.SessionKey">
+                        <td>@DescribeSession(session.SessionKey)</td>
+                        <td>@session.MessageCount</td>
+                        <td>@session.CachedTokens</td>
+                        <td>@session.UncachedInputTokens</td>
+                        <td>@session.OutputTokens</td>
+                        <td>@FormatRate(session.CachedTokens, session.UncachedInputTokens)</td>
+                        <td>@session.TotalTokens</td>
+                        <td>@DateTimeOffset.FromUnixTimeSeconds(session.LastTime).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private enum RangeKind { Today, Last24h, Last7d, Last30d }
+
+    private static readonly RangeKind[] Ranges = [RangeKind.Today, RangeKind.Last24h, RangeKind.Last7d, RangeKind.Last30d];
+
+    private bool IsLoading { get; set; } = true;
+    private RangeKind Selected { get; set; } = RangeKind.Today;
+
+    private List<TokenUsageBucket> PaddedBuckets { get; set; } = [];
+    private List<TokenSessionSummary> Sessions { get; set; } = [];
+
+    private long TotalCached => PaddedBuckets.Sum(bucket => bucket.CachedTokens);
+    private long TotalUncached => PaddedBuckets.Sum(bucket => bucket.UncachedInputTokens);
+    private long TotalOutput => PaddedBuckets.Sum(bucket => bucket.OutputTokens);
+    private long TotalInput => TotalCached + TotalUncached;
+    private long TotalAll => PaddedBuckets.Sum(bucket => bucket.TotalTokens);
+    private int MessageCount => Sessions.Sum(session => session.MessageCount);
+
+    private long SinceUnixSec { get; set; }
+    private long UntilUnixSec { get; set; }
+    private long BucketSeconds => Selected is RangeKind.Today or RangeKind.Last24h ? 3600 : 86400;
+    /// <summary>本地时区偏移（秒）：让天级桶对齐本地零点而非 UTC 零点。</summary>
+    private long LocalOffsetSeconds => (long)TimeZoneInfo.Local.GetUtcOffset(DateTime.Now).TotalSeconds;
+
+    private string GranularityTitle => BucketSeconds >= 86400 ? "按天" : "按小时";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task SelectRangeAsync(RangeKind kind)
+    {
+        if (Selected == kind) return;
+        Selected = kind;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        try
+        {
+            var now = DateTimeOffset.Now;
+            UntilUnixSec = now.ToUnixTimeSeconds();
+            SinceUnixSec = Selected switch
+            {
+                RangeKind.Today => new DateTimeOffset(now.Date, now.Offset).ToUnixTimeSeconds(),
+                RangeKind.Last24h => UntilUnixSec - 24 * 3600,
+                RangeKind.Last7d => UntilUnixSec - 7L * 86400,
+                _ => UntilUnixSec - 30L * 86400,
+            };
+
+            var bucketsTask = HistoryRecorder.AiMessages.GetTokenUsageBucketsAsync(SinceUnixSec, UntilUnixSec, BucketSeconds, LocalOffsetSeconds);
+            var sessionsTask = HistoryRecorder.AiMessages.GetTokenUsageBySessionAsync(SinceUnixSec, UntilUnixSec);
+            await Task.WhenAll(bucketsTask, sessionsTask);
+
+            // 补齐空桶，保持时间轴连续
+            var found = bucketsTask.Result.ToDictionary(bucket => bucket.BucketStart);
+            var first = FloorToBucket(SinceUnixSec);
+            PaddedBuckets = [];
+            for (var start = first; start <= UntilUnixSec; start += BucketSeconds)
+            {
+                PaddedBuckets.Add(found.TryGetValue(start, out var bucket)
+                    ? bucket
+                    : new TokenUsageBucket(start, 0, 0, 0));
+            }
+            // 最后一个不完整的小时/天桶保留（部分数据也画出来）
+            Sessions = sessionsTask.Result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载 Token 用量统计失败");
+            PaddedBuckets = [];
+            Sessions = [];
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private long FloorToBucket(long time)
+        => (time + LocalOffsetSeconds) / BucketSeconds * BucketSeconds - LocalOffsetSeconds;
+
+    private static string Describe(RangeKind kind) => kind switch
+    {
+        RangeKind.Today => "今天",
+        RangeKind.Last24h => "过去 24h",
+        RangeKind.Last7d => "过去 7 天",
+        _ => "过去 30 天",
+    };
+
+    private static string DescribeSession(string sessionKey)
+        => sessionKey.StartsWith("qq/group/", StringComparison.Ordinal)
+            ? $"群聊 {sessionKey["qq/group/".Length..]}"
+            : sessionKey;
+
+    private static string FormatTokens(long value)
+    {
+        if (value >= 1_000_000) return $"{(double)value / 1_000_000:0.#}M";
+        if (value >= 10_000) return $"{(double)value / 1000:0.#}k";
+        return value.ToString();
+    }
+
+    /// <summary>缓存命中率 = cached / (cached + uncached)，总输入为 0 时显示 "—"。</summary>
+    private static string FormatRate(long cached, long uncached)
+    {
+        var input = cached + uncached;
+        return input <= 0 ? "—" : $"{(double)cached / input:P1}";
+    }
+}

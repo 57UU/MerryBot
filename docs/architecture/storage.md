@@ -41,19 +41,19 @@ MerryBot 有两套独立的存储体系，都基于 **LiteDB**（本地 NoSQL，
 
 ## 历史记录（`DataService` 项目）
 
-### HistoryRecorder
+### HistoryRecorder / AiMessageStore
 
-`HistoryRecorder` 管理 `group_history.db`，集合按用途划分：
+`HistoryRecorder` 管理 `group_history.db`（数据库文件、对象存储、schema 迁移、生命周期的唯一属主），集合按用途划分。AI 消息相关读写拆分在 `AiMessageStore`：由 `HistoryRecorder` 构造组合（`HistoryRecorder.AiMessages`），共享同一数据库连接，迁移仍统一走 `HistoryRecorder.MigrateAsync`：
 
-| 集合 | 内容 |
-| --- | --- |
-| `messages` | 群消息（GroupId/SenderId/MessageId/Time 索引） |
-| `images` / `files` | 图片床 / 文件床（Hash 唯一索引，幂等去重） |
-| `events` | 群事件（进群/退群/禁言等） |
-| `forward_messages` | 合并转发消息 |
-| `group_names` | 群名历史 |
-| `ai_messages` | **AI 消息审计**（按 SessionKey 索引，Agent 对话留痕） |
-| `resource_references` | `merrybot://` 资源引用（消息与对象的映射） |
+| 集合 | 内容 | 归属 |
+| --- | --- | --- |
+| `messages` | 群消息（GroupId/SenderId/MessageId/Time 索引） | HistoryRecorder |
+| `images` / `files` | 图片床 / 文件床（Hash 唯一索引，幂等去重） | HistoryRecorder |
+| `events` | 群事件（进群/退群/禁言等） | HistoryRecorder |
+| `forward_messages` | 合并转发消息 | HistoryRecorder |
+| `group_names` | 群名历史 | HistoryRecorder |
+| `ai_messages` | **AI 消息审计**（按 SessionKey 索引，Agent 对话留痕；assistant 行带 token 用量：InputTokens/OutputTokens/CachedTokens，供 WebUI Token 用量页聚合） | AiMessageStore |
+| `resource_references` | `merrybot://` 资源引用（消息与对象的映射） | HistoryRecorder |
 
 设计要点：
 
