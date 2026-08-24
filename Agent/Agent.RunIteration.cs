@@ -12,13 +12,16 @@ public partial class Agent
 {
     /// <summary>
     /// 单次对话迭代：生成回复并回填工具调用结果。
-    /// 返回本次用量与最终回复；result 为 null 表示模型请求了工具调用，还需继续迭代
+    /// 返回本次用量与最终回复；result 为 null 表示模型请求了工具调用，还需继续迭代。
+    /// userInterruptToken：用户主动中断（如群聊 /stop）的独立 token，仅用于取消回填时区分
+    /// "用户取消"与"超时/上游取消"；不参与取消传播（传播仍由 cancellationToken 承担）
     /// </summary>
     private async Task<(TokenUsage usage, string? result)> RunIteration(
         CancellationToken cancellationToken,
         IList<Message> messages,
         LlmOptions llmOptions,
-        int iteration)
+        int iteration,
+        CancellationToken userInterruptToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -81,14 +84,16 @@ public partial class Agent
         catch (OperationCanceledException)
         {
             // 会话取消：为全部未完成的工具调用回填"已取消"结果，避免消息列表留下
-            // 悬空 tool_calls 导致后续请求被 API 拒绝（400），随后继续传播取消
+            // 悬空 tool_calls 导致后续请求被 API 拒绝（400），随后继续传播取消。
+            // 按 userInterruptToken 区分用户主动中断（/stop）与超时/上游取消
+            var reason = userInterruptToken.IsCancellationRequested ? "用户取消" : "对话已中断（任务超时或上游取消）";
             foreach (var toolCall in response.ToolCalls)
             {
                 var cancelledTool = new Message
                 {
                     role = Role.Tool,
                     toolCallId = toolCall.Id,
-                    content = [new MessagePartText { text = $"{{\"error\": \"工具 {toolCall.Name} 已取消\"}}" }],
+                    content = [new MessagePartText { text = $"{{\"error\": \"{reason}，工具 {toolCall.Name} 已中止\"}}" }],
                 };
                 messages.Add(cancelledTool);
                 RecordMessage(cancelledTool, TokenUsage.Zero);

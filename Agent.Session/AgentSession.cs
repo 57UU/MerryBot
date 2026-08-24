@@ -25,6 +25,10 @@ public class AgentSession
     /// <summary>是否正在处理消息（供 AgentSessionManager 空闲清理判断，会话不忙时才允许释放）</summary>
     internal bool IsBusy => _chatMutex.CurrentCount == 0;
 
+    /// <summary>当前正在处理的消息对应的取消源（链接消息自带 token），供 /stop 取消本轮对话；null 表示空闲</summary>
+    private CancellationTokenSource? _activeCts;
+    private readonly object _ctsLock = new();
+
     private long _lastActiveTicks = DateTime.UtcNow.Ticks;
 
     /// <summary>最近一次活动时间（UTC），由入队/处理刷新；供 AgentSessionManager 空闲淘汰判断</summary>
@@ -184,19 +188,70 @@ public class AgentSession
 
     private async Task<(string Response, TokenUsage Usage)> Process(string message, Action<string> messageChannel, CancellationToken cancellationToken)
     {
-        var (response, usage) = await _Agent.Chat(message, cancellationToken);
-        SessionUsage += usage;
-        MarkActive();
+        // 两个取消源分工：
+        //   upstreamCts —— 链接消息自带 token（插件关闭 disposeCts、Cron 任务超时等上游取消）
+        //   stopCts     —— 登记为 _activeCts，仅由 /stop（Stop()）触发，代表用户主动中断
+        // workCts 取两者并集驱动实际执行；Chat 同时拿到 stopCts.Token 作为 userInterruptToken，
+        // 使工具回填处能区分"用户取消"与"超时/上游取消"
+        using var upstreamCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var stopCts = new CancellationTokenSource();
+        using var workCts = CancellationTokenSource.CreateLinkedTokenSource(upstreamCts.Token, stopCts.Token);
+        lock (_ctsLock)
+        {
+            _activeCts = stopCts;
+        }
         try
         {
-            messageChannel(response);
+            var (response, usage) = await _Agent.Chat(message, workCts.Token, stopCts.Token);
+            SessionUsage += usage;
+            MarkActive();
+            try
+            {
+                messageChannel(response);
+            }
+            catch (Exception exception)
+            {
+                // 发送失败（如群消息发送异常）只记日志，不中断消息处理流程
+                _logger.Warn($"消息发送失败: {exception.Message}");
+            }
+            return (response, usage);
         }
-        catch (Exception exception)
+        finally
         {
-            // 发送失败（如群消息发送异常）只记日志，不中断消息处理流程
-            _logger.Warn($"消息发送失败: {exception.Message}");
+            lock (_ctsLock)
+            {
+                if (ReferenceEquals(_activeCts, stopCts))
+                {
+                    _activeCts = null;
+                }
+            }
+            stopCts.Dispose();
         }
-        return (response, usage);
+    }
+
+    /// <summary>
+    /// 停止当前正在处理的对话并丢弃积压队列。
+    /// 返回是否有正在处理的对话被取消。
+    /// </summary>
+    public bool Stop()
+    {
+        bool cancelled;
+        lock (_ctsLock)
+        {
+            cancelled = _activeCts != null;
+            _activeCts?.Cancel();
+        }
+        // 丢弃积压消息，等待者（如 Cron 的 ChatAndWaitAsync）按取消处理
+        lock (_queueLock)
+        {
+            while (MessageQueue.First != null)
+            {
+                var pending = MessageQueue.First.Value;
+                MessageQueue.RemoveFirst();
+                pending.Completion?.TrySetCanceled();
+            }
+        }
+        return cancelled;
     }
 
     /// <summary>清空当前会话上下文（内存消息 + 持久化历史）。供 TUI /new。</summary>

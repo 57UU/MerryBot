@@ -260,6 +260,10 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             fullPath = await ResolveShellPath(imagePath, args.cwd);
         }
+        catch (OperationCanceledException)
+        {
+            throw; // 取消不是路径解析失败：继续传播，由 Agent 统一回填取消结果
+        }
         catch (Exception e)
         {
             return $"[image_path 无效: {imagePath}: {e.Message}]";
@@ -309,6 +313,10 @@ public class TerminalToolSet : ToolSet, IDisposable
             {
                 return Path.GetFullPath(Path.Combine(shellPwd, imagePath));
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw; // 取消不参与路径降级：继续传播
         }
         catch
         {

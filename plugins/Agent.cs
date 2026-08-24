@@ -31,8 +31,8 @@ public partial class AgentPlugin : Plugin
         public bool IsDispatching { get; set; }
     }
 
-    /// <summary>控制命令类型：None 为普通聊天消息，New/Compact 为会话控制命令。</summary>
-    private enum ControlKind { None, New, Compact }
+    /// <summary>控制命令类型：None 为普通聊天消息，New/Compact 为会话控制命令，Stop 带外立即执行。</summary>
+    private enum ControlKind { None, New, Compact, Stop }
 
     private sealed record PendingGroupMessage(long SenderId, string? SenderNickname, string Content, ControlKind Kind = ControlKind.None, string? Topic = null);
     private readonly AgentConfig agentConfig;
@@ -97,10 +97,17 @@ public partial class AgentPlugin : Plugin
             {
                 "new" => ControlKind.New,
                 "compact" => ControlKind.Compact,
+                "stop" => ControlKind.Stop,
                 _ => ControlKind.None,
             };
             if (kind == ControlKind.None)
             {
+                return;
+            }
+            // /stop 带外立即执行：入队会排在正在生成的回复之后，起不到"停止"作用
+            if (kind == ControlKind.Stop)
+            {
+                await StopSessionAsync(sessionId, groupId, context.SenderId);
                 return;
             }
             var args = string.Join(' ', command.Args);
@@ -132,6 +139,24 @@ public partial class AgentPlugin : Plugin
         }
 
         Enqueue(sessionId, groupId, new PendingGroupMessage(context.SenderId, context.SenderNickname, rawText));
+    }
+
+    /// <summary>
+    /// /stop：取消该会话正在处理的对话，并丢弃尚未消费的排队消息。带外调用，不经过消息队列。
+    /// </summary>
+    private async Task StopSessionAsync(string sessionId, long groupId, long senderId)
+    {
+        // 丢弃插件层排队消息（调度循环尚未消费的）
+        var pending = pendingMessages.GetOrAdd(sessionId, static _ => new PendingGroupMessages());
+        lock (pending.SyncRoot)
+        {
+            pending.Items.Clear();
+        }
+        var session = await sessionManager.GetSessionAsync(sessionId);
+        // 会话层 Stop 同时取消当前对话与内部积压队列
+        var stopped = session.Stop();
+        SendGroupReply(groupId, [senderId],
+            stopped ? "已停止响应，排队的消息已丢弃" : "当前没有正在处理的对话");
     }
 
     /// <summary>入队消息并确保调度器运行：控制命令与普通消息共用同一队列，保证串行互斥。</summary>
@@ -230,10 +255,17 @@ public partial class AgentPlugin : Plugin
                     .Select(static item => item.SenderId)
                     .Distinct()
                     .ToArray();
-                await session.ChatAndWaitAsync(
-                    userInput,
-                    reply => SendGroupReply(groupId, replyTargets, reply),
-                    disposeCts.Token);
+                try
+                {
+                    await session.ChatAndWaitAsync(
+                        userInput,
+                        reply => SendGroupReply(groupId, replyTargets, reply),
+                        disposeCts.Token);
+                }
+                catch (OperationCanceledException) when (!disposeCts.IsCancellationRequested)
+                {
+                    // 用户 /stop 中断本轮对话：回执已在命令处理时发送，队列已清空，继续循环即可
+                }
             }
         }
         catch (OperationCanceledException)

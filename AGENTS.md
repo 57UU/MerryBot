@@ -128,7 +128,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 
 - 每个 QQ 群一个会话键 `SessionKey("qq", "group", 群号)`；`AgentSessionManager` 管理会话，空闲默认 12 小时淘汰（`IdleSessionTimeoutHours` 可配）
 - 群消息按群排队串行处理（`PendingGroupMessages` 调度循环），限速默认 5 次/20 秒（`RateLimiter`）
-- 控制命令：`@bot /new`（清空上下文）、`@bot /compact [主题]`（按主题压缩）、消息含 `#新对话` 关键字亦触发新会话
+- 控制命令：`@bot /new`（清空上下文）、`@bot /compact [主题]`（按主题压缩）、`@bot /stop`（带外立即执行：取消正在生成的回复并丢弃该群排队消息，`AgentSession.Stop()` 取消当前对话的链接 CTS）、消息含 `#新对话` 关键字亦触发新会话
 - 上下文超阈值（`ContextCompactRatio`）时用 LLM 摘要压缩，历史持久化到 agent 作用域 LiteDB（`DatabaseContextHistory`）
 - 工具调用：`MessageTool`（发消息/看图片）、`TodoListToolSet`、`WebTools`（经 `Browser`）、`PromptToolSet`（动态提示词）、`SkillToolSet`、`Cron`（定时任务）、`MemoryToolSet`（记忆）、`SubAgentToolSet`（子任务代理，不嵌套自身）、`TerminalToolSet`（仅 `AllowShell` 开启时注册，命令以 `shell-user` 身份 `sudo -u` 执行）
 - 视觉：主模型具备 `ImageInput` 能力时图片直接进对话；否则按 `vision-llm` 配置的辅助模型列表逐级降级（`VisionRouter`）

@@ -134,7 +134,8 @@ public partial class Agent
 
     public async Task<(string result, TokenUsage tokenUsage)> Chat(
         string userInput,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CancellationToken userInterruptToken = default)
     {
         Log(new AgentLogEvent(AgentLogEventKind.ChatStarted, DateTimeOffset.UtcNow));
         try
@@ -178,7 +179,8 @@ public partial class Agent
                     cancellationToken,
                     messages,
                     iterationOptions,
-                    iteration + 1);
+                    iteration + 1,
+                    userInterruptToken);
                 totalUsage += usage;
                 lastUsage = usage;
 
