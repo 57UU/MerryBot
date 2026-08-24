@@ -1,31 +1,154 @@
 /* ============================================================
-   MerryBot Web UI — 浅色简洁风
-   设计令牌 / 布局 / 导航 / 组件 / 工具类 / 响应式
+   MerryBot Web UI — 现代双主题（浅色默认 / 深色 Linear 风深灰底）
+   设计令牌（[data-theme] 切换）/ 布局 / 导航 / 组件 / 工具类 / 响应式
    ============================================================ */
 
+/* ============ 设计令牌 ============ */
+
 :root {
+    color-scheme: light;
+
+    /* 主色 */
     --accent: #4f46e5;
     --accent-hover: #4338ca;
     --accent-soft: #eef2ff;
-    --bg: #f6f7f9;
+    --focus-ring: rgba(79, 70, 229, 0.16);
+
+    /* 中性面 */
+    --bg: #f4f5f8;
     --surface: #ffffff;
-    --surface-2: #f8fafc;
-    --border: #e5e7eb;
-    --border-strong: #d1d5db;
-    --text: #1f2937;
-    --text-dim: #6b7280;
+    --surface-2: #f6f8fa;
+    --surface-3: #eceff4;
+    --border: #e6e8ee;
+    --border-strong: #d2d6de;
+    --text: #181b22;
+    --text-dim: #6a7280;
+
+    /* 语义色 */
     --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --danger-soft: rgba(220, 38, 38, 0.10);
     --success: #059669;
+    --success-soft: rgba(5, 150, 105, 0.12);
     --warning: #d97706;
-    --radius: 10px;
+    --warning-soft: rgba(217, 119, 6, 0.14);
+    --overlay: rgba(15, 20, 35, 0.45);
+
+    /* 图标色调（统计卡 / 存储卡等彩色图标底） */
+    --tone-gray: #64748b;
+    --tone-gray-bg: rgba(100, 116, 139, 0.12);
+    --tone-indigo: #4f46e5;
+    --tone-indigo-bg: rgba(99, 102, 241, 0.12);
+    --tone-cyan: #0891b2;
+    --tone-cyan-bg: rgba(6, 182, 212, 0.12);
+    --tone-green: #059669;
+    --tone-green-bg: rgba(16, 185, 129, 0.12);
+    --tone-violet: #7c3aed;
+    --tone-violet-bg: rgba(139, 92, 246, 0.12);
+    --tone-amber: #d97706;
+    --tone-amber-bg: rgba(245, 158, 11, 0.14);
+    --tone-red: #dc2626;
+    --tone-red-bg: rgba(239, 68, 68, 0.12);
+
+    /* 图表色板与坐标轴 */
+    --chart-grid: rgba(148, 163, 184, 0.22);
+    --chart-axis: #94a3b8;
+    --chart-1: #0891b2;
+    --chart-2: #059669;
+    --chart-3: #7c3aed;
+    --chart-4: #d97706;
+    --chart-5: #dc2626;
+    --chart-6: #2563eb;
+
+    /* 圆角 / 阴影 */
+    --radius-lg: 14px;
+    --radius: 12px;
     --radius-sm: 8px;
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+    --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.16);
+
+    /* 滚动条 */
+    --scrollbar-thumb: #c9cdd6;
+
     --font: "Inter", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    --accent: #818cf8;
+    --accent-hover: #98a2fb;
+    --accent-soft: rgba(129, 140, 248, 0.15);
+    --focus-ring: rgba(129, 140, 248, 0.28);
+
+    --bg: #0e1015;
+    --surface: #15171d;
+    --surface-2: #1a1d25;
+    --surface-3: #22262f;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #e4e7ee;
+    --text-dim: #9098a9;
+
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --danger-soft: rgba(248, 113, 113, 0.14);
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, 0.14);
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.15);
+    --overlay: rgba(0, 0, 0, 0.6);
+
+    --tone-gray: #94a3b8;
+    --tone-gray-bg: rgba(148, 163, 184, 0.14);
+    --tone-indigo: #a5b4fc;
+    --tone-indigo-bg: rgba(99, 102, 241, 0.22);
+    --tone-cyan: #22d3ee;
+    --tone-cyan-bg: rgba(6, 182, 212, 0.18);
+    --tone-green: #34d399;
+    --tone-green-bg: rgba(16, 185, 129, 0.18);
+    --tone-violet: #c4b5fd;
+    --tone-violet-bg: rgba(139, 92, 246, 0.20);
+    --tone-amber: #fbbf24;
+    --tone-amber-bg: rgba(245, 158, 11, 0.18);
+    --tone-red: #f87171;
+    --tone-red-bg: rgba(239, 68, 68, 0.16);
+
+    --chart-grid: rgba(255, 255, 255, 0.08);
+    --chart-axis: #7d8595;
+    --chart-1: #22d3ee;
+    --chart-2: #34d399;
+    --chart-3: #a78bfa;
+    --chart-4: #fbbf24;
+    --chart-5: #f87171;
+    --chart-6: #60a5fa;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.55);
+
+    --scrollbar-thumb: #333947;
 }
 
 * {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
 }
 
 html,
@@ -69,6 +192,13 @@ code {
     border: 1px solid var(--border);
     border-radius: 5px;
     padding: 0.1em 0.35em;
+}
+
+/* 统一键盘焦点样式 */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
 }
 
 /* ============ 布局 ============ */
@@ -149,9 +279,13 @@ main.embed-mode {
     flex-shrink: 0;
 }
 
-/* ============ 顶部条与导航（浅色） ============ */
+/* ============ 顶部条与导航 ============ */
 
 .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     padding: 1rem 1.25rem 0.5rem;
 }
 
@@ -160,6 +294,7 @@ main.embed-mode {
     align-items: center;
     gap: 0.75rem;
     padding: 0 0.25rem;
+    min-width: 0;
 }
 
 .nav-brand {
@@ -182,7 +317,8 @@ main.embed-mode {
     width: 30px;
     height: 30px;
     border-radius: 9px;
-    background: var(--accent);
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -199,6 +335,40 @@ main.embed-mode {
     color: var(--text-dim);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.top-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.theme-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.theme-toggle svg {
+    width: 16px;
+    height: 16px;
+    display: block;
 }
 
 .nav-toggler {
@@ -234,6 +404,7 @@ main.embed-mode {
 }
 
 .nav-item .nav-link {
+    position: relative;
     color: var(--text-dim);
     display: flex;
     align-items: center;
@@ -258,11 +429,29 @@ main.embed-mode {
     font-weight: 600;
 }
 
+.nav-item .nav-link.active::before {
+    content: "";
+    position: absolute;
+    left: -0.375rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
 .nav-item .nav-icon {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
     opacity: 0.9;
+}
+
+.nav-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .nav-footer {
@@ -298,6 +487,7 @@ main.embed-mode {
 .btn-primary {
     background: var(--accent);
     color: #fff;
+    box-shadow: 0 1px 2px var(--focus-ring);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -321,7 +511,7 @@ main.embed-mode {
 }
 
 .btn-danger:hover:not(:disabled) {
-    background: #b91c1c;
+    background: var(--danger-hover);
 }
 
 .btn-sm {
@@ -379,7 +569,7 @@ main.embed-mode {
 .form-control:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+    box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 textarea.form-control {
@@ -433,6 +623,10 @@ textarea.form-control {
     border-bottom: none;
 }
 
+.table tbody tr {
+    transition: background-color 0.12s ease;
+}
+
 .table tbody tr:hover {
     background: var(--surface-2);
 }
@@ -462,7 +656,7 @@ textarea.form-control {
     flex-direction: column;
     max-width: 100%;
     overflow: hidden;
-    transition: box-shadow 0.2s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card-full-height:hover {
@@ -498,22 +692,65 @@ textarea.form-control {
     border-radius: var(--radius);
     box-shadow: var(--shadow-sm);
     padding: 1rem 1.1rem;
-    transition: box-shadow 0.18s ease;
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .stat-card:hover {
     box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
 }
 
 .stat-card .stat-icon {
     width: 36px;
     height: 36px;
-    border-radius: 9px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.05rem;
     margin-bottom: 0.6rem;
+}
+
+.stat-icon svg,
+.storage-icon svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+/* 彩色图标底（浅色淡底 + 同系深字；深色主题自动提亮） */
+.tone-gray {
+    background: var(--tone-gray-bg);
+    color: var(--tone-gray);
+}
+
+.tone-indigo {
+    background: var(--tone-indigo-bg);
+    color: var(--tone-indigo);
+}
+
+.tone-cyan {
+    background: var(--tone-cyan-bg);
+    color: var(--tone-cyan);
+}
+
+.tone-green {
+    background: var(--tone-green-bg);
+    color: var(--tone-green);
+}
+
+.tone-violet {
+    background: var(--tone-violet-bg);
+    color: var(--tone-violet);
+}
+
+.tone-amber {
+    background: var(--tone-amber-bg);
+    color: var(--tone-amber);
+}
+
+.tone-red {
+    background: var(--tone-red-bg);
+    color: var(--tone-red);
 }
 
 .stat-card-body {
@@ -553,12 +790,16 @@ textarea.form-control {
 .storage-card .storage-icon {
     width: 42px;
     height: 42px;
-    border-radius: 10px;
+    border-radius: 11px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.15rem;
     flex-shrink: 0;
+}
+
+.storage-icon svg {
+    width: 20px;
+    height: 20px;
 }
 
 .storage-card .storage-label {
@@ -623,7 +864,15 @@ textarea.form-control {
     color: var(--text);
     font-weight: 600;
     font-size: 0.9rem;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.quick-link svg {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    color: var(--text-dim);
+    transition: color 0.15s ease;
 }
 
 .quick-link:hover {
@@ -631,6 +880,10 @@ textarea.form-control {
     color: var(--accent);
     text-decoration: none;
     box-shadow: var(--shadow-md);
+}
+
+.quick-link:hover svg {
+    color: var(--accent);
 }
 
 /* ============ 列表组 ============ */
@@ -718,33 +971,34 @@ textarea.form-control {
 
 .message-item-deleted-custom {
     padding: 0.9rem 1.05rem;
-    border: 1px solid #fecaca;
+    border: 1px solid var(--danger);
     border-radius: var(--radius);
-    background: #fef2f2;
+    background: var(--danger-soft);
 }
 
 .message-deleted-text-custom {
     font-size: 0.75rem;
-    color: #b91c1c;
+    color: var(--danger);
 }
 
-/* ============ 模态框 ============ */
+/* ============ 徽标 ============ */
 
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background-color: rgba(15, 23, 42, 0.5);
+    background-color: var(--overlay);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(4px);
 }
 
 .modal-content {
     background: var(--surface);
-    border-radius: var(--radius);
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     width: 80%;
     height: 80%;
     max-width: 1000px;
@@ -810,6 +1064,12 @@ textarea.form-control {
     background: var(--surface-2);
     border-color: var(--border);
     color: var(--text-dim);
+}
+
+.badge-success {
+    background: var(--success-soft);
+    border-color: transparent;
+    color: var(--success);
 }
 
 .text-center-custom {
@@ -935,6 +1195,10 @@ textarea.form-control {
     padding-left: 1rem;
 }
 
+.p-4 {
+    padding: 1rem;
+}
+
 /* ============ 日志管理 ============ */
 
 .log-toolbar {
@@ -965,6 +1229,7 @@ textarea.form-control {
     color: var(--text-dim);
     cursor: pointer;
     font-family: inherit;
+    transition: all 0.15s ease;
 }
 
 .log-level:hover {
@@ -1016,7 +1281,7 @@ textarea.form-control {
 }
 
 .log-line-warn {
-    color: #b45309;
+    color: var(--warning);
 }
 
 .log-line-error,
@@ -1101,13 +1366,14 @@ textarea.form-control {
     bottom: 0;
     left: 0;
     right: 0;
-    background: #fef2f2;
-    color: #991b1b;
+    background: var(--danger-soft);
+    color: var(--danger);
     padding: 0.6rem 1rem;
-    border-top: 1px solid #fecaca;
+    border-top: 1px solid var(--danger);
     display: none;
     z-index: 2000;
     font-size: 0.85rem;
+    backdrop-filter: blur(8px);
 }
 
 #blazor-error-ui .reload {
@@ -1135,7 +1401,7 @@ textarea.form-control {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    box-shadow: var(--shadow-lg);
     padding: 0.75rem 1rem;
     font-size: 0.85rem;
     z-index: 2100;
@@ -1150,7 +1416,7 @@ textarea.form-control {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    box-shadow: var(--shadow-lg);
     padding: 0.75rem 1rem;
     font-size: 0.85rem;
     z-index: 2100;
@@ -1187,7 +1453,7 @@ textarea.form-control {
         cursor: pointer;
         background: none;
         border: none;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.5' d='M4 8h22M4 15h22M4 22h22'/%3e%3c/svg%3e");
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%239aa1af' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.5' d='M4 8h22M4 15h22M4 22h22'/%3e%3c/svg%3e");
         background-repeat: no-repeat;
         background-position: center;
         background-size: 26px;
@@ -1218,12 +1484,14 @@ textarea.form-control {
         padding: 1rem 1rem 2.5rem;
     }
 }
+
 /* ===== Token 用量页（TokenUsage.razor / TokenBarChart.razor）===== */
 .token-chart-wrapper {
-    background: var(--panel-bg, #fff);
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     padding: 1rem;
+    box-shadow: var(--shadow-sm);
 }
 
 .token-chart-svg {
@@ -1237,7 +1505,7 @@ textarea.form-control {
     gap: 1.25rem;
     margin-bottom: 0.5rem;
     font-size: 0.85rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-dim);
 }
 
 .legend-item {

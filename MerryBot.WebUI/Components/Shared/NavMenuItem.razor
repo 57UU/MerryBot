@@ -2,7 +2,9 @@
     <NavLink class="nav-link" href="@Href" Match=@Match>
         @if (!string.IsNullOrEmpty(Icon))
         {
-            <span class="nav-icon" aria-hidden="true">@Icon</span>
+            <span class="nav-icon" aria-hidden="true">
+                <Icon Name="@Icon" />
+            </span>
         }
         <span>@ChildContent</span>
     </NavLink>
@@ -15,6 +17,7 @@
     [Parameter]
     public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
 
+    /// <summary>图标名（见 Icon.razor 的内置图标表）。</summary>
     [Parameter]
     public string? Icon { get; set; }
 

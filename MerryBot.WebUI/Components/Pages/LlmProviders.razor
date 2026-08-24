@@ -4,151 +4,184 @@
 
 <PageTitle>模型配置</PageTitle>
 
-<div class="container-custom">
-    <h1>模型配置</h1>
-    <p class="text-muted-custom">models.dev 用于目录导入；真正使用的 API 地址、模型启用状态和 Key 都保存在本机数据库。Key 仅可写入，不会再次显示。</p>
+<div class="page-header">
+    <div>
+        <h1>模型配置</h1>
+        <p class="page-header-sub">models.dev 用于目录导入；真正使用的 API 地址、模型启用状态和 Key 都保存在本机数据库。Key 仅可写入，不会再次显示。</p>
+    </div>
+</div>
 
-    @if (!string.IsNullOrWhiteSpace(Error))
-    {
-        <div class="message-item-custom mb-3-custom">@Error</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="lp-alert mb-3-custom">@Error</div>
+}
 
-    <section class="message-item-custom mb-3-custom">
-        <div class="message-header-custom"><strong>从 models.dev 添加模型</strong></div>
-        <div class="message-content-custom">
-            <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
-            <div class="mb-3-custom">
-                <label>1. 搜索 Provider（输入即过滤）</label>
-                <input class="form-control" value="@CatalogProviderQuery" @oninput="OnProviderQueryChanged" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
-                <button class="btn btn-primary mt-2" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
-                <button class="btn btn-secondary mt-2 ms-2" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
-                @if (CatalogStatus is not null)
-                {
-                    <div><small class="text-muted-custom">目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
-                    @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
+<section class="lp-section mb-3-custom">
+    <div class="lp-section-head"><strong>本地运行配置</strong></div>
+    <div class="lp-section-body">
+        @if (Config == null)
+        {
+            <span class="text-muted-custom">加载中…</span>
+        }
+        else if (Config.Providers.Count == 0)
+        {
+            <span class="text-muted-custom">暂无已导入的配置。可从页面底部 models.dev 目录导入，或在「手工维护配置」中手动添加。</span>
+        }
+        else
+        {
+            @foreach (var provider in Config.Providers)
+            {
+                <div class="lp-provider" @key="provider.Id">
+                    <div class="lp-provider-head">
+                        <div class="lp-provider-title">
+                            <strong>@provider.Name</strong>
+                            <code>@provider.Id</code>
+                            <span class="badge">@provider.ApiFormat</span>
+                            @if (provider.Enabled)
+                            {
+                                <span class="badge badge-success">启用</span>
+                            }
+                            else
+                            {
+                                <span class="badge">禁用</span>
+                            }
+                        </div>
+                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</button>
+                    </div>
+                    <div class="lp-provider-sub"><small class="text-muted-custom">@provider.BaseUrl</small></div>
+
+                    @if (provider.Keys.Count > 0)
                     {
-                        <div><small class="text-muted-custom">刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
+                        <div class="lp-keys">
+                            <small class="text-muted-custom">Key</small>
+                            @foreach (var key in provider.Keys)
+                            {
+                                <span class="lp-key-chip" @key="key.Id">
+                                    <strong>@key.Name</strong>
+                                    <code>@key.Fingerprint</code>
+                                    <button type="button" class="lp-chip-delete" title="删除此 Key" aria-label="删除此 Key" @onclick="() => DeleteKeyAsync(key.Id)">×</button>
+                                </span>
+                            }
+                        </div>
                     }
-                }
-            </div>
 
-            @if (HasSearchedProviders && CatalogProviders.Count == 0)
-            {
-                <span>没有找到匹配的 Provider。</span>
-            }
-            else if (CatalogProviders.Count > 0)
-            {
-                <div class="table-scroll mb-3-custom">
-                    <table class="table">
-                        <thead><tr><th>Provider</th><th>ID</th><th>可用模型</th><th></th></tr></thead>
-                        <tbody>
-                        @foreach (var provider in CatalogProviders)
-                        {
-                            <tr @key="provider.Id">
-                                <td>@provider.Name</td>
-                                <td><code>@provider.Id</code></td>
-                                <td>@provider.ModelCount</td>
-                                <td><button class="btn btn-secondary" @onclick="() => SelectProviderAsync(provider)">选择并查看模型</button></td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
+                    @if (provider.Models.Count > 0)
+                    {
+                        <div class="lp-models">
+                            @foreach (var model in provider.Models)
+                            {
+                                <div class="lp-model" @key="model.Id">
+                                    <div class="lp-model-info">
+                                        <div class="lp-model-name">
+                                            <code>@model.Id</code><span class="lp-arrow">→</span><code>@model.RemoteModelId</code>
+                                            @if (Config.DefaultModelId == model.Id)
+                                            {
+                                                <span class="badge badge-success">默认</span>
+                                            }
+                                            @if (!model.Enabled)
+                                            {
+                                                <span class="badge">禁用</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(model.ReasoningEffort))
+                                            {
+                                                <span class="badge">思维 @model.ReasoningEffort</span>
+                                            }
+                                            @if (model.EnablePromptCache)
+                                            {
+                                                <span class="badge">缓存</span>
+                                            }
+                                        </div>
+                                        <small class="text-muted-custom">
+                                            @FormatLimit(model.ContextLength) context · @FormatLimit(model.MaxOutputTokens) output · @FormatCapabilities(model.Capabilities) · @FormatReasoningOptions(model.ReasoningOptions)
+                                        </small>
+                                    </div>
+                                    <div class="lp-model-actions">
+                                        @if (Config.DefaultModelId != model.Id)
+                                        {
+                                            <button class="btn btn-secondary btn-sm" @onclick="() => SetDefaultAsync(model.Id)">设为默认</button>
+                                        }
+                                        <button class="btn btn-secondary btn-sm" @onclick="() => FillManualFormAsync(model)">编辑</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteModelAsync(model.Id)">删除模型</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             }
+        }
+    </div>
+</section>
 
-            @if (SelectedCatalogProvider is not null)
-            {
-                <div class="mb-3-custom">
-                    <h5>2. 为 @SelectedCatalogProvider.Name 添加模型</h5>
-                    <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
-                    <label class="mt-2">筛选模型（输入即过滤）</label>
-                    <input class="form-control" value="@CatalogModelQuery" @oninput="OnModelQueryChanged" placeholder="例如 gpt、deepseek、flash" />
-                    <button class="btn btn-secondary mt-2" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button>
+<section class="lp-section mb-3-custom" @ref="ManualFormSection">
+    <div class="lp-section-head">
+        <strong>手工维护配置</strong>
+        @if (EditingModelId is not null)
+        {
+            <span class="lp-editing">
+                正在编辑 <code>@EditingModelId</code>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="ClearManualForm">清空表单</button>
+            </span>
+        }
+    </div>
+    <div class="lp-section-body">
+        <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
+            <h5>Provider</h5>
+            <div class="lp-form-grid">
+                <div class="lp-field">
+                    <label class="form-label">Provider ID</label>
+                    <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
                 </div>
-                <div class="mb-3-custom">
-                    <label>首次添加此 Provider 时使用的 API 地址</label>
-                    <input class="form-control" @bind="ImportBaseUrl" placeholder="https://api.example.com/v1" />
-                    <small class="text-muted-custom">默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。</small>
+                <div class="lp-field">
+                    <label class="form-label">显示名称</label>
+                    <input class="form-control" @bind="EditProviderName" placeholder="显示名称" required />
                 </div>
-                <div class="mb-3-custom">
-                    <label>API 格式</label>
-                    <select class="form-control" @bind="ImportApiFormat">
+                <div class="lp-field">
+                    <label class="form-label">API 地址</label>
+                    <input class="form-control" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">API 格式</label>
+                    <select class="form-control" @bind="EditApiFormat">
                         <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
                         <option value="openai-responses">OpenAI Responses（/responses）</option>
                         <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
                     </select>
-                    <small class="text-muted-custom">按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small>
                 </div>
-                <div class="mb-3-custom">
-                    <label>添加模型时一并保存的 API Key（可留空，随后单独添加）</label>
-                    <input class="form-control" type="password" @bind="ImportApiKey" autocomplete="new-password" />
-                </div>
-                @if (HasSearchedModels && CatalogModels.Count == 0)
-                {
-                    <span>这个 Provider 中没有匹配的模型。</span>
-                }
-                else if (CatalogModels.Count > 0)
-                {
-                    <div class="table-scroll">
-                        <table class="table">
-                            <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th>推理选项</th><th></th></tr></thead>
-                            <tbody>
-                            @foreach (var model in CatalogModels)
-                            {
-                                <tr @key="@($"{model.ProviderId}/{model.ModelId}")">
-                                    <td><code>@model.ModelId</code><br /><small>@model.Name</small></td>
-                                    <td>@FormatLimit(model.ContextLength)</td>
-                                    <td>@FormatLimit(model.MaxOutputTokens)</td>
-                                    <td>@model.Capabilities</td>
-                                    <td><small>@FormatReasoningOptions(model.ReasoningOptions)</small></td>
-                                    <td>
-                                        <button class="btn btn-primary" @onclick="() => ImportAsync(model)">添加模型</button>
-                                        <button class="btn btn-secondary" @onclick="() => FillManualFormAsync(model)">填入下方表格</button>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            }
-        </div>
-    </section>
+            </div>
+            <button class="btn btn-primary mt-2" type="submit">保存 Provider</button>
+        </form>
 
-    <section class="message-item-custom mb-3-custom" @ref="ManualFormSection">
-        <div class="message-header-custom"><strong>手工维护配置</strong></div>
-        <div class="message-content-custom">
-            <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
-                <h5>Provider</h5>
-                <label>Provider ID</label>
-                <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
-                <label class="mt-2">显示名称</label>
-                <input class="form-control mt-2" @bind="EditProviderName" placeholder="显示名称" required />
-                <label class="mt-2">API 地址</label>
-                <input class="form-control mt-2" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
-                <label class="mt-2">API 格式</label>
-                <select class="form-control" @bind="EditApiFormat">
-                    <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
-                    <option value="openai-responses">OpenAI Responses（/responses）</option>
-                    <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
-                </select>
-                <button class="btn btn-secondary mt-2" type="submit">保存 Provider</button>
-            </form>
-            <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
-                <h5>模型</h5>
-                <label>本地模型 ID</label>
-                <input class="form-control" @bind="EditModelId" placeholder="本地模型 ID，例如 provider/model" required />
-                <label class="mt-2">Provider ID</label>
-                <input class="form-control mt-2" @bind="EditModelProviderId" placeholder="Provider ID" required />
-                <label class="mt-2">显示名称</label>
-                <input class="form-control mt-2" @bind="EditModelName" placeholder="显示名称" required />
-                <label class="mt-2">上游 model ID</label>
-                <input class="form-control mt-2" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
-                <label class="mt-2">上下文长度</label>
-                <input class="form-control mt-2" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
-                <label class="mt-2">最大输出</label>
-                <input class="form-control mt-2" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
-                <label class="mt-2">能力（Capabilities）</label>
+        <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
+            <h5>模型</h5>
+            <div class="lp-form-grid">
+                <div class="lp-field">
+                    <label class="form-label">本地模型 ID</label>
+                    <input class="form-control" @bind="EditModelId" placeholder="本地模型 ID，例如 provider/model" required />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">Provider ID</label>
+                    <input class="form-control" @bind="EditModelProviderId" placeholder="Provider ID" required />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">显示名称</label>
+                    <input class="form-control" @bind="EditModelName" placeholder="显示名称" required />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">上游 model ID</label>
+                    <input class="form-control" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">上下文长度</label>
+                    <input class="form-control" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">最大输出</label>
+                    <input class="form-control" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
+                </div>
+            </div>
+            <div class="lp-field">
+                <label class="form-label">能力（Capabilities）</label>
                 <small class="text-muted-custom d-block">Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
                 <div class="form-check mt-1">
                     <input class="form-check-input" type="checkbox" id="capImageInput" @bind="EditModelImageInput" />
@@ -170,11 +203,13 @@
                     <input class="form-check-input" type="checkbox" id="capStructured" @bind="EditModelStructuredOutput" />
                     <label class="form-label" for="capStructured" style="margin-bottom:0">结构化输出（StructuredOutput）</label>
                 </div>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" id="editModelEnabled" @bind="EditModelEnabled" />
-                    <label class="form-label" for="editModelEnabled" style="margin-bottom:0">启用此模型</label>
-                </div>
-                <label class="mt-2">推理选项（Reasoning Options）</label>
+            </div>
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="editModelEnabled" @bind="EditModelEnabled" />
+                <label class="form-label" for="editModelEnabled" style="margin-bottom:0">启用此模型</label>
+            </div>
+            <div class="lp-field mt-2">
+                <label class="form-label">推理选项（Reasoning Options）</label>
                 <small class="text-muted-custom d-block">直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
                 @for (var _roIdx = 0; _roIdx < EditReasoningOptions.Count; _roIdx++)
                 {
@@ -186,122 +221,179 @@
                             <option value="effort">effort（档位）</option>
                         </select>
                         <input class="form-control" placeholder="可选值，逗号分隔，如 low, medium, high" value="@_ro.ValuesText" @oninput="e => OnReasoningOptionValuesChanged(_idx, e.Value?.ToString())" disabled="@(_ro.Type == "toggle")" />
-                        <button type="button" class="btn btn-danger" @onclick="() => RemoveReasoningOption(_idx)">删除</button>
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="() => RemoveReasoningOption(_idx)">删除</button>
                     </div>
                 }
-                <button type="button" class="btn btn-secondary mt-1" @onclick="AddReasoningOption">添加推理选项</button>
-                <label class="mt-2">思维强度（Reasoning Effort）</label>
-                <select class="form-control" @bind="EditModelReasoningEffort">
-                    <option value="">不开启</option>
-                    @foreach (var _eff in GetReasoningEffortOptions())
-                    {
-                        <option value="@_eff">@_eff</option>
-                    }
-                </select>
-                <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
-                    <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
-                </div>
-                <button class="btn btn-secondary mt-2" type="submit">保存模型</button>
-            </form>
-        </div>
-    </section>
-
-    <section class="message-item-custom mb-3-custom">
-        <div class="message-header-custom"><strong>添加或替换 Provider Key</strong></div>
-        <div class="message-content-custom">
-            @if (Config?.Providers.Count > 0)
-            {
-                <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
-                    <label>Provider</label>
-                    <select class="form-control" @bind="KeyProviderId">
-                        @foreach (var provider in Config.Providers)
+                <button type="button" class="btn btn-secondary btn-sm mt-2" @onclick="AddReasoningOption">添加推理选项</button>
+            </div>
+            <div class="lp-form-grid">
+                <div class="lp-field">
+                    <label class="form-label">思维强度（Reasoning Effort）</label>
+                    <select class="form-control" @bind="EditModelReasoningEffort">
+                        <option value="">不开启</option>
+                        @foreach (var _eff in GetReasoningEffortOptions())
                         {
-                            <option value="@provider.Id">@provider.Name (@provider.Id)</option>
+                            <option value="@_eff">@_eff</option>
                         }
                     </select>
-                    <label class="mt-2">名称</label>
-                    <input class="form-control" @bind="KeyName" placeholder="生产 Key" />
-                    <label class="mt-2">API Key</label>
-                    <input class="form-control" type="password" @bind="KeySecret" autocomplete="new-password" required />
-                    <label class="mt-2">优先级（数字越小越优先）</label>
-                    <input class="form-control" type="number" @bind="KeyPriority" />
-                    <button class="btn btn-primary mt-2" type="submit">保存 Key</button>
-                </form>
-            }
-            else
-            {
-                <span>请先从 models.dev 导入至少一个模型。</span>
-            }
-        </div>
-    </section>
+                    <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
+                </div>
+            </div>
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
+                <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
+            </div>
+            <button class="btn btn-primary mt-2" type="submit">保存模型</button>
+        </form>
+    </div>
+</section>
 
-    <section class="message-item-custom">
-        <div class="message-header-custom"><strong>本地运行配置</strong></div>
-        <div class="message-content-custom">
-            @if (Config == null)
-            {
-                <span>加载中…</span>
-            }
-            else if (Config.Providers.Count == 0)
-            {
-                <span>暂无已导入的配置。</span>
-            }
-            else
-            {
-                @foreach (var provider in Config.Providers)
-                {
-                    <div class="mb-3-custom" @key="provider.Id">
-                        <strong>@provider.Name</strong> <code>@provider.Id</code>
-                        <div><small>@provider.ApiFormat · @provider.BaseUrl · @(provider.Enabled ? "启用" : "禁用")</small></div>
-                        <div>
-                            <small>Key：</small>
-                            @foreach (var key in provider.Keys)
+<section class="lp-section mb-3-custom">
+    <div class="lp-section-head"><strong>添加或替换 Provider Key</strong></div>
+    <div class="lp-section-body">
+        @if (Config?.Providers.Count > 0)
+        {
+            <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
+                <div class="lp-form-grid">
+                    <div class="lp-field">
+                        <label class="form-label">Provider</label>
+                        <select class="form-control" @bind="KeyProviderId">
+                            @foreach (var provider in Config.Providers)
                             {
-                                <span class="me-2" @key="key.Id">@key.Name @key.Fingerprint <button class="btn btn-danger" @onclick="() => DeleteKeyAsync(key.Id)">删除</button></span>
+                                <option value="@provider.Id">@provider.Name (@provider.Id)</option>
                             }
-                        </div>
-                        <ul>
-                            @foreach (var model in provider.Models)
-                            {
-                                <li @key="model.Id">
-                                    <code>@model.Id</code> → <code>@model.RemoteModelId</code>
-                                    （@FormatLimit(model.ContextLength) context / @FormatLimit(model.MaxOutputTokens) output）
-                                    <small class="text-muted-custom ms-2">@FormatCapabilities(model.Capabilities)</small>
-                                    <small class="text-muted-custom ms-2">@FormatReasoningOptions(model.ReasoningOptions)</small>
-                                    @if (!model.Enabled)
-                                    {
-                                        <span class="badge ms-2">禁用</span>
-                                    }
-                                    @if (!string.IsNullOrEmpty(model.ReasoningEffort))
-                                    {
-                                        <span class="badge ms-2">思维 @model.ReasoningEffort</span>
-                                    }
-                                    @if (model.EnablePromptCache)
-                                    {
-                                        <span class="badge ms-2">缓存</span>
-                                    }
-                                    @if (Config.DefaultModelId == model.Id)
-                                    {
-                                        <strong> 默认</strong>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn btn-secondary ms-2" @onclick="() => SetDefaultAsync(model.Id)">设为默认</button>
-                                    }
-                                    <button class="btn btn-secondary ms-2" @onclick="() => FillManualFormAsync(model)">填入下方表格</button>
-                                    <button class="btn btn-danger ms-2" @onclick="() => DeleteModelAsync(model.Id)">删除模型</button>
-                                </li>
-                            }
-                        </ul>
-                        <button class="btn btn-danger" @onclick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</button>
+                        </select>
                     </div>
+                    <div class="lp-field">
+                        <label class="form-label">名称</label>
+                        <input class="form-control" @bind="KeyName" placeholder="生产 Key" />
+                    </div>
+                    <div class="lp-field">
+                        <label class="form-label">API Key</label>
+                        <input class="form-control" type="password" @bind="KeySecret" autocomplete="new-password" required />
+                    </div>
+                    <div class="lp-field">
+                        <label class="form-label">优先级（数字越小越优先）</label>
+                        <input class="form-control" type="number" @bind="KeyPriority" />
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-2" type="submit">保存 Key</button>
+            </form>
+        }
+        else
+        {
+            <span class="text-muted-custom">请先从 models.dev 导入至少一个模型。</span>
+        }
+    </div>
+</section>
+
+<section class="lp-section mb-3-custom">
+    <div class="lp-section-head"><strong>从 models.dev 添加模型</strong></div>
+    <div class="lp-section-body">
+        <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
+        <div class="mb-3-custom">
+            <div class="lp-step-title">步骤 1 · 选择 Provider</div>
+            <input class="form-control" value="@CatalogProviderQuery" @oninput="OnProviderQueryChanged" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
+            <div class="mt-2 inline-row flex-wrap">
+                <button class="btn btn-primary btn-sm" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
+                <button class="btn btn-secondary btn-sm" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
+            </div>
+            @if (CatalogStatus is not null)
+            {
+                <div><small class="text-muted-custom">目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
+                @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
+                {
+                    <div><small class="text-muted-custom">刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
                 }
             }
         </div>
-    </section>
-</div>
+
+        @if (HasSearchedProviders && CatalogProviders.Count == 0)
+        {
+            <p class="text-muted-custom">没有找到匹配的 Provider。</p>
+        }
+        else if (CatalogProviders.Count > 0)
+        {
+            <div class="table-scroll mb-3-custom">
+                <table class="table">
+                    <thead><tr><th>Provider</th><th>ID</th><th>可用模型</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var provider in CatalogProviders)
+                    {
+                        <tr @key="provider.Id">
+                            <td>@provider.Name</td>
+                            <td><code>@provider.Id</code></td>
+                            <td>@provider.ModelCount</td>
+                            <td><button class="btn btn-secondary btn-sm" @onclick="() => SelectProviderAsync(provider)">选择并查看模型</button></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (SelectedCatalogProvider is not null)
+        {
+            <div class="mb-3-custom">
+                <div class="lp-step-title">步骤 2 · 为 @SelectedCatalogProvider.Name 添加模型</div>
+                <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
+            </div>
+            <div class="lp-form-grid mb-3-custom">
+                <div class="lp-field">
+                    <label class="form-label">筛选模型（输入即过滤）</label>
+                    <input class="form-control" value="@CatalogModelQuery" @oninput="OnModelQueryChanged" placeholder="例如 gpt、deepseek、flash" />
+                    <div class="mt-2"><button class="btn btn-secondary btn-sm" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button></div>
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">首次添加此 Provider 时使用的 API 地址</label>
+                    <input class="form-control" @bind="ImportBaseUrl" placeholder="https://api.example.com/v1" />
+                    <small class="text-muted-custom">默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。</small>
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">API 格式</label>
+                    <select class="form-control" @bind="ImportApiFormat">
+                        <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
+                        <option value="openai-responses">OpenAI Responses（/responses）</option>
+                        <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
+                    </select>
+                    <small class="text-muted-custom">按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small>
+                </div>
+                <div class="lp-field">
+                    <label class="form-label">添加模型时一并保存的 API Key（可留空，随后单独添加）</label>
+                    <input class="form-control" type="password" @bind="ImportApiKey" autocomplete="new-password" />
+                </div>
+            </div>
+            @if (HasSearchedModels && CatalogModels.Count == 0)
+            {
+                <p class="text-muted-custom">这个 Provider 中没有匹配的模型。</p>
+            }
+            else if (CatalogModels.Count > 0)
+            {
+                <div class="table-scroll">
+                    <table class="table">
+                        <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th>推理选项</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var model in CatalogModels)
+                        {
+                            <tr @key="@($"{model.ProviderId}/{model.ModelId}")">
+                                <td><code>@model.ModelId</code><br /><small>@model.Name</small></td>
+                                <td>@FormatLimit(model.ContextLength)</td>
+                                <td>@FormatLimit(model.MaxOutputTokens)</td>
+                                <td>@model.Capabilities</td>
+                                <td><small>@FormatReasoningOptions(model.ReasoningOptions)</small></td>
+                                <td class="inline-row flex-wrap gap-2">
+                                    <button class="btn btn-primary btn-sm" @onclick="() => ImportAsync(model)">添加模型</button>
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => FillManualFormAsync(model)">填入编辑表单</button>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    </div>
+</section>
 
 @code {
     private LlmConfigSnapshot? Config;
@@ -347,6 +439,9 @@
     private string EditModelReasoningEffort { get; set; } = string.Empty;
     private bool EditModelEnablePromptCache { get; set; }
     private ElementReference ManualFormSection;
+
+    /// <summary>当前正在编辑的已保存模型 ID；null 表示表单为空白新增状态。</summary>
+    private string? EditingModelId;
 
     // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
     private CancellationTokenSource? _providerSearchCts;
@@ -538,7 +633,7 @@
         }
     }
 
-    /// <summary>把 models.dev 目录模型填入下方"手工维护配置"的模型表单，便于微调后保存。</summary>
+    /// <summary>把 models.dev 目录模型填入「手工维护配置」的模型表单（空白新增态），便于微调后保存。</summary>
     private async Task FillManualFormAsync(LlmCatalogModelDto model)
     {
         EditModelId = MakeLocalModelId(model.ProviderId, model.ModelId);
@@ -552,12 +647,14 @@
         ApplyReasoningOptions(model.ReasoningOptions);
         EditModelReasoningEffort = string.Empty;
         EditModelEnablePromptCache = false;
+        EditingModelId = null;
         await ScrollToManualFormAsync();
     }
 
-    /// <summary>把已导入的本地模型回填到下方"手工维护配置"的模型表单，便于微调后覆盖保存。</summary>
+    /// <summary>把已导入的本地模型回填到「手工维护配置」的模型表单，便于微调后覆盖保存。</summary>
     private async Task FillManualFormAsync(LlmModelDto model)
     {
+        EditingModelId = model.Id;
         EditModelId = model.Id;
         EditModelProviderId = model.ProviderId;
         EditModelName = model.Name;
@@ -578,6 +675,23 @@
         {
             await JSRuntime.InvokeVoidAsync("llmProviderApi.scrollIntoView", ManualFormSection);
         }
+    }
+
+    /// <summary>清空模型表单并退出编辑态，回到空白新增状态。</summary>
+    private void ClearManualForm()
+    {
+        EditModelId = string.Empty;
+        EditModelProviderId = string.Empty;
+        EditModelName = string.Empty;
+        EditModelRemoteId = string.Empty;
+        EditModelContextLength = 32_768;
+        EditModelMaxOutput = 4_096;
+        ApplyCapabilitiesFromString(null);
+        EditModelEnabled = true;
+        ApplyReasoningOptions(null);
+        EditModelReasoningEffort = string.Empty;
+        EditModelEnablePromptCache = false;
+        EditingModelId = null;
     }
 
     /// <summary>与插件 MakeLocalModelId 一致的本地模型 ID 生成规则。</summary>
@@ -640,6 +754,7 @@
                 new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
                     EditModelContextLength, EditModelMaxOutput, BuildCapabilities(), EditModelEnabled, EditModelReasoningEffort, EditModelEnablePromptCache, BuildReasoningOptions()));
             await LoadConfigAsync();
+            EditingModelId = null;
         }
         catch (Exception ex)
         {

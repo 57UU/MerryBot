@@ -1,0 +1,212 @@
+/* 模型配置页专属样式：全部引用全局设计令牌，亮暗主题自动适配 */
+
+/* 错误横幅 */
+.lp-alert {
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 0.9rem;
+}
+
+/* 区块卡片（替代通用 message-item-custom） */
+.lp-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.lp-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.8rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.98rem;
+}
+
+.lp-section-body {
+    padding: 1.1rem;
+}
+
+/* 编辑态提示 */
+.lp-editing {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.2rem 0.35rem 0.2rem 0.75rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.lp-editing .btn {
+    margin-left: 0.25rem;
+}
+
+/* Provider 卡 */
+.lp-provider {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+}
+
+.lp-provider + .lp-provider {
+    margin-top: 0.9rem;
+}
+
+.lp-provider-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.lp-provider-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    font-size: 0.95rem;
+}
+
+.lp-provider-sub {
+    margin-top: 0.15rem;
+}
+
+/* Key 胶囊 */
+.lp-keys {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.lp-key-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: 0.78rem;
+}
+
+.lp-key-chip code {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--text-dim);
+}
+
+.lp-chip-delete {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.lp-chip-delete:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+/* 模型行 */
+.lp-models {
+    margin-top: 0.7rem;
+    border-top: 1px solid var(--border);
+}
+
+.lp-model {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.6rem 0.1rem;
+}
+
+.lp-model + .lp-model {
+    border-top: 1px solid var(--border);
+}
+
+.lp-model-info {
+    min-width: 0;
+    flex: 1 1 320px;
+}
+
+.lp-model-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.lp-arrow {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
+.lp-model-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+/* 表单网格：宽屏两列，窄屏单列 */
+.lp-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+@media (max-width: 800px) {
+    .lp-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.lp-field label:not(.form-label) {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.lp-step-title {
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.lp-step-title::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--accent);
+    margin-right: 0.5rem;
+    vertical-align: -2px;
+}

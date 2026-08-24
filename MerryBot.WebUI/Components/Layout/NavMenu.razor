@@ -10,68 +10,73 @@
             </span>
         </a>
     </div>
-    <input type="checkbox" title="导航菜单" class="nav-toggler" />
+    <div class="top-row-actions">
+        <button class="theme-toggle" title="切换亮/暗主题" aria-label="切换亮/暗主题" @onclick="ToggleThemeAsync">
+            <Icon Name="@(IsDark == true ? "sun" : "moon")" />
+        </button>
+        <input type="checkbox" title="导航菜单" class="nav-toggler" />
+    </div>
 </div>
 
 <div class="nav-scrollable" @onclick="CloseNavIfToggled">
     <nav class="nav-column">
         <div class="nav-group">首页</div>
 
-        <NavMenuItem Href="" Match=NavLinkMatch.All Icon="🏠">
+        <NavMenuItem Href="" Match=NavLinkMatch.All Icon="home">
             概览
         </NavMenuItem>
 
         <div class="nav-group">配置管理</div>
 
-        <NavMenuItem Href="config" Icon="⚙️">
+        <NavMenuItem Href="config" Icon="settings">
             配置中心
         </NavMenuItem>
 
-        <NavMenuItem Href="advanced" Icon="🧪">
+        <NavMenuItem Href="advanced" Icon="flask">
             高级配置
         </NavMenuItem>
 
-        <NavMenuItem Href="groups" Icon="👥">
+        <NavMenuItem Href="groups" Icon="users">
             群组管理
         </NavMenuItem>
 
         <div class="nav-group">AI 服务</div>
 
-        <NavMenuItem Href="llmproviders" Icon="🧠">
+        <NavMenuItem Href="llmproviders" Icon="cpu">
             模型配置
         </NavMenuItem>
 
-        <NavMenuItem Href="skills" Icon="🧩">
+        <NavMenuItem Href="skills" Icon="puzzle">
             技能管理
         </NavMenuItem>
 
-        <NavMenuItem Href="memories" Icon="🗂️">
+        <NavMenuItem Href="memories" Icon="archive">
             记忆管理
         </NavMenuItem>
 
-        <NavMenuItem Href="sessionai" Icon="🔎">
+        <NavMenuItem Href="sessionai" Icon="search">
             会话快照
         </NavMenuItem>
 
         <div class="nav-group">消息审计</div>
 
-        <NavMenuItem Href="statistics" Icon="📊">
+        <NavMenuItem Href="statistics" Icon="bar-chart">
             数据统计
         </NavMenuItem>
 
-        <NavMenuItem Href="tokenusage" Icon="📈">
+        <NavMenuItem Href="tokenusage" Icon="trending-up">
             Token 用量
         </NavMenuItem>
 
-        <NavMenuItem Href="groupmessages" Icon="💬">
+        <NavMenuItem Href="groupmessages" Icon="message-square">
             群聊记录
         </NavMenuItem>
 
-        <NavMenuItem Href="aimessages" Icon="🤖">
+        <NavMenuItem Href="aimessages" Icon="bot">
             AI 记录
         </NavMenuItem>
 
-        <NavMenuItem Href="logs" Icon="📜">
+        <NavMenuItem Href="logs" Icon="scroll-text">
             运行日志
         </NavMenuItem>
     </nav>
@@ -95,6 +100,42 @@
     private bool Restarting;
     private bool Reloading;
     private bool Checking;
+
+    // 主题状态：预渲染阶段未知（显示 moon 占位），电路建立后从 JS 读取
+    private bool? IsDark;
+    private bool _themeInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 与页面数据加载同因：预渲染阶段无法调 JS，交互连接建立后再读当前主题
+        if (firstRender && !_themeInitialized)
+        {
+            _themeInitialized = true;
+            try
+            {
+                IsDark = await JSRuntime.InvokeAsync<string>("theme.get") == "dark";
+                StateHasChanged();
+            }
+            catch
+            {
+                // 电路断开等场景忽略
+            }
+        }
+    }
+
+    /// <summary>切换亮/暗主题并持久化选择。</summary>
+    private async Task ToggleThemeAsync()
+    {
+        try
+        {
+            var next = await JSRuntime.InvokeAsync<string>("theme.toggle");
+            IsDark = next == "dark";
+        }
+        catch
+        {
+            // 电路断开等场景忽略
+        }
+    }
 
     private async Task CloseNavIfToggled()
     {

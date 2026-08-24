@@ -30,12 +30,12 @@ else
 {
     <h2 class="page-title">用量汇总（@Describe(Selected)）</h2>
     <div class="stat-row">
-        <StatCard Title="总输入" Value="@FormatTokens(TotalInput)" Icon="📥" IconBg="rgba(6,182,212,0.12)" IconColor="#0891b2" />
-        <StatCard Title="缓存命中" Value="@FormatTokens(TotalCached)" Icon="⚡" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
-        <StatCard Title="缓存命中率" Value="@FormatRate(TotalCached, TotalUncached)" Icon="🎯" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
-        <StatCard Title="未缓存输入" Value="@FormatTokens(TotalUncached)" Icon="🔤" IconBg="rgba(99,102,241,0.12)" IconColor="#4f46e5" />
-        <StatCard Title="输出" Value="@FormatTokens(TotalOutput)" Icon="📤" IconBg="rgba(139,92,246,0.12)" IconColor="#7c3aed" />
-        <StatCard Title="总计 / 消息数" Value="@($"{FormatTokens(TotalAll)} / {MessageCount}")" Icon="🤖" IconBg="rgba(245,158,11,0.14)" IconColor="#d97706" />
+        <StatCard Title="总输入" Value="@FormatTokens(TotalInput)" IconName="download" Tone="cyan" />
+        <StatCard Title="缓存命中" Value="@FormatTokens(TotalCached)" IconName="zap" Tone="green" />
+        <StatCard Title="缓存命中率" Value="@FormatRate(TotalCached, TotalUncached)" IconName="target" Tone="green" />
+        <StatCard Title="未缓存输入" Value="@FormatTokens(TotalUncached)" IconName="type" Tone="indigo" />
+        <StatCard Title="输出" Value="@FormatTokens(TotalOutput)" IconName="upload" Tone="violet" />
+        <StatCard Title="总计 / 消息数" Value="@($"{FormatTokens(TotalAll)} / {MessageCount}")" IconName="cpu" Tone="amber" />
     </div>
 
     <h2 class="page-title">@GranularityTitle 柱状图</h2>

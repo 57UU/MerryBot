@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
+    <script>
+        // 首屏前设置主题，避免亮/暗切换闪烁；选择由 theme.js 持久化
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem("merrybot-theme"); } catch (e) { }
+            if (t !== "light" && t !== "dark") {
+                t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            }
+            document.documentElement.dataset.theme = t;
+        })();
+    </script>
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["MerryBot.WebUI.styles.css"]" />
     <ImportMap />
@@ -22,6 +33,7 @@
     <script src="js/groupMessages.js"></script>
     <script src="js/llmProvider.js"></script>
     <script src="js/configApi.js"></script>
+    <script src="js/theme.js"></script>
     <script src="js/skillApi.js"></script>
 </body>
 

@@ -5,9 +5,9 @@
     每根柱子自下而上依次为 未缓存输入 / 缓存命中 / 输出。 *@
 <div class="token-chart-wrapper">
     <div class="token-chart-legend">
-        <span class="legend-item"><span class="legend-swatch" style="background:@UncachedColor;"></span>未缓存输入</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:@CachedColor;"></span>缓存命中</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:@OutputColor;"></span>输出</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--chart-1);"></span>未缓存输入</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--chart-2);"></span>缓存命中</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--chart-3);"></span>输出</span>
     </div>
     @if (Buckets.Count == 0)
     {
@@ -32,9 +32,9 @@
             {
                 var value = yMax / 4 * tick;
                 var y = plotBottom - (int)((double)plotHeight * tick / 4);
-                <line x1="@plotLeft" y1="@y" x2="@plotRight" y2="@y" stroke="rgba(148,163,184,0.25)" stroke-width="1" />
+                <line x1="@plotLeft" y1="@y" x2="@plotRight" y2="@y" stroke="var(--chart-grid)" stroke-width="1" />
                 @* Razor 会把 <text> 解析为转义标记，SVG 文本元素须经 MarkupString 输出 *@
-                @((MarkupString)$"<text x=\"{plotLeft - 6}\" y=\"{y + 4}\" text-anchor=\"end\" font-size=\"11\" fill=\"#94a3b8\">{FormatTokens(value)}</text>")
+                @((MarkupString)$"<text x=\"{plotLeft - 6}\" y=\"{y + 4}\" text-anchor=\"end\" font-size=\"11\" fill=\"var(--chart-axis)\">{FormatTokens(value)}</text>")
             }
             @{
                 var count = Buckets.Count;
@@ -76,13 +76,13 @@
                     @if (bucket.TotalTokens == 0)
                     {
                         // 空桶画一条底线占位，保持时间轴连续感
-                        <rect x="@x" y="@(plotBottom - 1)" width="@barWidth" height="1" fill="rgba(148,163,184,0.35)">
+                        <rect x="@x" y="@(plotBottom - 1)" width="@barWidth" height="1" fill="var(--chart-grid)">
                             <title>@BucketTitle(bucket)</title>
                         </rect>
                     }
                     @if (i % labelEvery == 0)
                     {
-                        @((MarkupString)$"<text x=\"{x + barWidth / 2}\" y=\"{plotBottom + 16}\" text-anchor=\"middle\" font-size=\"10\" fill=\"#94a3b8\">{BucketLabel(bucket.BucketStart)}</text>")
+                        @((MarkupString)$"<text x=\"{x + barWidth / 2}\" y=\"{plotBottom + 16}\" text-anchor=\"middle\" font-size=\"10\" fill=\"var(--chart-axis)\">{BucketLabel(bucket.BucketStart)}</text>")
                     }
                 </g>
             }
@@ -99,9 +99,10 @@
     [Parameter]
     public long BucketSeconds { get; set; } = 3600;
 
-    private static string UncachedColor => "#0891b2";
-    private static string CachedColor => "#059669";
-    private static string OutputColor => "#7c3aed";
+    // 系列色走 CSS 令牌（--chart-1/2/3），亮暗主题自动切换
+    private static string UncachedColor => "var(--chart-1)";
+    private static string CachedColor => "var(--chart-2)";
+    private static string OutputColor => "var(--chart-3)";
 
     private string BucketLabel(long bucketStart)
     {

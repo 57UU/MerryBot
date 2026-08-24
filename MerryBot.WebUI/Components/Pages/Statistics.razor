@@ -17,31 +17,31 @@
 
 <h2 class="page-title">消息统计</h2>
 <div class="stat-row">
-    <StatCard Title="活跃群聊" Value="@(IsLoadingStats ? "—" : GroupCount.ToString())" Icon="👥" IconBg="rgba(99,102,241,0.12)" IconColor="#4f46e5" />
-    <StatCard Title="群聊消息数" Value="@(IsLoadingStats ? "—" : MessageCount.ToString())" Icon="💬" IconBg="rgba(6,182,212,0.12)" IconColor="#0891b2" />
-    <StatCard Title="AI 消息数" Value="@(IsLoadingStats ? "—" : AiMessageCount.ToString())" Icon="🤖" IconBg="rgba(139,92,246,0.12)" IconColor="#7c3aed" />
-    <StatCard Title="图片数量" Value="@(IsLoadingStats ? "—" : ImageCount.ToString())" Icon="🖼️" IconBg="rgba(16,185,129,0.12)" IconColor="#059669" />
-    <StatCard Title="文件/视频/语音" Value="@(IsLoadingStats ? "—" : FileCount.ToString())" Icon="📦" IconBg="rgba(245,158,11,0.14)" IconColor="#d97706" />
+    <StatCard Title="活跃群聊" Value="@(IsLoadingStats ? "—" : GroupCount.ToString())" IconName="users" Tone="indigo" />
+    <StatCard Title="群聊消息数" Value="@(IsLoadingStats ? "—" : MessageCount.ToString())" IconName="message-square" Tone="cyan" />
+    <StatCard Title="AI 消息数" Value="@(IsLoadingStats ? "—" : AiMessageCount.ToString())" IconName="bot" Tone="violet" />
+    <StatCard Title="图片数量" Value="@(IsLoadingStats ? "—" : ImageCount.ToString())" IconName="image" Tone="green" />
+    <StatCard Title="文件/视频/语音" Value="@(IsLoadingStats ? "—" : FileCount.ToString())" IconName="package" Tone="amber" />
 </div>
 
 <h2 class="page-title">存储占用</h2>
 <div class="stat-row">
     <div class="storage-card">
-        <span class="storage-icon" style="background:rgba(99,102,241,0.12);">🗄️</span>
+        <span class="storage-icon tone-indigo"><Icon Name="database" /></span>
         <div>
             <div class="storage-label">群聊历史库</div>
             <div class="storage-value">@GroupHistoryDbSize</div>
         </div>
     </div>
     <div class="storage-card">
-        <span class="storage-icon" style="background:rgba(16,185,129,0.12);">🖼️</span>
+        <span class="storage-icon tone-green"><Icon Name="image" /></span>
         <div>
             <div class="storage-label">图片存储</div>
             <div class="storage-value">@ImageStorageSize</div>
         </div>
     </div>
     <div class="storage-card">
-        <span class="storage-icon" style="background:rgba(245,158,11,0.14);">📦</span>
+        <span class="storage-icon tone-amber"><Icon Name="package" /></span>
         <div>
             <div class="storage-label">文件存储</div>
             <div class="storage-value">@FileStorageSize</div>

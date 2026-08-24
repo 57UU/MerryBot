@@ -1,6 +1,6 @@
 <div class="stat-card">
-    <div class="stat-icon" style="background:@(IconBg); color:@(IconColor);">
-        @Icon
+    <div class="stat-icon @ToneClass">
+        <Icon Name="@IconName" />
     </div>
     <div class="stat-card-body">
         <p class="stat-card-value">@Value</p>
@@ -15,12 +15,13 @@
     [Parameter]
     public object Value { get; set; } = 0;
 
+    /// <summary>图标名（见 Icon.razor 的内置图标表）。</summary>
     [Parameter]
-    public string? Icon { get; set; } = "📊";
+    public string IconName { get; set; } = "bar-chart";
 
+    /// <summary>图标色调类名：tone-gray/indigo/cyan/green/violet/amber/red（见 app.css）。</summary>
     [Parameter]
-    public string IconBg { get; set; } = "rgba(107,114,128,0.10)";
+    public string Tone { get; set; } = "gray";
 
-    [Parameter]
-    public string IconColor { get; set; } = "#6b7280";
+    private string ToneClass => $"tone-{Tone}";
 }
