@@ -61,7 +61,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 
 ### 测试项目
 
-- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
+- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）、`TerminalBackgroundTimeoutTests`（shell 前台超时转后台）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
 - **`ModelsDev.Sdk.Test/`** — xunit 测试（SDK 序列化/查询）
 - **`Browser.Test/`** — 浏览器手工测试台（Exe，非自动化测试）
 - **`Test/`** — 手工测试台（Exe，非自动化测试，通常不需要维护）
@@ -130,7 +130,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 - 群消息按群排队串行处理（`PendingGroupMessages` 调度循环），限速默认 5 次/20 秒（`RateLimiter`）
 - 控制命令：`@bot /new`（清空上下文）、`@bot /compact [主题]`（按主题压缩）、`@bot /stop`（带外立即执行：取消正在生成的回复并丢弃该群排队消息，`AgentSession.Stop()` 取消当前对话的链接 CTS）、消息含 `#新对话` 关键字亦触发新会话
 - 上下文超阈值（`ContextCompactRatio`）时用 LLM 摘要压缩，历史持久化到 agent 作用域 LiteDB（`DatabaseContextHistory`）
-- 工具调用：`MessageTool`（发消息/看图片）、`TodoListToolSet`、`WebTools`（经 `Browser`）、`PromptToolSet`（动态提示词）、`SkillToolSet`、`Cron`（定时任务）、`MemoryToolSet`（记忆）、`SubAgentToolSet`（子任务代理，不嵌套自身）、`TerminalToolSet`（仅 `AllowShell` 开启时注册，命令以 `shell-user` 身份 `sudo -u` 执行）
+- 工具调用：`MessageTool`（发消息/看图片）、`TodoListToolSet`、`WebTools`（经 `Browser`）、`PromptToolSet`（动态提示词）、`SkillToolSet`、`Cron`（定时任务）、`MemoryToolSet`（记忆）、`SubAgentToolSet`（子任务代理，不嵌套自身）、`TerminalToolSet`（仅 `AllowShell` 开启时注册，命令以 `shell-user` 身份 `sudo -u` 执行；shell 前台支持 `background_on_timeout`，超时不终止而是自动转后台任务并以 `TERMINAL_TASK_RESULT` 通知）
 - 视觉：主模型具备 `ImageInput` 能力时图片直接进对话；否则按 `vision-llm` 配置的辅助模型列表逐级降级（`VisionRouter`）
 
 ### WebUI

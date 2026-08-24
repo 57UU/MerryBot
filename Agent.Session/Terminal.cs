@@ -58,9 +58,10 @@ public class Terminal : IDisposable
 
     /// <summary>
     /// 执行命令并等待输出结束（以 marker 标记），返回合并后的 stdout/stderr。
-    /// cwd 非空时先切换工作目录；timeoutSeconds 为 null 时不设超时，否则超时后终止并重启 shell。
+    /// cwd 非空时先切换工作目录；timeoutSeconds 为 null 时不设超时，否则超时后终止并重启 shell；
+    /// backgroundOnTimeout 为 true 时超时不终止命令，而是转为后台继续运行（见 <see cref="TerminalRunResult.Detached"/>）。
     /// </summary>
-    public async Task<string> RunCommandAsync(string command, string? cwd = null, int? timeoutSeconds = 30)
+    public async Task<TerminalRunResult> RunCommandAsync(string command, string? cwd = null, int? timeoutSeconds = 30, bool backgroundOnTimeout = false)
     {
         await _mutex.WaitAsync();
         try
@@ -75,25 +76,49 @@ public class Terminal : IDisposable
             await _writer.WriteLineAsync($"printf '\\n{_endMarker}\\n';printf '\\n{_endMarker}\\n' >&2");
             await _writer.FlushAsync();
 
-            using var cts = timeoutSeconds is > 0
-                ? new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds.Value))
-                : new CancellationTokenSource();
-            var readOutTask = ReadUntilMarkerAsync(_reader, _endMarker, cts.Token);
-            var readErrTask = ReadUntilMarkerAsync(_errorReader, _endMarker, cts.Token);
-            await Task.WhenAll(readOutTask, readErrTask);
+            // 读取任务不带取消令牌：中途取消会破坏 StreamReader 的内部读状态（缓冲丢失、后续读提前 EOF），
+            // 超时通过与读取任务竞争（WhenAny + Delay）实现；放弃前台等待时要么杀进程让流关闭收尾，
+            // 要么（转后台）让同一批读取任务继续在后台跑到 marker 或进程退出。
+            var readOutTask = ReadUntilMarkerAsync(_reader, _endMarker);
+            var readErrTask = ReadUntilMarkerAsync(_errorReader, _endMarker);
+            var allRead = Task.WhenAll(readOutTask, readErrTask);
 
-            var (outText, outCancelled) = await readOutTask;
-            var (errText, errCancelled) = await readErrTask;
-            bool cancelled = outCancelled || errCancelled;
+            int timeoutMilliseconds = timeoutSeconds is > 0 ? timeoutSeconds.Value * 1000 : Timeout.Infinite;
+            bool timedOut = await Task.WhenAny(allRead, Task.Delay(timeoutMilliseconds)) != allRead;
 
-            string output = string.IsNullOrWhiteSpace(errText) ? outText : $"{outText}\nerror:{errText}";
-            output = output.Trim().Replace("\t", " ");
-            if (string.IsNullOrWhiteSpace(output))
+            if (timedOut && backgroundOnTimeout)
             {
-                output = "[无输出]";
+                // 超时转后台：不杀进程，同一批读取任务继续在后台执行；
+                // 必须先捕获旧进程再 Restart——RestartProcess 会原地替换本实例的进程与流字段。
+                var oldProcess = _process;
+                async Task<string> AssembleAsync()
+                {
+                    var texts = await allRead;
+                    return MergeOutput(texts[0], texts[1]);
+                }
+                var detached = new TerminalDetachedCommand(oldProcess, AssembleAsync());
+                // 只初始化新进程、不 Dispose 旧实例——RestartProcess 的 Dispose 会把旧进程（即后台任务
+                // 正在使用的进程）一并杀死；旧进程由 detached 句柄持有并负责最终回收
+                try
+                {
+                    InitializeProcess();
+                }
+                catch
+                {
+                    // 重启失败：保留原状态，下次调用会再次尝试
+                }
+                return new TerminalRunResult
+                {
+                    Output = "命令执行超时，已自动转入后台继续运行",
+                    Detached = detached,
+                };
             }
 
-            if (cancelled)
+            // 超时路径必须先杀进程：流随之关闭，allRead 才能结束并带回已收到的部分输出
+            var texts = await allRead;
+            string output = MergeOutput(texts[0], texts[1]);
+
+            if (timedOut)
             {
                 bool killed = await TryKillAsync();
                 RestartProcess();
@@ -106,16 +131,11 @@ public class Terminal : IDisposable
                 RestartProcess();
                 output += "\nShell 进程已退出，已重启";
             }
-            return output;
-        }
-        catch (OperationCanceledException)
-        {
-            // 调用方取消：保持取消语义，不包装成 Error 文本返回
-            throw;
+            return new TerminalRunResult { Output = output };
         }
         catch (Exception e)
         {
-            return $"Error:{e.Message}";
+            return new TerminalRunResult { Output = $"Error:{e.Message}" };
         }
         finally
         {
@@ -123,38 +143,40 @@ public class Terminal : IDisposable
         }
     }
 
+    /// <summary>合并 stdout/stderr 并做基础清理（去首尾空白、制表符转空格；全空时返回占位文本）</summary>
+    private static string MergeOutput(string outText, string errText)
+    {
+        string output = string.IsNullOrWhiteSpace(errText) ? outText : $"{outText}\nerror:{errText}";
+        output = output.Trim().Replace("\t", " ");
+        return string.IsNullOrWhiteSpace(output) ? "[无输出]" : output;
+    }
+
     /// <summary>用单引号包裹并转义，使含空格/特殊字符的路径安全传给 shell</summary>
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
 
-    /// <summary>逐行读取输出，直到行尾 marker 或取消（超时）；累积超过字节上限后停止累积并标记截断</summary>
-    private static async Task<(string content, bool cancelled)> ReadUntilMarkerAsync(StreamReader reader, string endMarker, CancellationToken token)
+    /// <summary>逐行读取输出，直到行尾 marker 或流关闭；累积超过字节上限后停止累积并标记截断。
+    /// 不接收取消令牌——中途取消会破坏 StreamReader 内部读状态，调用方通过杀进程（流关闭自然结束）收尾</summary>
+    private static async Task<string> ReadUntilMarkerAsync(StreamReader reader, string endMarker)
     {
         var sb = new StringBuilder();
         long byteCount = 0;
         bool truncated = false;
-        try
+        while (true)
         {
-            while (true)
+            string? line = await reader.ReadLineAsync();
+            if (line == null) break;
+            if (line.Trim() == endMarker) break;
+            if (truncated) continue; // 超限后继续排空流（直到 marker），但不再累积
+            byteCount += Encoding.UTF8.GetByteCount(line) + 2; // 含换行
+            if (byteCount > MaxOutputBytes)
             {
-                string? line = await reader.ReadLineAsync(token);
-                if (line == null) break;
-                if (line.Trim() == endMarker) break;
-                if (truncated) continue; // 超限后继续排空流（直到 marker），但不再累积
-                byteCount += Encoding.UTF8.GetByteCount(line) + 2; // 含换行
-                if (byteCount > MaxOutputBytes)
-                {
-                    truncated = true;
-                    sb.AppendLine($"\n…（输出超过 {MaxOutputBytes / (1024 * 1024)}MB，已截断）");
-                    continue;
-                }
-                sb.AppendLine(line);
+                truncated = true;
+                sb.AppendLine($"\n…（输出超过 {MaxOutputBytes / (1024 * 1024)}MB，已截断）");
+                continue;
             }
+            sb.AppendLine(line);
         }
-        catch (OperationCanceledException)
-        {
-            return (sb.ToString(), true);
-        }
-        return (sb.ToString(), false);
+        return sb.ToString();
     }
 
     private async Task<bool> TryKillAsync()
@@ -178,28 +200,59 @@ public class Terminal : IDisposable
 
     private void InitializeProcess()
     {
-        _process = new Process
+        // 事务式初始化：先保存原进程与流字段，失败时恢复并回收半成品新进程，
+        // 避免 _process 指向新进程、流仍指向旧进程的不一致状态（下次调用会再次尝试）。
+        // 注意不能在此 Dispose 旧进程——转后台路径中旧进程仍被后台任务使用。
+        var oldProcess = _process;
+        var oldWriter = _writer;
+        var oldReader = _reader;
+        var oldErrorReader = _errorReader;
+        try
         {
-            StartInfo = new ProcessStartInfo
+            _process = new Process
             {
-                FileName = _shell,
-                Arguments = _arguments,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = !string.IsNullOrWhiteSpace(_initialWorkingDirectory)
-                    ? _initialWorkingDirectory
-                    : Environment.CurrentDirectory,
-            },
-        };
-        _process.Start();
-        _writer = _process.StandardInput;
-        _reader = _process.StandardOutput;
-        _errorReader = _process.StandardError;
-        _disposed = false;
-        CreatedCount++;
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = _shell,
+                    Arguments = _arguments,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = !string.IsNullOrWhiteSpace(_initialWorkingDirectory)
+                        ? _initialWorkingDirectory
+                        : Environment.CurrentDirectory,
+                },
+            };
+            _process.Start();
+            _writer = _process.StandardInput;
+            _reader = _process.StandardOutput;
+            _errorReader = _process.StandardError;
+            _disposed = false;
+            CreatedCount++;
+        }
+        catch
+        {
+            // 回收可能已创建的新进程（Start 失败时 HasExited 可能不可查询，需单独兜底）
+            try
+            {
+                if (_process is not null && !_process.HasExited)
+                {
+                    _process.Kill(entireProcessTree: true);
+                }
+                _process?.Dispose();
+            }
+            catch
+            {
+                // 进程可能未成功启动，忽略清理异常
+            }
+            _process = oldProcess;
+            _writer = oldWriter;
+            _reader = oldReader;
+            _errorReader = oldErrorReader;
+            throw;
+        }
     }
 
     private void RestartProcess()
@@ -230,6 +283,58 @@ public class Terminal : IDisposable
                 _process.Kill(entireProcessTree: true);
             }
             _process?.Dispose();
+        }
+        catch
+        {
+            // 进程可能已退出或已被释放，忽略
+        }
+    }
+}
+
+/// <summary>RunCommandAsync 的返回：Output 为给调用方的文本；Detached 非空表示前台超时已自动转后台</summary>
+public sealed class TerminalRunResult
+{
+    public required string Output { get; init; }
+
+    /// <summary>超时转后台后的续接句柄；null 表示未发生转后台</summary>
+    public TerminalDetachedCommand? Detached { get; init; }
+}
+
+/// <summary>
+/// 前台超时后转入后台继续执行的命令句柄：Completion 在命令真正结束时完成，返回全量输出
+/// （含前台阶段已收到的部分输出）；Dispose 终止原进程树（幂等）。
+/// 直接持有旧 Process 而非 Terminal 实例——Terminal 超时重启会原地替换其内部进程与流字段，
+/// 持有实例引用反而会误杀重启后的新进程。
+/// </summary>
+public sealed class TerminalDetachedCommand : IDisposable
+{
+    private readonly Process _process;
+    private bool _disposed;
+
+    public TerminalDetachedCommand(Process process, Task<string> completion)
+    {
+        _process = process;
+        Completion = completion;
+    }
+
+    /// <summary>命令最终完成的任务：跑完或进程退出时结束</summary>
+    public Task<string> Completion { get; }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        try
+        {
+            if (!_process.HasExited)
+            {
+                // 终止整个进程树，确保子进程一并终止（Windows 同样生效）
+                _process.Kill(entireProcessTree: true);
+            }
+            _process.Dispose();
         }
         catch
         {

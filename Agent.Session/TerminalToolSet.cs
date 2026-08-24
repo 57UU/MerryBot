@@ -10,7 +10,8 @@ namespace Agent.Session;
 /// 终端工具集：注册 bash / task_list / task_output / task_stop 四个工具，效果对齐内置 Bash 工具。
 /// bash 进程懒加载——构造时不启动，首次前台调用时才创建共享常驻终端，之后跨调用保留 shell 状态（如 cd）。
 /// user 构造参数非空时以 sudo -u user 运行 bash；后台任务各自使用独立终端实例。
-/// 后台任务完成时通过 sessionManager 主动通知所属 session 的 Agent（stackable 类型，避免积压），
+/// 前台命令可通过 background_on_timeout 在超时时自动转为后台任务（复用同一套后台设施），
+/// 完成时通过 sessionManager 主动通知所属 session 的 Agent（stackable 类型，避免积压），
 /// 消息正文使用 &lt;TERMINAL_TASK_RESULT&gt; XML 标签包裹。
 /// </summary>
 public class TerminalToolSet : ToolSet, IDisposable
@@ -100,10 +101,13 @@ public class TerminalToolSet : ToolSet, IDisposable
         return false;
     }
 
-    private sealed record BackgroundTask(string Id, string Description, Terminal Terminal, Task<string> Task, DateTime StartTime)
+    private sealed record BackgroundTask(string Id, string Description, IDisposable Owner, Task<string> Task, DateTime StartTime)
     {
         /// <summary>任务被显式终止（task_stop 等）后置位，抑制"已完成"通知</summary>
         public volatile bool Stopped;
+
+        /// <summary>是否由前台超时自动转入后台（通知中标注来源）；Owner 为转后台句柄而非独立终端</summary>
+        public bool FromForegroundTimeout;
     }
 
     public TerminalToolSet(
@@ -137,6 +141,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             $"如需执行命令，调用 shell 工具；当前检测到的 shell 为：{_detectedShell}，请使用该 shell 的正确语法编写命令。命令在常驻 shell 中执行，cd 等状态跨调用保留；长任务可后台执行，用 task_list / task_output / task_stop 管理。";
         var builder = new ToolSetBridge.Builder(prompt);
         var shellDescription = "执行 shell 命令并返回输出。前台（默认）：在共享常驻 shell 中串行执行，同步返回输出，默认超时 60 秒，超时后终止并重启 shell；" +
+              "设置 background_on_timeout=true 时超时不终止命令，而是自动转入后台继续运行并返回 task_id；" +
               "run_in_background=true 时后台执行，立即返回 task_id，之后用 task_output 查询结果，默认超时 600 秒，disable_timeout=true 则不设超时。";
         builder.AddFunction<BashArgs>("shell", shellDescription,
             (BashArgs args, CancellationToken ct, Action<Message> onIterationAdd) => RunAsync(args, ct));
@@ -184,6 +189,9 @@ public class TerminalToolSet : ToolSet, IDisposable
 
         [Description("是否后台执行，后台立即返回 task_id")]
         public bool? run_in_background { get; set; }
+
+        [Description("前台超时时不终止命令，而是自动转为后台任务继续运行并返回 task_id，默认 false")]
+        public bool? background_on_timeout { get; set; }
 
         [Description("后台任务说明，建议填写便于 task_list 识别")]
         public string? description { get; set; }
@@ -239,7 +247,33 @@ public class TerminalToolSet : ToolSet, IDisposable
         {
             throw new ArgumentException("timeout 必须大于 0");
         }
-        return await _sync.Value.RunCommandAsync(command, args.cwd, timeout);
+        var result = await _sync.Value.RunCommandAsync(command, args.cwd, timeout, args.background_on_timeout == true);
+        if (result.Detached == null)
+        {
+            return result.Output;
+        }
+        return RegisterConvertedTask(result.Detached, args.description,
+            $"命令前台执行超时（{timeout} 秒），已自动转入后台继续运行");
+    }
+
+    /// <summary>
+    /// 登记一个由前台超时自动转入后台的任务：复用现有后台任务设施
+    /// （task_list/task_output/task_stop/完成通知/过期清理），转换后的任务持有转后台句柄而非独立终端。
+    /// 不做运行数上限检查——命令已经在跑，拒绝登记只会让它脱离管理。
+    /// </summary>
+    private string RegisterConvertedTask(TerminalDetachedCommand detached, string? description, string headline)
+    {
+        CleanupExpiredTasks();
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var info = new BackgroundTask(id, description ?? string.Empty, detached, detached.Completion, DateTime.Now)
+        {
+            FromForegroundTimeout = true,
+        };
+        _tasks[id] = info;
+        _ = NotifyOnCompletionAsync(info);
+        return headline + $"，task_id: {id}"
+            + (string.IsNullOrEmpty(description) ? string.Empty : $"，说明：{description}")
+            + "\n可用 task_list 查看状态，task_output 查询结果。";
     }
 
     /// <summary>
@@ -308,7 +342,7 @@ public class TerminalToolSet : ToolSet, IDisposable
         }
         try
         {
-            var shellPwd = (await _sync.Value.RunCommandAsync("pwd", null, 5)).Trim();
+            var shellPwd = (await _sync.Value.RunCommandAsync("pwd", null, 5)).Output.Trim();
             if (!string.IsNullOrEmpty(shellPwd))
             {
                 return Path.GetFullPath(Path.Combine(shellPwd, imagePath));
@@ -346,7 +380,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             {
                 throw new ArgumentException("timeout 必须大于 0");
             }
-            var task = terminal.RunCommandAsync(command, cwd, effectiveTimeout);
+            var task = RunAndUnwrapAsync(terminal, command, cwd, effectiveTimeout);
             var info = new BackgroundTask(id, description ?? string.Empty, terminal, task, DateTime.Now);
             _tasks[id] = info;
             // 完成后主动通知所属会话的 Agent（fire-and-forget）
@@ -361,6 +395,10 @@ public class TerminalToolSet : ToolSet, IDisposable
             throw;
         }
     }
+
+    /// <summary>后台任务专用：执行命令并只取输出文本（RunCommandAsync 现返回 TerminalRunResult，后台路径不涉及转后台句柄）</summary>
+    private static async Task<string> RunAndUnwrapAsync(Terminal terminal, string command, string? cwd, int? timeoutSeconds)
+        => (await terminal.RunCommandAsync(command, cwd, timeoutSeconds)).Output;
 
     /// <summary>
     /// 后台任务完成（成功或失败）后，主动通知所属会话的 Agent，让它拿到结果继续处理。
@@ -378,12 +416,18 @@ public class TerminalToolSet : ToolSet, IDisposable
             {
                 return; // 任务已被 task_stop 等显式终止，不推送"已完成"误导通知
             }
-            message = global::Agent.AgentEventMessageFormatter.Format(
-                "TERMINAL_TASK_RESULT",
+            var fields = new List<(string Name, string? Value)>
+            {
                 ("task_id", info.Id),
                 ("status", "completed"),
                 ("description", info.Description),
-                ("output", CapResult(result)));
+            };
+            if (info.FromForegroundTimeout)
+            {
+                fields.Add(("note", "前台超时自动转入后台"));
+            }
+            fields.Add(("output", CapResult(result)));
+            message = global::Agent.AgentEventMessageFormatter.Format("TERMINAL_TASK_RESULT", fields.ToArray());
         }
         catch (Exception ex)
         {
@@ -453,7 +497,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             return $"任务 {id} 仍在执行中（已等待 {elapsed:F0}秒），请稍后再查询。";
         }
         _tasks.TryRemove(id, out _);
-        info.Terminal.Dispose();
+        info.Owner.Dispose();
         var result = await info.Task;
         return $"任务 {id} 已完成：\n{result}";
     }
@@ -470,7 +514,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             return Task.FromResult($"未找到任务 {id}，可能已过期或从未存在。");
         }
         info.Stopped = true; // 抑制完成通知，避免推送误导性的"已完成"消息
-        info.Terminal.Dispose(); // Kill 终端进程（含子进程树），命令随之终止
+        info.Owner.Dispose(); // Kill 终端进程（含子进程树），命令随之终止
         return Task.FromResult($"任务 {id} 已终止。");
     }
 
@@ -484,7 +528,7 @@ public class TerminalToolSet : ToolSet, IDisposable
                 if (_tasks.TryRemove(kvp.Key, out var info))
                 {
                     info.Stopped = true;
-                    info.Terminal.Dispose();
+                    info.Owner.Dispose();
                 }
             }
         }
@@ -501,7 +545,7 @@ public class TerminalToolSet : ToolSet, IDisposable
             if (_tasks.TryRemove(kvp.Key, out var info))
             {
                 info.Stopped = true;
-                info.Terminal.Dispose();
+                info.Owner.Dispose();
             }
         }
     }
