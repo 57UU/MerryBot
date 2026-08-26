@@ -145,7 +145,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 | 路径（相对数据目录） | 内容 |
 | --- | --- |
 | `plugin_data.db` | 核心配置（`core` 命名空间）、插件配置（`Plugin_Config_Table`）、插件对象数据（`Plugin_Data_Table`）、各插件 scoped 集合（LLM Provider/模型/Key、Agent 会话历史/记忆/定时任务等） |
-| `group_history.db` + `storage/` | 群消息、图片/文件（按 SHA-256 hash 去重）、群事件、转发消息、群名、AI 消息审计（`ai_messages`，assistant 行带 token 用量：InputTokens/OutputTokens/CachedTokens，供 WebUI Token 用量页聚合）、资源引用表 |
+| `group_history.db` + `storage/` | 群消息、图片/文件（按 SHA-256 hash 去重）、群事件、转发消息、群名、AI 消息审计（`ai_messages`：每轮 user/assistant/tool 消息均落库，assistant 的工具调用请求以函数调用形式 `name(参数JSON)` 随正文落库；assistant 行带 token 用量：InputTokens/OutputTokens/CachedTokens，iteration 中间轮用量也计入，供 WebUI Token 用量页聚合）、资源引用表 |
 | `log/` | NLog 日志，按天命名 `bot-<日期>.log`（按天/10MB 归档、保留 30 份），layout `${longdate}|${level:uppercase=true}|${logger}|${message}`；WebUI `/logs` 页按 `*.log` 枚举浏览历史 |
 | `skills/` | Agent 技能文件（`.md`，可用 `.disable` 标记禁用） |
 | `models.dev-api.json` | models.dev 目录缓存（平时搜索优先本地缓存） |

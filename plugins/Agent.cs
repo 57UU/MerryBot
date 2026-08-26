@@ -324,12 +324,23 @@ public partial class AgentPlugin : Plugin
     /// <summary>
     /// Agent 消息审计回调：把每条会话消息（user/assistant/tool）以角色为类型写入 ai_messages。
     /// 只提取文本 part，纯非文本消息（如图片）不落库；消息产生即落库，不受上下文压缩/重置影响。
+    /// assistant 的工具调用请求随正文落库：模型请求工具调用时正文通常为空（仅 toolCalls），
+    /// 若按"纯文本为空即跳过"过滤，iteration 内部的中间轮模型输出与工具调用参数会整条丢失，
+    /// 且该轮 token 用量无从落库（用量按 assistant 行聚合，统计会偏低）。
     /// </summary>
     private async void RecordAiAuditMessageAsync(string sessionId, Message message, TokenUsage usage)
     {
         try
         {
             var text = string.Join('\n', message.content.OfType<MessagePartText>().Select(part => part.text)).Trim();
+            if (message.role.Value == "assistant" && message.toolCalls.Any())
+            {
+                // Role 为 class（属性每次新实例），不能引用比较，按 Value 字符串判断；
+                // 工具调用记录为函数调用形式 name(参数JSON)——参数即模型产出的 JSON 原文
+                var calls = string.Join('\n', message.toolCalls.Select(toolCall =>
+                    $"{toolCall.Name}({toolCall.Arguments})"));
+                text = text.Length == 0 ? calls : $"{text}\n{calls}";
+            }
             if (text.Length == 0)
             {
                 return;
