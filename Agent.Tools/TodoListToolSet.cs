@@ -42,7 +42,8 @@ public class TodoListToolSet : ToolSet
     {
         lock (gate)
         {
-            if (plan.Count == 0)
+            // 计划为空，或全部步骤已完成时，不再注入提醒（已完成的任务无需再提示推进）
+            if (plan.Count == 0 || plan.All(item => item.status == PlanStatus.completed))
             {
                 return null;
             }
