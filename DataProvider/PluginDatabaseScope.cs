@@ -1,3 +1,4 @@
+using LiteDB;
 using LiteDB.Async;
 using System.Text;
 
@@ -13,17 +14,23 @@ public sealed class PluginDatabaseScope
     private readonly LiteDatabaseAsync _database;
     private readonly string _prefix;
 
-    internal PluginDatabaseScope(LiteDatabaseAsync database, string pluginId, string prefix = "plugin")
+    internal PluginDatabaseScope(LiteDatabaseAsync database, string pluginId, string prefix = "plugin", BsonMapper? mapper = null)
     {
         _database = database;
         PluginId = pluginId;
         _prefix = string.IsNullOrWhiteSpace(prefix) ? "plugin" : prefix.Trim();
+        // 暴露数据库统一 mapper：作用域持有者做弱类型（BsonDocument）读取后，
+        // 需要用同一 mapper 反序列化 object 字段（保持 _type 元数据一致）
+        Mapper = mapper;
     }
 
     /// <summary>
     /// The plugin identifier that owns this database scope.
     /// </summary>
     public string PluginId { get; }
+
+    /// <summary>数据库构造时统一传入的 BsonMapper（可能为 null，仅当宿主未显式提供时）。</summary>
+    public BsonMapper? Mapper { get; }
 
     /// <summary>
     /// Gets or creates a typed collection in this plugin's namespace.

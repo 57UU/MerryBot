@@ -42,10 +42,11 @@ public sealed class CoreClockStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DateTime_RoundTrip_Preserves_Utc_Instant()
+    public async Task DateTime_Round_Trip_Preserves_Utc_Instant()
     {
-        // 1) 记录 LiteDB 原生陷阱：写 Kind=Utc 的 DateTime，读回会被转成本地墙钟（本机 +8h）。
-        //    这正是 CAS 领取永远失败、任务静默不执行的根因，断言在此固定下来防止回归。
+        // 1) 连接已启用 UTC_DATE pragma：读回必须保持 Kind=Utc、数值不变。
+        //    若该断言失败说明 pragma 被移除——LiteDB 默认把 DateTime 读成本地墙钟（本机 +8），
+        //    正是 CAS 领取被静默拒绝、任务不执行的根因，固定断言防止回归。
         var scope = _db.CreateScope("clock", prefix: "core");
         var raw = scope.GetCollection<RawDateTimeRecord>("raw_probe");
         await raw.InsertAsync(new RawDateTimeRecord
@@ -54,10 +55,8 @@ public sealed class CoreClockStoreTests : IDisposable
             Utc = new DateTime(2026, 8, 15, 12, 30, 0, DateTimeKind.Utc),
         });
         var rawRead = (await raw.FindAllAsync()).Single();
-        Assert.True(
-            rawRead.Utc.Kind == DateTimeKind.Local
-            && rawRead.Utc != new DateTime(2026, 8, 15, 12, 30, 0, DateTimeKind.Utc),
-            $"LiteDB 应把 Kind=Utc 读成 Local 墙钟（本机偏移 +8），实际: {rawRead.Utc:O}");
+        Assert.Equal(DateTimeKind.Utc, rawRead.Utc.Kind);
+        Assert.Equal(new DateTime(2026, 8, 15, 12, 30, 0, DateTimeKind.Utc), rawRead.Utc);
 
         // 2) CoreClockStore 往返必须保持 UTC 实例不变
         await _store.EnsureInitializedAsync();
@@ -90,7 +89,7 @@ public sealed class CoreClockStoreTests : IDisposable
         Assert.Equal(ClockRunStatus.Running, claim1!.Status);
         Assert.Equal(task.Id, claim1.TaskId);
 
-        var persisted = await _store.GetAsync("qq:group:1", task.Id);
+        var persisted = await _store.GetAsync(TestClock.PluginId, "qq:group:1", task.Id);
         Assert.Equal(now.AddHours(1), persisted!.NextRunAtUtc);
         Assert.Equal(scheduled, persisted.LastRunAtUtc);
 
@@ -141,7 +140,7 @@ public sealed class CoreClockStoreTests : IDisposable
         claim.ResultSummary = "ok";
         await _store.CompleteRunAsync(claim);
 
-        var logs = await _store.QueryLogsAsync("qq:group:1", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
+        var logs = await _store.QueryLogsAsync(TestClock.PluginId, "qq:group:1", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
         var log = Assert.Single(logs);
         Assert.Equal(ClockRunStatus.Succeeded, log.Status);
         Assert.Equal("ok", log.ResultSummary);
@@ -162,7 +161,7 @@ public sealed class CoreClockStoreTests : IDisposable
         // 模拟重启：Running 记录被标记为 Cancelled
         await _store.RecoverInterruptedRunsAsync(now.AddMinutes(10));
 
-        var logs = await _store.QueryLogsAsync("qq:group:1", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
+        var logs = await _store.QueryLogsAsync(TestClock.PluginId, "qq:group:1", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
         var log = Assert.Single(logs);
         Assert.Equal(ClockRunStatus.Cancelled, log.Status);
         Assert.Contains("重启", log.Error);
@@ -182,6 +181,115 @@ public sealed class CoreClockStoreTests : IDisposable
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => _store.EnsureInitializedAsync());
+    }
+
+    // ── Content object?：POCO 往返 / 类型已删除降级 ─────────────────────────
+
+    private sealed class TestPayload
+    {
+        public string Topic { get; set; } = string.Empty;
+        public int Limit { get; set; }
+    }
+
+    [Fact]
+    public async Task Content_Poco_RoundTrips_Through_Storage()
+    {
+        await _store.EnsureInitializedAsync();
+        var task = TestClock.MakeTask("qq:group:1", nextRun: TestClock.Start.AddMinutes(30));
+        task.Content = new TestPayload { Topic = "report", Limit = 5 };
+        await _store.CreateAsync(task);
+
+        var loaded = (await _store.LoadAllAsync()).Single();
+        var payload = Assert.IsType<TestPayload>(loaded.Content);
+        Assert.Equal("report", payload.Topic);
+        Assert.Equal(5, payload.Limit);
+
+        // 按 pluginId+sessionId 列表读取同样还原
+        var listed = (await _store.ListAsync(TestClock.PluginId, "qq:group:1")).Single();
+        Assert.IsType<TestPayload>(listed.Content);
+    }
+
+    [Fact]
+    public async Task Content_With_Removed_Type_Degrades_To_Text_Not_Exception()
+    {
+        await _store.EnsureInitializedAsync();
+        // 手工插入 Content 指向不存在类型的文档，模拟插件被删除后的存量数据
+        var scope = _db.CreateScope("clock", prefix: "core");
+        var docs = scope.GetCollection<BsonDocument>("clock_tasks");
+        var doc = new BsonDocument
+        {
+            ["_id"] = Guid.NewGuid(),
+            ["PluginId"] = "removed-plugin",
+            ["SessionId"] = "qq:group:1",
+            ["CronExpression"] = "0 9 * * *",
+            ["TimeZoneId"] = "UTC",
+            ["Content"] = new BsonDocument
+            {
+                ["_type"] = "MerryBot.Test.DoesNotExistPayload, MerryBot.Test",
+                ["Topic"] = "stale",
+            },
+            ["TriggerType"] = "group",
+            ["TriggerId"] = "1",
+            ["RunOnce"] = false,
+            ["TimeoutSeconds"] = 600,
+            ["Enabled"] = true,
+            ["CreatedAtUtc"] = TestClock.Start.UtcDateTime,
+            ["UpdatedAtUtc"] = TestClock.Start.UtcDateTime,
+        };
+        await docs.InsertAsync(doc);
+
+        // 弱类型读取：不抛异常，Content 降级为 JSON 文本
+        var loaded = (await _store.LoadAllAsync()).Single(t => t.PluginId == "removed-plugin");
+        Assert.NotNull(loaded.Content);
+        Assert.Contains("stale", loaded.Content.ToString());
+    }
+
+    // ── v1→v2 迁移：存量数据补 PluginId ────────────────────────────────────
+
+    [Fact]
+    public async Task EnsureInitialized_Migrates_V1_Records_To_Agent_PluginId()
+    {
+        // 构造 v1 存量：任务与日志都没有 PluginId，meta 版本为 "1"
+        var scope = _db.CreateScope("clock", prefix: "core");
+        var taskDocs = scope.GetCollection<BsonDocument>("clock_tasks");
+        var logDocs = scope.GetCollection<BsonDocument>("clock_run_logs");
+        var meta = scope.GetCollection<MetaRecord>("meta");
+
+        var taskId = Guid.NewGuid();
+        await taskDocs.InsertAsync(new BsonDocument
+        {
+            ["_id"] = taskId,
+            ["SessionId"] = "qq:group:1",
+            ["CronExpression"] = "0 9 * * *",
+            ["TimeZoneId"] = "UTC",
+            ["Content"] = "legacy",
+            ["TriggerType"] = "group",
+            ["TriggerId"] = "1",
+            ["RunOnce"] = false,
+            ["TimeoutSeconds"] = 600,
+            ["Enabled"] = true,
+            ["NextRunAtUtc"] = TestClock.Start.AddMinutes(30).UtcDateTime,
+            ["CreatedAtUtc"] = TestClock.Start.UtcDateTime,
+            ["UpdatedAtUtc"] = TestClock.Start.UtcDateTime,
+        });
+        await logDocs.InsertAsync(new BsonDocument
+        {
+            ["RunId"] = Guid.NewGuid(),
+            ["TaskId"] = taskId,
+            ["SessionId"] = "qq:group:1",
+            ["ScheduledAtUtc"] = TestClock.Start.UtcDateTime,
+            ["Status"] = (int)ClockRunStatus.Succeeded,
+        });
+        await meta.InsertAsync(new MetaRecord { Id = "persistence-schema-version", Value = "1" });
+
+        await _store.EnsureInitializedAsync();
+
+        // 迁移后归属 agent、meta 升到 2
+        var loaded = (await _store.LoadAllAsync()).Single();
+        Assert.Equal("agent", loaded.PluginId);
+        Assert.Equal("legacy", loaded.Content);
+        var version = await scope.GetCollection<MetaRecord>("meta").FindByIdAsync("persistence-schema-version");
+        Assert.Equal("2", version!.Value);
     }
 
     private sealed class MetaRecord

@@ -60,7 +60,7 @@ public partial class AgentPlugin : Plugin
             new WebTools(browser),
             new PromptToolSet(dynamicPrompt),
             skillToolSet,
-            new Cron(sessionId, Interop.ClockService),
+            new Cron(sessionId, Interop.Clock),
             memoryToolSet,
         };
         if (agentConfig.AllowShell)

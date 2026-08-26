@@ -86,7 +86,7 @@ public record PluginInterop(
     EventRegister EventRegister,
     IMessageService MessageService,
     MessageChannel Channel,
-    ClockService ClockService
+    ClockScope Clock
     )
 {
     /// <summary>

@@ -1,0 +1,346 @@
+@page "/clock"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@using System.Text.Json
+@using Agent.Session
+
+<PageTitle>定时任务</PageTitle>
+
+<div class="container-custom clock-page">
+    <h1>定时任务</h1>
+    <p class="text-muted-custom">所有插件的定时任务（按 pluginId 隔离）。可编辑调度与文本型内容、启停或删除任务；插件自定义模型的内容为只读，请在插件侧修改。任务的创建由插件/模型工具完成。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+
+    @if (Tasks is null)
+    {
+        <span>加载中…</span>
+    }
+    else if (Tasks.Count == 0)
+    {
+        <div class="message-item-custom">暂时没有任何定时任务。</div>
+    }
+    else
+    {
+        <div class="clock-layout">
+            <aside class="message-item-custom clock-list">
+                <div class="clock-list-header">
+                    <strong>任务</strong>
+                    <select class="form-select form-select-sm" value="@PluginFilter" @onchange="e => OnPluginFilterChangedAsync(e.Value?.ToString())">
+                        <option value="">全部插件</option>
+                        @foreach (var pluginId in PluginIds)
+                        {
+                            <option value="@pluginId">@pluginId</option>
+                        }
+                    </select>
+                </div>
+                @foreach (var task in FilteredTasks)
+                {
+                    <button class="clock-task @(SelectedTask?.Id == task.Id ? "active" : "")" @onclick="() => SelectTaskAsync(task)">
+                        <span class="clock-task-title">
+                            <span class="clock-badge @(task.Enabled ? "on" : "off")">@(task.Enabled ? "启用" : "停用")</span>
+                            <code>@task.CronExpression</code>
+                        </span>
+                        <small>@task.PluginId / @ShortSession(task.SessionId)</small>
+                        <small>下次: @(task.NextRunAtUtc?.LocalDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</small>
+                    </button>
+                }
+            </aside>
+
+            <section class="clock-detail">
+                @if (SelectedTask is null)
+                {
+                    <div class="message-item-custom">从左侧选择一个任务进行编辑。</div>
+                }
+                else
+                {
+                    <div class="message-item-custom mb-3-custom">
+                        <div class="message-header-custom">
+                            <strong>编辑任务</strong>
+                            <small class="text-muted-custom">@SelectedTask.PluginId / @SelectedTask.SessionId</small>
+                        </div>
+                        <div class="message-content-custom clock-form">
+                            <div class="clock-field">
+                                <label class="form-label">Cron 表达式（分 时 日 月 周）</label>
+                                <input class="form-control" placeholder="0 9 * * 1-5" value="@EditCron" @onchange="e => EditCron = e.Value?.ToString() ?? string.Empty" />
+                            </div>
+                            <div class="clock-field">
+                                <label class="form-label">时区</label>
+                                <input class="form-control" placeholder="Asia/Shanghai" value="@EditTimeZone" @onchange="e => EditTimeZone = e.Value?.ToString() ?? string.Empty" />
+                            </div>
+                            <div class="clock-field">
+                                <label class="form-label">超时（秒，1-86400）</label>
+                                <input class="form-control" type="number" min="1" max="86400" value="@EditTimeout" @onchange="e => EditTimeout = e.Value?.ToString() ?? string.Empty" />
+                            </div>
+                            <div class="clock-field clock-checks">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" checked="@EditRunOnce" @onchange="e => EditRunOnce = e.Value is bool v && v" />
+                                    <label class="form-check-label">只执行一次（run_once）</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" checked="@EditEnabled" @onchange="e => EditEnabled = e.Value is bool v && v" />
+                                    <label class="form-check-label">启用</label>
+                                </div>
+                            </div>
+                            @if (SelectedTask.ContentIsText)
+                            {
+                                <div class="clock-field">
+                                    <label class="form-label">内容（留空保存则保持原内容不变）</label>
+                                    <textarea class="form-control" rows="5" value="@EditContent" @onchange="e => EditContent = e.Value?.ToString() ?? string.Empty"></textarea>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="clock-field">
+                                    <label class="form-label">内容（插件自定义类型，只读）</label>
+                                    <pre class="clock-json">@ObjectJsonText</pre>
+                                </div>
+                            }
+                            <div class="clock-actions">
+                                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@IsSaving">@(IsSaving ? "保存中…" : "保存修改")</button>
+                                <button class="btn btn-secondary" @onclick="() => ToggleEnabledAsync()" disabled="@IsSaving">@(!EditEnabled ? "启用" : "停用")</button>
+                                <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@IsSaving">删除任务</button>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(SaveError))
+                            {
+                                <div class="clock-save-error">@SaveError</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="message-item-custom">
+                        <div class="message-header-custom"><strong>执行记录</strong></div>
+                        <div class="message-content-custom">
+                            @if (Logs is null || Logs.Count == 0)
+                            {
+                                <span>暂无执行记录。</span>
+                            }
+                            else
+                            {
+                                <table class="table clock-log-table">
+                                    <thead>
+                                        <tr>
+                                            <th>计划时间</th>
+                                            <th>状态</th>
+                                            <th>耗时</th>
+                                            <th>结果 / 错误</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var log in Logs)
+                                        {
+                                            <tr>
+                                                <td>@log.ScheduledAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                                <td><span class="clock-badge st-@log.Status.ToString().ToLowerInvariant()">@StatusText(log.Status)</span></td>
+                                                <td>@(log.DurationMilliseconds is { } ms ? $"{ms / 1000.0:F1}s" : "-")</td>
+                                                <td class="clock-log-result">@(log.Error ?? log.SkipReason ?? TruncateText(log.ResultSummary, 160))</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ClockTaskDto>? Tasks;
+    private List<ClockLogDto>? Logs;
+    private ClockTaskDto? SelectedTask;
+    private string? Error;
+    private string? SaveError;
+    private bool IsSaving;
+    private string PluginFilter = string.Empty;
+
+    // 编辑表单状态
+    private string EditCron = string.Empty;
+    private string EditTimeZone = string.Empty;
+    private string EditTimeout = string.Empty;
+    private string EditContent = string.Empty;
+    private bool EditRunOnce;
+    private bool EditEnabled;
+
+    private IEnumerable<string> PluginIds => (Tasks ?? [])
+        .Select(t => t.PluginId)
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(id => id, StringComparer.Ordinal);
+
+    private IEnumerable<ClockTaskDto> FilteredTasks => string.IsNullOrEmpty(PluginFilter)
+        ? Tasks ?? []
+        : (Tasks ?? []).Where(t => t.PluginId == PluginFilter);
+
+    /// <summary>对象型 Content 的只读 JSON 展示文本。</summary>
+    private string ObjectJsonText
+    {
+        get
+        {
+            var content = SelectedTask?.Content;
+            if (content is null)
+            {
+                return string.Empty;
+            }
+            try { return JsonSerializer.Serialize(content, new JsonSerializerOptions { WriteIndented = true }); }
+            catch { return content.ToString() ?? string.Empty; }
+        }
+    }
+
+    protected override Task OnInitializedAsync() => LoadTasksAsync();
+
+    private async Task LoadTasksAsync()
+    {
+        try
+        {
+            Error = null;
+            Tasks = await JSRuntime.InvokeAsync<List<ClockTaskDto>>("configApi.request", "GET", "/api/clock/tasks");
+            // 列表刷新后保持选中项（任务可能被外部修改）
+            if (SelectedTask != null)
+            {
+                var refreshed = Tasks.FirstOrDefault(t => t.Id == SelectedTask.Id);
+                if (refreshed is null)
+                {
+                    SelectedTask = null;
+                    Logs = null;
+                }
+            }
+        }
+        catch (Exception exception) { Error = $"无法读取定时任务: {exception.Message}"; }
+    }
+
+    private async Task OnPluginFilterChangedAsync(string? pluginId)
+    {
+        PluginFilter = pluginId ?? string.Empty;
+        await Task.CompletedTask;
+    }
+
+    private async Task SelectTaskAsync(ClockTaskDto task)
+    {
+        SelectedTask = task;
+        SaveError = null;
+        EditCron = task.CronExpression;
+        EditTimeZone = task.TimeZoneId;
+        EditTimeout = task.TimeoutSeconds.ToString();
+        EditRunOnce = task.RunOnce;
+        EditEnabled = task.Enabled;
+        EditContent = ContentToText(task.Content);
+        Logs = null;
+        await LoadLogsAsync(task);
+    }
+
+    private static string ContentToText(object? content)
+    {
+        return content switch
+        {
+            null => string.Empty,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? string.Empty,
+            JsonElement { ValueKind: JsonValueKind.Null } => string.Empty,
+            _ => string.Empty,
+        };
+    }
+
+    private async Task LoadLogsAsync(ClockTaskDto task)
+    {
+        try
+        {
+            var encodedPlugin = Uri.EscapeDataString(task.PluginId);
+            var encodedSession = Uri.EscapeDataString(task.SessionId);
+            Logs = await JSRuntime.InvokeAsync<List<ClockLogDto>>(
+                "configApi.request", "GET",
+                $"/api/clock/logs?pluginId={encodedPlugin}&sessionId={encodedSession}&taskId={task.Id}&limit=20");
+        }
+        catch (Exception exception) { Error = $"无法读取执行记录: {exception.Message}"; }
+    }
+
+    private Task SaveAsync() => SaveCoreAsync(EditEnabled);
+
+    private Task ToggleEnabledAsync() => SaveCoreAsync(!EditEnabled);
+
+    private async Task SaveCoreAsync(bool enabled)
+    {
+        if (SelectedTask is null) return;
+        IsSaving = true;
+        SaveError = null;
+        try
+        {
+            var request = new ClockTaskUpdateRequest(
+                SelectedTask.PluginId,
+                SelectedTask.SessionId,
+                SelectedTask.Id,
+                string.IsNullOrWhiteSpace(EditCron) ? null : EditCron.Trim(),
+                string.IsNullOrWhiteSpace(EditTimeZone) ? null : EditTimeZone.Trim(),
+                EditContent,
+                ContentProvided: SelectedTask.ContentIsText,
+                RunOnce: EditRunOnce,
+                TimeoutSeconds: int.TryParse(EditTimeout, out var timeout) ? timeout : null,
+                Enabled: enabled);
+            var updated = await JSRuntime.InvokeAsync<ClockTaskDto>("configApi.request", "POST", "/api/clock/tasks/update", request);
+            EditEnabled = enabled;
+            await LoadTasksAsync();
+            // 用刷新后的数据重新填充表单（NextRunAtUtc 等可能变化）
+            var refreshed = Tasks?.FirstOrDefault(t => t.Id == updated.Id);
+            if (refreshed != null)
+            {
+                await SelectTaskAsync(refreshed);
+            }
+        }
+        catch (Exception exception)
+        {
+            SaveError = $"保存失败: {exception.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (SelectedTask is null) return;
+        bool confirmed;
+        try { confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定要删除该定时任务吗？\n\n{SelectedTask.PluginId} / {SelectedTask.CronExpression}\n执行历史会保留。"); }
+        catch { confirmed = false; }
+        if (!confirmed) return;
+
+        IsSaving = true;
+        SaveError = null;
+        try
+        {
+            var request = new ClockTaskDeleteRequest(SelectedTask.PluginId, SelectedTask.SessionId, SelectedTask.Id);
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/clock/tasks/delete", request);
+            SelectedTask = null;
+            Logs = null;
+            await LoadTasksAsync();
+        }
+        catch (Exception exception)
+        {
+            SaveError = $"删除失败: {exception.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private static string ShortSession(string sessionId) =>
+        sessionId.Length <= 24 ? sessionId : sessionId[..24] + "…";
+
+    private static string StatusText(ClockRunStatus status) => status switch
+    {
+        ClockRunStatus.Running => "执行中",
+        ClockRunStatus.Succeeded => "成功",
+        ClockRunStatus.TimedOut => "超时",
+        ClockRunStatus.Failed => "失败",
+        ClockRunStatus.Skipped => "跳过",
+        ClockRunStatus.Cancelled => "取消",
+        _ => status.ToString(),
+    };
+
+    private static string TruncateText(string? value, int limit) =>
+        string.IsNullOrEmpty(value) ? string.Empty : (value.Length <= limit ? value : value[..limit] + "…");
+}

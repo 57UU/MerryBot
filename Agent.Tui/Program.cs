@@ -46,7 +46,9 @@ try
     sessionManager = new AgentSessionManager(CreateAgentAsync);
     clockService = new ClockService(
         new InMemoryClockStore(),
-        new DelegatingClockExecutor { Inner = new AgentSessionClockExecutor(sessionManager) });
+        new DelegatingClockExecutor());
+    // Tui 是独立终端客户端：所有定时任务归属单一 "tui" 命名空间（InMemoryStore 不落盘）
+    clockService.RegisterExecutor("tui", new AgentSessionClockExecutor(sessionManager));
     await clockService.StartAsync(shutdown.Token);
 
     chatApp.Bind(sessionManager, clockService, browser, terminalToolSets);
@@ -116,7 +118,7 @@ Task<(global::Agent.Agent, Action<string>)> CreateAgentAsync(string sessionId)
             },
             [
                 terminal,
-                new Cron(sessionId, clock),
+                new Cron(sessionId, new ClockScope(clock, "tui")),
                 new TimeToolSet(),
                 new TodoListToolSet(),
                 new SkillToolSet(skillsPath),

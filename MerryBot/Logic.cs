@@ -62,6 +62,8 @@ internal partial class Logic
         // 调度器先于插件创建；存储用 core 自己的命名空间（prefix "core"），与插件数据隔离
         clockStore = new CoreClockStore(PluginStorageDatabase.CreateScope("clock", prefix: "core"));
         clockService = new ClockService(clockStore, new DelegatingClockExecutor());
+        // 定时任务管理端 API（core 拥有调度器，跨插件列出/编辑；插件侧经 PluginInterop.Clock 隔离访问）
+        ClockApiMapper.Map(webUiApplication, clockService);
         _ = StartClockAsync();
         LoadPlugins();
         _ = RunWebUiAsync();

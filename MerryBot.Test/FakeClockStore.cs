@@ -44,25 +44,25 @@ public sealed class FakeClockStore : IClockStore
         }
     }
 
-    public Task<IReadOnlyList<ClockTask>> ListAsync(string sessionId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ClockTask>> ListAsync(string pluginId, string sessionId, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
             return Task.FromResult<IReadOnlyList<ClockTask>>(
                 _tasks.Values
-                    .Where(t => t.SessionId == sessionId)
+                    .Where(t => t.PluginId == pluginId && t.SessionId == sessionId)
                     .OrderBy(static t => t.CreatedAtUtc)
                     .Select(static t => t.Clone())
                     .ToList());
         }
     }
 
-    public Task<ClockTask?> GetAsync(string sessionId, Guid taskId, CancellationToken cancellationToken = default)
+    public Task<ClockTask?> GetAsync(string pluginId, string sessionId, Guid taskId, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
             return Task.FromResult(
-                _tasks.TryGetValue(taskId, out var task) && task.SessionId == sessionId
+                _tasks.TryGetValue(taskId, out var task) && task.PluginId == pluginId && task.SessionId == sessionId
                     ? task.Clone()
                     : null);
         }
@@ -94,11 +94,12 @@ public sealed class FakeClockStore : IClockStore
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string sessionId, Guid taskId, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(string pluginId, string sessionId, Guid taskId, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            if (_tasks.TryGetValue(taskId, out var task) && task.SessionId == sessionId)
+            if (_tasks.TryGetValue(taskId, out var task) &&
+                task.PluginId == pluginId && task.SessionId == sessionId)
             {
                 _tasks.Remove(taskId);
             }
@@ -117,6 +118,7 @@ public sealed class FakeClockStore : IClockStore
         lock (_lock)
         {
             if (!_tasks.TryGetValue(expectedTask.Id, out var task)
+                || task.PluginId != expectedTask.PluginId
                 || task.SessionId != expectedTask.SessionId
                 || !task.Enabled
                 || task.NextRunAtUtc != expectedTask.NextRunAtUtc
@@ -134,6 +136,7 @@ public sealed class FakeClockStore : IClockStore
             {
                 RunId = Guid.NewGuid(),
                 TaskId = task.Id,
+                PluginId = task.PluginId,
                 SessionId = task.SessionId,
                 ScheduledAtUtc = scheduledAtUtc,
                 StartedAtUtc = startedAtUtc,
@@ -181,6 +184,7 @@ public sealed class FakeClockStore : IClockStore
     }
 
     public Task<IReadOnlyList<ClockRunLog>> QueryLogsAsync(
+        string pluginId,
         string sessionId,
         ClockLogQuery query,
         CancellationToken cancellationToken = default)
@@ -189,7 +193,7 @@ public sealed class FakeClockStore : IClockStore
         {
             var limit = Math.Clamp(query.Limit, 1, 100);
             var result = _runLogs.Values
-                .Where(l => l.SessionId == sessionId)
+                .Where(l => l.PluginId == pluginId && l.SessionId == sessionId)
                 .Where(l => query.TaskId == null || l.TaskId == query.TaskId)
                 .Where(l => query.Status == null || l.Status == query.Status)
                 .Where(l => query.FromUtc == null || l.ScheduledAtUtc >= query.FromUtc)

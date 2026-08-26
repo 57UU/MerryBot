@@ -1,3 +1,4 @@
+using Agent.Session;
 using BotPlugin;
 using CommonLib;
 using MerryBot.WebUI.Api;
@@ -61,7 +62,8 @@ internal partial class Logic
                 EventRegister,
                 messageService,
                 new BotMessageChannel(botClient.Bot, new NLogAdapter(), attribute.Id),
-                clockService
+                // 每个插件获得绑定自己 pluginId 的调度器门面：CRUD 与执行器注册自动限定在本插件任务内
+                new ClockScope(clockService, attribute.Id)
                 );
                 pluginInteropMap.Add(type, interop);
                 pluginInitializer.AddDependency(type, attribute, [interop]);

@@ -10,7 +10,7 @@ namespace Agent.Session;
 /// <summary>
 /// Session-scoped facade for the shared ClockService.
 /// The scheduler itself is shared by all sessions; this tool set only applies
-/// the current session's ownership boundary to CRUD and log queries.
+/// the current plugin+session ownership boundary to CRUD and log queries.
 /// </summary>
 public sealed class Cron : ToolSet
 {
@@ -23,17 +23,17 @@ public sealed class Cron : ToolSet
     };
 
     private readonly string _sessionId;
-    private readonly ClockService _service;
+    private readonly ClockScope _scope;
     private readonly ToolSetBridge _bridge;
 
-    public Cron(string sessionId, ClockService service)
+    public Cron(string sessionId, ClockScope scope)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             throw new ArgumentException("sessionId 不能为空", nameof(sessionId));
         }
         _sessionId = sessionId;
-        _service = service ?? throw new ArgumentNullException(nameof(service));
+        _scope = scope ?? throw new ArgumentNullException(nameof(scope));
 
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<ClockCreateArgs>(
@@ -73,7 +73,7 @@ public sealed class Cron : ToolSet
 
     private async Task<string> CreateAsync(ClockCreateArgs args)
     {
-        var task = await _service.CreateAsync(_sessionId, new ClockCreateRequest
+        var task = await _scope.CreateAsync(_sessionId, new ClockCreateRequest
         {
             CronExpression = args.cron,
             TimeZoneId = args.timezone,
@@ -87,19 +87,19 @@ public sealed class Cron : ToolSet
 
     private async Task<string> ListAsync(ClockListArgs _)
     {
-        var tasks = await _service.ListAsync(_sessionId);
+        var tasks = await _scope.ListAsync(_sessionId);
         return Serialize(tasks.Select(ToSummary).ToList());
     }
 
     private async Task<string> GetAsync(ClockGetArgs args)
     {
-        var task = await _service.GetAsync(_sessionId, args.id);
+        var task = await _scope.GetAsync(_sessionId, args.id);
         return Serialize(task);
     }
 
     private async Task<string> UpdateAsync(ClockUpdateArgs args)
     {
-        var task = await _service.UpdateAsync(_sessionId, args.id, new ClockUpdateRequest
+        var task = await _scope.UpdateAsync(_sessionId, args.id, new ClockUpdateRequest
         {
             CronExpression = args.cron,
             TimeZoneId = args.timezone,
@@ -114,13 +114,13 @@ public sealed class Cron : ToolSet
 
     private async Task<string> DeleteAsync(ClockDeleteArgs args)
     {
-        await _service.DeleteAsync(_sessionId, args.id);
+        await _scope.DeleteAsync(_sessionId, args.id);
         return Serialize(new { id = args.id, deleted = true });
     }
 
     private async Task<string> LogAsync(ClockLogArgs args)
     {
-        var logs = await _service.QueryLogsAsync(_sessionId, new ClockLogQuery
+        var logs = await _scope.QueryLogsAsync(_sessionId, new ClockLogQuery
         {
             TaskId = args.task_id,
             Status = ParseStatus(args.status),
@@ -150,9 +150,10 @@ public sealed class Cron : ToolSet
     private static object ToSummary(ClockTask task) => new
     {
         id = task.Id,
+        pluginId = task.PluginId,
         cron = task.CronExpression,
         timezone = task.TimeZoneId,
-        content = task.Content.Length <= 120 ? task.Content : task.Content[..120] + "…",
+        content = ContentPreview(task),
         trigger = task.Trigger,
         runOnce = task.RunOnce,
         timeoutSeconds = task.TimeoutSeconds,
@@ -160,6 +161,18 @@ public sealed class Cron : ToolSet
         nextRunAtUtc = task.NextRunAtUtc,
         lastRunAtUtc = task.LastRunAtUtc,
     };
+
+    /// <summary>Content 已放宽为 object?：string 取原文，其他模型序列化为 JSON，统一截断 120 字。</summary>
+    private static string ContentPreview(ClockTask task)
+    {
+        var content = task.Content;
+        if (content is null)
+        {
+            return string.Empty;
+        }
+        var text = content is string value ? value : JsonSerializer.Serialize(content, JsonOptions);
+        return text.Length <= 120 ? text : text[..120] + "…";
+    }
 
     private static string Serialize(object value) => JsonSerializer.Serialize(value, JsonOptions);
 

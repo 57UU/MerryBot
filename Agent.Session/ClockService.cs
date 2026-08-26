@@ -129,16 +129,47 @@ public sealed class ClockService : IAsyncDisposable
         _stateLock.Dispose();
     }
 
+    /// <summary>注册插件执行器（转发到 DelegatingClockExecutor）；通常经 ClockScope.RegisterExecutor 调用。</summary>
+    public IClockExecutor? RegisterExecutor(string pluginId, IClockExecutor executor)
+    {
+        return _executor.Add(pluginId, executor);
+    }
+
+    /// <summary>
+    /// 列出全部插件的全部任务（WebUI 管理端专用；插件侧请使用 ClockScope 的会话 API，
+    /// 避免跨插件读写他人任务）。
+    /// </summary>
+    public async Task<IReadOnlyList<ClockTask>> ListAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _stateLock.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureStarted();
+            return _tasks.Values
+                .OrderBy(x => x.PluginId, StringComparer.Ordinal)
+                .ThenBy(x => x.CreatedAtUtc)
+                .Select(x => x.Clone())
+                .ToList();
+        }
+        finally
+        {
+            _stateLock.Release();
+        }
+    }
+
     public async Task<ClockTask> CreateAsync(
+        string pluginId,
         string sessionId,
         ClockCreateRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         var expression = ClockSchedule.Normalize(request.CronExpression);
         var timezoneId = NormalizeTimeZoneId(request.TimeZoneId);
         _ = ResolveTimeZone(timezoneId);
-        var content = RequireContent(request.Content);
+        var content = request.Content; // 内容可为 null 或插件自定义模型，语义由执行器解释
         var trigger = ValidateTrigger(request.Trigger);
         var timeout = ValidateTimeout(request.TimeoutSeconds ?? DefaultTimeoutSeconds);
         var now = _timeProvider.GetUtcNow();
@@ -146,6 +177,7 @@ public sealed class ClockService : IAsyncDisposable
         var task = new ClockTask
         {
             Id = Guid.NewGuid(),
+            PluginId = pluginId,
             SessionId = sessionId,
             CronExpression = expression,
             TimeZoneId = timezoneId,
@@ -175,16 +207,18 @@ public sealed class ClockService : IAsyncDisposable
     }
 
     public async Task<IReadOnlyList<ClockTask>> ListAsync(
+        string pluginId,
         string sessionId,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         await _stateLock.WaitAsync(cancellationToken);
         try
         {
             EnsureStarted();
             return _tasks.Values
-                .Where(x => x.SessionId == sessionId)
+                .Where(x => x.PluginId == pluginId && x.SessionId == sessionId)
                 .OrderBy(x => x.CreatedAtUtc)
                 .Select(x => x.Clone())
                 .ToList();
@@ -196,16 +230,18 @@ public sealed class ClockService : IAsyncDisposable
     }
 
     public async Task<ClockTask> GetAsync(
+        string pluginId,
         string sessionId,
         Guid taskId,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         await _stateLock.WaitAsync(cancellationToken);
         try
         {
             EnsureStarted();
-            return GetOwnedTask(sessionId, taskId).Clone();
+            return GetOwnedTask(pluginId, sessionId, taskId).Clone();
         }
         finally
         {
@@ -214,17 +250,19 @@ public sealed class ClockService : IAsyncDisposable
     }
 
     public async Task<ClockTask> UpdateAsync(
+        string pluginId,
         string sessionId,
         Guid taskId,
         ClockUpdateRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         await _stateLock.WaitAsync(cancellationToken);
         try
         {
             EnsureStarted();
-            var task = GetOwnedTask(sessionId, taskId);
+            var task = GetOwnedTask(pluginId, sessionId, taskId);
             var scheduleChanged = false;
 
             if (request.CronExpression != null)
@@ -241,7 +279,7 @@ public sealed class ClockService : IAsyncDisposable
             }
             if (request.Content != null)
             {
-                task.Content = RequireContent(request.Content);
+                task.Content = request.Content;
             }
             if (request.Trigger != null)
             {
@@ -286,17 +324,19 @@ public sealed class ClockService : IAsyncDisposable
     }
 
     public async Task DeleteAsync(
+        string pluginId,
         string sessionId,
         Guid taskId,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         await _stateLock.WaitAsync(cancellationToken);
         try
         {
             EnsureStarted();
-            _ = GetOwnedTask(sessionId, taskId);
-            await _store.DeleteAsync(sessionId, taskId, cancellationToken);
+            _ = GetOwnedTask(pluginId, sessionId, taskId);
+            await _store.DeleteAsync(pluginId, sessionId, taskId, cancellationToken);
             _tasks.Remove(taskId);
         }
         finally
@@ -307,10 +347,12 @@ public sealed class ClockService : IAsyncDisposable
     }
 
     public async Task<IReadOnlyList<ClockRunLog>> QueryLogsAsync(
+        string pluginId,
         string sessionId,
         ClockLogQuery query,
         CancellationToken cancellationToken = default)
     {
+        EnsurePluginId(pluginId);
         EnsureSessionId(sessionId);
         var normalizedQuery = new ClockLogQuery
         {
@@ -320,7 +362,7 @@ public sealed class ClockService : IAsyncDisposable
             ToUtc = query.ToUtc,
             Limit = Math.Clamp(query.Limit, 1, 100),
         };
-        return await _store.QueryLogsAsync(sessionId, normalizedQuery, cancellationToken);
+        return await _store.QueryLogsAsync(pluginId, sessionId, normalizedQuery, cancellationToken);
     }
 
     private async Task RunSchedulerAsync(CancellationToken cancellationToken)
@@ -592,9 +634,11 @@ public sealed class ClockService : IAsyncDisposable
         }
     }
 
-    private ClockTask GetOwnedTask(string sessionId, Guid taskId)
+    private ClockTask GetOwnedTask(string pluginId, string sessionId, Guid taskId)
     {
-        if (!_tasks.TryGetValue(taskId, out var task) || task.SessionId != sessionId)
+        if (!_tasks.TryGetValue(taskId, out var task) ||
+            task.PluginId != pluginId ||
+            task.SessionId != sessionId)
         {
             throw new KeyNotFoundException($"当前会话未找到定时任务: {taskId}");
         }
@@ -621,6 +665,7 @@ public sealed class ClockService : IAsyncDisposable
         {
             RunId = Guid.NewGuid(),
             TaskId = task.Id,
+            PluginId = task.PluginId,
             SessionId = task.SessionId,
             ScheduledAtUtc = scheduledAtUtc,
             StartedAtUtc = now,
@@ -693,21 +738,20 @@ public sealed class ClockService : IAsyncDisposable
         }
     }
 
+    private static void EnsurePluginId(string pluginId)
+    {
+        if (string.IsNullOrWhiteSpace(pluginId))
+        {
+            throw new ArgumentException("pluginId 不能为空", nameof(pluginId));
+        }
+    }
+
     private static void EnsureSessionId(string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             throw new ArgumentException("sessionId 不能为空", nameof(sessionId));
         }
-    }
-
-    private static string RequireContent(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new ArgumentException("任务内容不能为空");
-        }
-        return content.Trim();
     }
 
     private static ClockTrigger ValidateTrigger(ClockTrigger trigger)
@@ -836,7 +880,6 @@ public sealed class ClockService : IAsyncDisposable
         _ = ClockSchedule.Normalize(task.CronExpression);
         task.ParsedCron = CronExpression.Parse(task.CronExpression, CronFormat.Standard); // 加载时解析一次并缓存
         _ = ResolveTimeZone(task.TimeZoneId);
-        _ = RequireContent(task.Content);
         _ = ValidateTrigger(task.Trigger);
         _ = ValidateTimeout(task.TimeoutSeconds);
     }

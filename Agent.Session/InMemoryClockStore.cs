@@ -19,25 +19,26 @@ public sealed class InMemoryClockStore : IClockStore
         }
     }
 
-    public Task<IReadOnlyList<ClockTask>> ListAsync(string sessionId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ClockTask>> ListAsync(string pluginId, string sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
             return Task.FromResult<IReadOnlyList<ClockTask>>(_tasks.Values
-                .Where(x => x.SessionId == sessionId)
+                .Where(x => x.PluginId == pluginId && x.SessionId == sessionId)
                 .OrderBy(x => x.CreatedAtUtc)
                 .Select(x => x.Clone())
                 .ToList());
         }
     }
 
-    public Task<ClockTask?> GetAsync(string sessionId, Guid taskId, CancellationToken cancellationToken = default)
+    public Task<ClockTask?> GetAsync(string pluginId, string sessionId, Guid taskId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
-            return Task.FromResult(_tasks.TryGetValue(taskId, out var task) && task.SessionId == sessionId
+            return Task.FromResult(_tasks.TryGetValue(taskId, out var task) &&
+                    task.PluginId == pluginId && task.SessionId == sessionId
                 ? task.Clone()
                 : null);
         }
@@ -70,12 +71,13 @@ public sealed class InMemoryClockStore : IClockStore
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string sessionId, Guid taskId, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(string pluginId, string sessionId, Guid taskId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
-            if (_tasks.TryGetValue(taskId, out var task) && task.SessionId == sessionId)
+            if (_tasks.TryGetValue(taskId, out var task) &&
+                task.PluginId == pluginId && task.SessionId == sessionId)
             {
                 _tasks.Remove(taskId);
             }
@@ -95,6 +97,7 @@ public sealed class InMemoryClockStore : IClockStore
         lock (_sync)
         {
             if (!_tasks.TryGetValue(expectedTask.Id, out var task) ||
+                task.PluginId != expectedTask.PluginId ||
                 task.SessionId != expectedTask.SessionId ||
                 !task.Enabled ||
                 task.NextRunAtUtc != expectedTask.NextRunAtUtc ||
@@ -112,6 +115,7 @@ public sealed class InMemoryClockStore : IClockStore
             {
                 RunId = Guid.NewGuid(),
                 TaskId = task.Id,
+                PluginId = task.PluginId,
                 SessionId = task.SessionId,
                 ScheduledAtUtc = scheduledAtUtc,
                 StartedAtUtc = startedAtUtc,
@@ -164,6 +168,7 @@ public sealed class InMemoryClockStore : IClockStore
     }
 
     public Task<IReadOnlyList<ClockRunLog>> QueryLogsAsync(
+        string pluginId,
         string sessionId,
         ClockLogQuery query,
         CancellationToken cancellationToken = default)
@@ -173,7 +178,7 @@ public sealed class InMemoryClockStore : IClockStore
         lock (_sync)
         {
             var result = _logs.Values
-                .Where(x => x.SessionId == sessionId)
+                .Where(x => x.PluginId == pluginId && x.SessionId == sessionId)
                 .Where(x => query.TaskId == null || x.TaskId == query.TaskId)
                 .Where(x => query.Status == null || x.Status == query.Status)
                 .Where(x => query.FromUtc == null || x.ScheduledAtUtc >= query.FromUtc)

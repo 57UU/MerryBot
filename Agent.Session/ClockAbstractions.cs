@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Agent.Session;
 
 public interface IClockStore
@@ -6,10 +8,12 @@ public interface IClockStore
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ClockTask>> ListAsync(
+        string pluginId,
         string sessionId,
         CancellationToken cancellationToken = default);
 
     Task<ClockTask?> GetAsync(
+        string pluginId,
         string sessionId,
         Guid taskId,
         CancellationToken cancellationToken = default);
@@ -23,6 +27,7 @@ public interface IClockStore
         CancellationToken cancellationToken = default);
 
     Task DeleteAsync(
+        string pluginId,
         string sessionId,
         Guid taskId,
         CancellationToken cancellationToken = default);
@@ -55,6 +60,7 @@ public interface IClockStore
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ClockRunLog>> QueryLogsAsync(
+        string pluginId,
         string sessionId,
         ClockLogQuery query,
         CancellationToken cancellationToken = default);
@@ -68,18 +74,35 @@ public interface IClockExecutor
 }
 
 /// <summary>
-/// 转发执行器：core 先以空转发器创建调度器，插件初始化完成后再注册自己的执行器（Inner）。
-/// Inner 未注册时到点任务标记失败并记录原因，调度器不受影响。
+/// 按 pluginId 路由的转发执行器：core 先以空转发器集合创建调度器，各插件初始化时通过
+/// <see cref="Add"/> 注册自己的执行器，执行时按 <see cref="ClockTask.PluginId"/> 路由。
+/// 未注册插件的任务标记失败并记录原因，调度器不受影响；后注册者覆盖先前注册（返回旧执行器）。
 /// </summary>
 public sealed class DelegatingClockExecutor : IClockExecutor
 {
-    public IClockExecutor? Inner { get; set; }
+    private readonly ConcurrentDictionary<string, IClockExecutor> _executors = new(StringComparer.Ordinal);
+
+    /// <summary>注册插件执行器；返回被覆盖的旧执行器（无则 null）。</summary>
+    public IClockExecutor? Add(string pluginId, IClockExecutor executor)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentNullException.ThrowIfNull(executor);
+        return _executors.AddOrUpdate(pluginId, _ => executor, (_, _) => executor);
+    }
+
+    /// <summary>移除插件执行器；不存在返回 false。</summary>
+    public bool Remove(string pluginId)
+    {
+        return _executors.TryRemove(pluginId, out _);
+    }
 
     public Task<ClockExecutionResult> ExecuteAsync(ClockTask task, CancellationToken cancellationToken)
     {
-        var inner = Inner;
-        return inner == null
-            ? Task.FromResult(ClockExecutionResult.Failure("定时任务执行器未注册（Agent 插件未加载）"))
-            : inner.ExecuteAsync(task, cancellationToken);
+        if (task.PluginId is { Length: > 0 } pluginId && _executors.TryGetValue(pluginId, out var executor))
+        {
+            return executor.ExecuteAsync(task, cancellationToken);
+        }
+        return Task.FromResult(ClockExecutionResult.Failure(
+            $"定时任务执行器未注册（插件 {task.PluginId} 未加载）"));
     }
 }

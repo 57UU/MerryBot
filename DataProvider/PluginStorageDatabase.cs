@@ -6,13 +6,14 @@ namespace DataProvider;
 public partial class PluginStorageDatabase : IDisposable
 {
     private readonly LiteDatabaseAsync _db;
+    private readonly BsonMapper _mapper;
     private readonly ILiteCollectionAsync<PluginData> _pluginDataCollection;
     private readonly ILiteCollectionAsync<PluginData> _groupConfigCollection;
 
     public PluginStorageDatabase(string databasePath = "plugin_data.db")
     {
-        var mapper = new BsonMapper { IncludeFields = true };
-        _db = new LiteDatabaseAsync(databasePath, mapper);
+        _mapper = new BsonMapper { IncludeFields = true };
+        _db = new LiteDatabaseAsync(databasePath, _mapper);
         // 读取时直接返回 UTC，避免 LiteDB 按机器本地时区转换（UTC_DATE pragma）。底层存储始终是 UTC。
         _db.UtcDate = true;
 
@@ -30,7 +31,7 @@ public partial class PluginStorageDatabase : IDisposable
     public PluginDatabaseScope CreateScope(string pluginId, string prefix = "plugin")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
-        return new PluginDatabaseScope(_db, pluginId, prefix);
+        return new PluginDatabaseScope(_db, pluginId, prefix, _mapper);
     }
 
     // Plugin-level

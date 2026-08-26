@@ -6,7 +6,7 @@ nav_order: 6
 
 # 会话层（Session）
 
-会话层把「消息队列」与「Agent 实例」绑定在一起：每个会话对应一个 `AgentSession`（串行消息队列）+ 底层一个 `Agent`，由 `AgentSessionManager`（会话注册表）统一管理创建、恢复与回收。代码位于 `Agent.Session/` 与 `plugins/Agent.cs`、`plugins/Agent.Creat.cs`。
+会话层把「消息队列」与「Agent 实例」绑定在一起：每个会话对应一个 `AgentSession`（串行消息队列）+ 底层一个 `Agent`，由 `AgentSessionManager`（会话注册表）统一管理创建、恢复与回收。代码位于 `Agent.Session/` 与 `plugins/Agent.cs`、`plugins/Agent.Create.cs`。
 
 ```
 AgentSessionManager（注册表 + 空闲回收）
@@ -16,7 +16,7 @@ AgentSessionManager（注册表 + 空闲回收）
 
 ## Agent 创建（create 回调）
 
-`AgentSessionManager` 通过**工厂回调（creator）**创建会话：`GetSessionAsync(sessionId)` 时若会话不存在，调用 `AgentPlugin.CreateAgent`（`plugins/Agent.Creat.cs`）异步构建，并缓存复用。核心阶段如下：
+`AgentSessionManager` 通过**工厂回调（creator）**创建会话：`GetSessionAsync(sessionId)` 时若会话不存在，调用 `AgentPlugin.CreateAgent`（`plugins/Agent.Create.cs`）异步构建，并缓存复用。核心阶段如下：
 
 ```mermaid
 sequenceDiagram

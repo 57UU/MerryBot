@@ -42,9 +42,16 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
         }
     }
 
+    private static DelegatingClockExecutor CreateExecutor(RecordingExecutor executor)
+    {
+        var delegating = new DelegatingClockExecutor();
+        delegating.Add(TestClock.PluginId, executor);
+        return delegating;
+    }
+
     private async Task<bool> HasSucceededRunAsync(Guid taskId)
     {
-        var logs = await _store.QueryLogsAsync("qq:group:100", new ClockLogQuery { TaskId = taskId, Limit = 10 });
+        var logs = await _store.QueryLogsAsync(TestClock.PluginId, "qq:group:100", new ClockLogQuery { TaskId = taskId, Limit = 10 });
         return logs.Any(static l => l.Status == ClockRunStatus.Succeeded);
     }
 
@@ -58,7 +65,7 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
         var task = TestClock.MakeTask("qq:group:100", nextRun: TestClock.Start.AddMinutes(30));
         await _store.CreateAsync(task);
 
-        await using var service = new ClockService(_store, new DelegatingClockExecutor { Inner = executor }, time);
+        await using var service = new ClockService(_store, CreateExecutor(executor), time);
         await service.StartAsync();
 
         await TestClock.AdvanceUntilAsync(
@@ -68,12 +75,13 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
         // 执行了一次且执行记录成功（完整链路走通：领取未被 CAS 拒绝）
         Assert.Single(executor.Executed);
         Assert.Equal(task.Id, executor.Executed[0].Id);
-        var logs = await _store.QueryLogsAsync("qq:group:100", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
+        var logs = await _store.QueryLogsAsync(TestClock.PluginId, "qq:group:100", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
         var run = Assert.Single(logs);
         Assert.Equal(ClockRunStatus.Succeeded, run.Status);
+        Assert.Equal(TestClock.PluginId, run.PluginId);
 
         // 任务被推进到下一次执行
-        var persisted = await _store.GetAsync("qq:group:100", task.Id);
+        var persisted = await _store.GetAsync(TestClock.PluginId, "qq:group:100", task.Id);
         Assert.True(persisted!.Enabled);
         Assert.True(persisted.NextRunAtUtc > TestClock.Start.AddMinutes(31));
     }
@@ -90,7 +98,7 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
 
         // 第一次运行：到点触发，任务推进到下一个小时
         {
-            await using var service = new ClockService(_store, new DelegatingClockExecutor { Inner = executor }, time);
+            await using var service = new ClockService(_store, CreateExecutor(executor), time);
             await service.StartAsync();
             await TestClock.AdvanceUntilAsync(
                 time,
@@ -99,9 +107,9 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
         } // 模拟进程退出
 
         // 重启：重新加载持久化任务，NextRunAtUtc 必须与运行期完全一致（UTC 往返无损）
-        await using var restarted = new ClockService(_store, new DelegatingClockExecutor { Inner = executor }, time);
+        await using var restarted = new ClockService(_store, CreateExecutor(executor), time);
         await restarted.StartAsync();
-        var loaded = await _store.GetAsync("qq:group:100", task.Id);
+        var loaded = await _store.GetAsync(TestClock.PluginId, "qq:group:100", task.Id);
         Assert.Equal(TestClock.Start.AddMinutes(60), loaded!.NextRunAtUtc);
 
         // 再次触发下一小时 → 成功
@@ -109,7 +117,7 @@ public sealed class ClockServiceStoreIntegrationTests : IDisposable
             time,
             async () => executor.CallCount >= 2 && await HasSucceededRunAsync(task.Id));
         Assert.Equal(2, executor.CallCount);
-        var logs = await _store.QueryLogsAsync("qq:group:100", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
+        var logs = await _store.QueryLogsAsync(TestClock.PluginId, "qq:group:100", new ClockLogQuery { TaskId = task.Id, Limit = 10 });
         Assert.Equal(2, logs.Count(l => l.Status == ClockRunStatus.Succeeded));
     }
 }

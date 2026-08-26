@@ -57,7 +57,7 @@ public partial class AgentPlugin : Plugin
             : TimeSpan.FromHours(12);
         sessionManager = new AgentSessionManager(CreateAgent, idleSessionTimeout);
         // 调度器由 core 拥有：插件只注册自己的执行器（把任务内容投给本插件的 AgentSession 执行）
-        Interop.ClockService.Executor.Inner = new AgentSessionClockExecutor(sessionManager);
+        Interop.Clock.RegisterExecutor(new AgentSessionClockExecutor(sessionManager));
         persistenceStartTask = InitializePersistenceAsync();
     }
 

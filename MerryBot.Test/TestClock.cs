@@ -9,6 +9,9 @@ internal static class TestClock
     /// <summary>默认测试起点：2026-08-15 12:00:00 UTC。</summary>
     public static readonly DateTimeOffset Start = new(2026, 8, 15, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>测试默认插件命名空间（与 ClockServiceTests 注册执行器的 pluginId 一致）。</summary>
+    public const string PluginId = "test-plugin";
+
     public static ClockTask MakeTask(
         string sessionId,
         string cron = "0 * * * *",
@@ -16,11 +19,13 @@ internal static class TestClock
         bool runOnce = false,
         bool enabled = true,
         int timeoutSeconds = 600,
-        string timezone = "UTC")
+        string timezone = "UTC",
+        string? pluginId = null)
     {
         return new ClockTask
         {
             Id = Guid.NewGuid(),
+            PluginId = pluginId ?? PluginId,
             SessionId = sessionId,
             CronExpression = cron,
             TimeZoneId = timezone,

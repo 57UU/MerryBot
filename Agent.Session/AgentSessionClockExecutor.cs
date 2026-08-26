@@ -27,8 +27,13 @@ public sealed class AgentSessionClockExecutor : IClockExecutor
         ClockTask task,
         CancellationToken cancellationToken)
     {
+        // Content 已放宽为 object?（供其他插件携带自定义模型）；agent 执行器仍要求非空白字符串提示词
+        if (task.Content is not string content || string.IsNullOrWhiteSpace(content))
+        {
+            return ClockExecutionResult.Failure("agent 定时任务要求 content 为非空字符串");
+        }
         var session = await _sessionManager.GetSessionAsync(task.SessionId);
-        var (response, usage) = await session.ChatAndWaitAsync(task.Content, cancellationToken: cancellationToken);
+        var (response, usage) = await session.ChatAndWaitAsync(content, cancellationToken: cancellationToken);
         if (_recordAiMessage != null)
         {
             try

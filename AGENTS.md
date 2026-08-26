@@ -48,7 +48,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 ### Agent 组
 
 - **`Agent/`** — 通用 LLM Agent 核心（不依赖 NapCat/QQ）：`Agent.cs`（对话循环、上下文压缩）、`Agent.RunIteration.cs`（单轮迭代与工具执行）、`Agent.Options.cs`、`Agent.ToolSet.cs`、`Context.cs`/`ContextManager.cs`/`ContextHistory.cs`、`VisionRouter.cs`（主模型无视觉能力时用辅助模型描述图片）、`AgentLogEvent.cs`
-- **`Agent.Session/`** — 会话层：`AgentSession`（串行消息队列）、`AgentSessionManager`（空闲淘汰）、`AgentSessionClockExecutor`（把定时任务投给会话）、`ClockService`（core 拥有的 cron 调度器，持久化、misfire 跳过、超时、会话隔离）、`ClockModels`/`ClockAbstractions`/`InMemoryClockStore`、`Cron.cs`（定时任务 LLM 工具集）、`Terminal.cs`（常驻 bash 进程封装）/`TerminalToolSet.cs`（shell 工具）
+- **`Agent.Session/`** — 会话层：`AgentSession`（串行消息队列）、`AgentSessionManager`（空闲淘汰）、`AgentSessionClockExecutor`（把定时任务投给会话）、`ClockService`（core 拥有的 cron 调度器，持久化、misfire 跳过、超时、按 `(pluginId, sessionId)` 双重隔离共享给所有插件）、`ClockScope`（绑定插件 Id 的门面，供 `PluginInterop.Clock` 注入）、`ClockModels`/`ClockAbstractions`（`DelegatingClockExecutor` 按 pluginId 注册/路由）/`InMemoryClockStore`、`Cron.cs`（定时任务 LLM 工具集）、`Terminal.cs`（常驻 bash 进程封装）/`TerminalToolSet.cs`（shell 工具）
 - **`Agent.Tools/`** — LLM 工具集：`WebTools`（web_search/web_fetch，Bing）、`SkillToolSet`/`FileSkillManagementService`、`SubAgentToolSet`、`TimeToolSet`、`TodoListToolSet`
 - **`Agent.Tui/`** — 独立的终端聊天客户端，复用 Agent/Agent.Session/Agent.Tools，直接连 OpenAI 兼容 API；终端 UI 基于自研 `MerryBot.Tui/` 框架
 - **`MerryBot.Tui/`** — 自研终端 UI 框架（`Ansi`/`Component`/`TerminalDriver`/`RawMode`/`KeyParser`/`SelectList`/`TextWidth`/`TuiApp`/`TuiScreen`/`ConsoleUtf8` 等），替代原 Terminal.Gui，被 `Agent.Tui` 引用。`ConsoleUtf8` 在 `TuiApp.Run` 启动时显式把 Windows 控制台代码页切到 65001(UTF-8) 并对 stdout 启用 VT 处理（退出恢复），解决传统 conhost（GBK 代码页）下中文/ANSI 乱码
@@ -84,7 +84,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - `MessageService`（消息入库、`merrybot://` 资源引用、AI 消息审计）
 - WebUI（`MerryBot.WebUI.Program.CreateApp`）与 `ConfigRegistry`，随后注册各 API mapper
 - `HostLifecycle`（git 检测更新 / 编译槽 / 重启 / 重载 / 退出）
-- `ClockService`（core 拥有，存储为 `PluginStorageDatabase.CreateScope("clock", prefix: "core")`；调度器先于插件创建）
+- `ClockService`（core 拥有，存储为 `PluginStorageDatabase.CreateScope("clock", prefix: "core")`，schema v2 任务带 `PluginId`、`Content` 为 `object?` 弱类型存储；调度器先于插件创建，插件经 `PluginInterop.Clock`（`ClockScope`）按 pluginId 隔离访问）
 - `LoadPlugins()`（反射加载插件）
 - 重连循环（适配器由宿主按 `ReconnectIntervalSeconds` 轮询连接，适配器自身不重连）与事件处理器注册
 
@@ -115,7 +115,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 
 生命周期：构造 → （全部加载完）`OnLoaded()` → 每条消息 `OnMessageAsync(...)` → 关闭时按依赖逆序 `Dispose()`。**不要在构造函数中使用 `Interop` 的互操作能力**（此时插件未加载完），请在 `OnLoaded` 中使用。`IsEnable=false` 时 `OnMessageAsync` 不会被调用。
 
-`PluginInterop`（`plugins/_interface.cs`，record）提供：日志（`ISimpleLogger`）、群列表（`GroupId`）、`PluginInfoGetter`、`PluginStorage`（对象级读写，内含 `PluginDatabaseScope` 即 scoped LiteDB 集合）、`ClockService`（定时任务调度器，生命周期归宿主；执行器经 `ClockService.Executor`（`DelegatingClockExecutor`）的 `.Inner` 挂载，Agent 插件把自己的执行器挂到这里）、`Lifecycle`（`IHostLifecycle`）、`AuthorizedUser`、`PathPrefix`、`EventRegister`（`_interface.event.cs` 的通知事件注册）、`MessageService`、`Channel`（发消息）、`Interceptors`（拦截器，仅拦截当前插件的消息）。另有 `internal FindPlugin<T>()` 按类型查找插件（仅同程序集可见）。
+`PluginInterop`（`plugins/_interface.cs`，record）提供：日志（`ISimpleLogger`）、群列表（`GroupId`）、`PluginInfoGetter`、`PluginStorage`（对象级读写，内含 `PluginDatabaseScope` 即 scoped LiteDB 集合）、`Clock`（`ClockScope` 门面，绑定本插件 Id 的定时任务调度器访问视图——CRUD 与日志查询按 `(pluginId, sessionId)` 隔离；执行器经 `RegisterExecutor` 注册，调度器按 `task.PluginId` 路由到各插件自己的执行器；调度器生命周期归宿主。`ClockTask.Content` 为 `object?`：可为 null 或插件自定义模型，agent 执行器要求非空字符串）、`Lifecycle`（`IHostLifecycle`）、`AuthorizedUser`、`PathPrefix`、`EventRegister`（`_interface.event.cs` 的通知事件注册）、`MessageService`、`Channel`（发消息）、`Interceptors`（拦截器，仅拦截当前插件的消息）。另有 `internal FindPlugin<T>()` 按类型查找插件（仅同程序集可见）。
 
 ### 进程生命周期与更新（`IHostLifecycle` / `launch.sh`）
 
@@ -136,7 +136,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 ### WebUI
 
 - Blazor InteractiveServer，与主程序同进程运行，监听启动配置 `setting.toml` 的 `web-address`（默认 `http://localhost:5000`）
-- 提供 `/api/...` Minimal API：状态、群组管理、日志、配置编辑、高级配置、LLM Provider/模型/Key 管理、Skill 上传/禁用、记忆管理、上下文快照、更新检测
+- 提供 `/api/...` Minimal API：状态、群组管理、日志、配置编辑、高级配置、LLM Provider/模型/Key 管理、Skill 上传/禁用、记忆管理、上下文快照、更新检测、定时任务（`ClockApiMapper`，跨插件列出/编辑/删除与日志查询）
 - 图片/文件经 `/api/image/{id}`、`/api/file/{id}`、`/api/resource` 由本地存储提供，消息链中的媒体均为 `merrybot://` 本地引用，前端不直连远端 URL
 - **设计决策（by design）**：WebUI **不做内置鉴权**，默认仅绑定 `localhost` —— 这是有意为之，目的是保持配置/管理入口的简洁性，避免引入账号体系与登录复杂度。**远程访问的推荐方式是 SSH 端口转发**（如 `ssh -L 5000:localhost:5000 user@host`），由 SSH 承担认证与加密，WebUI 自身不需要也不应暴露到公网。若用户自行将 `setting.toml` 的 `web-address` 改为 `0.0.0.0`，则须自行经受控内网或 HTTPS 反向代理保护，风险自担。监听地址不在 WebUI 中提供修改入口（引导问题：WebUI 挂了就改不回来），只能改 `setting.toml` 后重启
 
@@ -158,7 +158,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 - **统一抽象**：`CommonLib.ISimpleLogger`（`LogLevel`/`ConsoleLogger` 同文件）。接口用 DIM 提供 `Log(level,msg)`、`X(Exception,msg)`、`X(format,args)` 重载；DIM 方法仅在 `ISimpleLogger` 类型变量上可见。
 - **全局门面**：`CommonLib.SimpleLog.Default`，宿主 `Entry.cs` 在 NLog 配置后替换为 `new NLogAdapter("CommonLib")`。库代码规范：实例类用可选构造参数 `ISimpleLogger? logger = null`（体内 `_logger ??= SimpleLog.Default`），静态方法/无注入点用 `SimpleLog.Default`。**禁止再直连 `ConsoleLogger.Instance` 或裸 `Console.WriteLine/Error` 记业务日志**（Tui 终端诊断除外）。
 - **NLog 桥**（宿主 `MerryBot` 内）：`NLogAdapter`（logger 名参数化，默认 `NapcatClient`，给 BotClient/WebSocketAdapter/Actions/BotMessageChannel）；`PluginLoggerAdapter` 的 `PluginLogger(tag)`（logger 名 `plugin:<tag>`，给插件）。NLog 级别规则 Debug~Fatal（Trace 丢弃，供高频诊断如模型增量）。
-- **Agent 引擎事件**：Agent 组（Agent/LlmClient/LlmBackend）不依赖 CommonLib；`AgentOptions.OnLog` 回调由 `plugins/Agent.LogBridge.cs` 桥接到插件 Logger（`Agent.Creat.cs` 已接线），会话/工具调用/压缩/流式重置等事件按级别映射，高频增量落 Trace。
+- **Agent 引擎事件**：Agent 组（Agent/LlmClient/LlmBackend）不依赖 CommonLib；`AgentOptions.OnLog` 回调由 `plugins/Agent.LogBridge.cs` 桥接到插件 Logger（`Agent.Create.cs` 已接线），会话/工具调用/压缩/流式重置等事件按级别映射，高频增量落 Trace。
 - **WebUI 日志页**：`LogApiMapper` 的 `/api/logs/current` 支持 `lines/level/keyword/file` 后端过滤（向后多扫），`/api/logs/files` 列历史文件；`Logs.razor`（`/logs`）3 秒轮询、文件下拉切换、搜索防抖。WebUI 内部 ASP.NET ILogger（M.E.L.）通道保留，但与 NLog 文件不互通。
 
 ## 配置
