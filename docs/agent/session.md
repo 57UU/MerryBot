@@ -109,51 +109,54 @@ CleanupLoop（每 1 小时）
 
 ## 会话队列与消息投递
 
-`AgentSession` 用串行队列（`SemaphoreSlim(1,1)`）保证同一会话的消息按顺序处理。排队规则：
+`AgentSession` 用串行队列保证同一会话的消息按顺序处理。所有消息统一入队；入队方与排空方共用一把 `_gate` 锁，"追加/合并 + 检查是否启动排空（`_draining` 标志）"与"判空 + 复位 `_draining`"在锁内原子完成，保证入队的消息不存在"无消费者"的窗口。排队规则：
 
 ```mermaid
 flowchart TD
     CALL["Chat(message, type, stackable)<br/>/ ChatAndWaitAsync"]
-    CALL --> IDLE{"会话空闲?<br/>(_chatMutex 可获取)"}
-    IDLE -->|"是"| IMM["立即处理 + DrainQueueAsync<br/>(处理当前消息后排空积压)"]
-    IDLE -->|"否，忙时入队"| Q{"stackable<br/>且队尾同类型?"}
-    Q -->|"是"| R["替换队尾<br/>(合并连续同类消息，防积压)"]
+    CALL --> LOCK["加 _gate 锁入队"]
+    LOCK --> Q{"stackable 且队列中<br/>存在同类型节点?<br/>(不限位置)"}
+    Q -->|"是"| R["正文拼接进该节点<br/>(每类型至多一个节点，防积压且不丢内容)"]
     Q -->|"否"| F{"队列已满?<br/>(MaxQueued=200)"}
     F -->|"是"| D["丢弃最旧消息<br/>(其等待者按取消处理)"]
     F -->|"否"| A["追加到队尾<br/>(FIFO)"]
-    R --> E["入队完成，调用方立即返回<br/>(不阻塞)"]
-    D --> E
-    A --> E
-    IMM --> P1["Process(message)<br/>→ Agent.Chat → 结果经消息通道发出"]
-    E -.->|"处理线程空闲后"| DRAIN["循环出队（TryDequeue）<br/>排空积压队列"]
-    DRAIN --> P1
+    D --> A
+    R --> E["合并完成，调用方立即返回<br/>(排空循环必然在运行)"]
+    A --> START{"_draining<br/>已置位?"}
+    START -->|"否：置位并启动"| DRAIN2["DrainQueueAsync 排空循环<br/>(fire-and-forget)"]
+    START -->|"是"| E
+    DRAIN2 --> LOOP{"队首有消息?"}
+    LOOP -->|"是"| P1["Process(message)<br/>→ Agent.Chat → 结果经消息通道发出<br/>→ 下一条"]
+    LOOP -->|"否：锁内复位 _draining 后退出"| IDLE2["会话空闲"]
+    E -.->|"运行中的排空循环<br/>继续消费"| LOOP
+    P1 --> LOOP
 ```
 
 队列实际形态与合并效果：
 
 ```mermaid
 flowchart LR
-    subgraph Processing["正在处理（占用互斥锁）"]
+    subgraph Processing["正在处理"]
         P["群消息 A"]
     end
     subgraph Queue["消息队列（LinkedList，FIFO，上限 200）"]
         direction TB
         Q1["群消息 B"]
-        Q2["群消息 C"]
-        Q3["task_result 通知<br/>(stackable)"]
+        Q2["task_result 通知 T1<br/>(stackable)"]
+        Q3["群消息 C"]
     end
     P --> Q1
     Q1 --> Q2
     Q2 --> Q3
-    N["新到 task_result 通知"] -.->|"stackable 且队尾同类型<br/>替换队尾而非追加"| Q3
+    N["新到 task_result 通知 T2"] -.->|"stackable：正文拼接进 T1 节点<br/>(保留原位置，不追加新节点)"| Q2
 ```
 
 规则说明：
 
-- `Chat(message, type, stackable)`：不阻塞调用方，忙时入队；`stackable=true` 且队尾同类型时**替换队尾**（合并连续同类消息，防积压）
-- `ChatAndWaitAsync`：等待真正执行完成并返回结果与用量（供定时任务执行器使用）；内部使用保留类型 `"wait"`，**不可被 stackable 同类消息替换队尾**
+- `Chat(message, type, stackable)`：不阻塞调用方，入队即返回；`stackable=true` 且队列中**任意位置**存在同类型节点时，新消息**正文拼接**进该节点（合并后模型一轮处理全部结果，内容不丢失；合并节点保留最旧同类型节点的原位置）。非 stackable 或队列中无同类型节点时追加到队尾
+- `ChatAndWaitAsync`：等待真正执行完成并返回结果与用量（供定时任务执行器使用）；内部使用保留类型 `"wait"`，**不可被 stackable 同类消息合并**（等待方需要独立的完成通知）
 - 每个队列元素携带**自己的** `CancellationToken`、消息通道与可选完成通知（`TaskCompletionSource`），取消/完成按各自语义处理
-- 队列上限 `MaxQueued=200`：超出丢弃最旧消息，保证最新消息不被阻塞
+- 队列上限 `MaxQueued=200`：超出丢弃最旧消息，保证最新消息不被阻塞（合并路径不增加队列长度，不触发丢弃）
 - 异步任务完成 / 子任务结果以 `type: "task_result"` / `"subagent_result"` 的 stackable 消息注入队列，主模型下一轮处理（见 [Tool Design](tool-design.html) 的异步完成回调）
 
 ## 相关页面
