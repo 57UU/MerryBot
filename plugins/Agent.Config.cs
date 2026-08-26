@@ -45,7 +45,7 @@ public class AgentConfig : IPluginConfig
     public int MaxBackgroundTasks { get; set; } = 5;
 
     private int _maxReferenceDepth = 3;
-    [ConfigDescription("引用消息自动展开深度", "自动将引用/转发消息内容展开到上下文并以 <reference> 包裹；0 表示关闭，默认 3，范围 0-10。")]
+    [ConfigDescription("引用消息自动展开深度", "自动将引用消息内容展开到上下文并以 <reference> 包裹；0 表示关闭，默认 3，范围 0-10。")]
     public int MaxReferenceDepth
     {
         get => _maxReferenceDepth;
