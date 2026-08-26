@@ -280,8 +280,10 @@ internal sealed class CoreClockStore : IClockStore
 
     private static DateTimeOffset ToDateTimeOffset(DateTime value)
     {
-        // LiteDB 读回的 DateTime 是本地墙钟（Kind=Local，刻度已含本地偏移）：
-        // 必须转成 UTC 实例，否则下游拿到的时间比真实时刻偏移一个本地时区（如 +8 小时）。
+        // 连接已启用 UTC_DATE pragma（HistoryRecorder/PluginStorageDatabase 构造时设置）：
+        // LiteDB 读取返回 Kind=Utc 的实例，这里直接原样转 DateTimeOffset。
+        // 保留 ToUniversalTime() 作为安全网：若某处回退到未启用 pragma 的连接，
+        // 读到 Kind=Local 墙钟时仍能归一化为 UTC，避免偏移一个本地时区（如 +8 小时）。
         return new DateTimeOffset(value.ToUniversalTime());
     }
 

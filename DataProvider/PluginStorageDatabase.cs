@@ -13,6 +13,8 @@ public partial class PluginStorageDatabase : IDisposable
     {
         var mapper = new BsonMapper { IncludeFields = true };
         _db = new LiteDatabaseAsync(databasePath, mapper);
+        // 读取时直接返回 UTC，避免 LiteDB 按机器本地时区转换（UTC_DATE pragma）。底层存储始终是 UTC。
+        _db.UtcDate = true;
 
         _pluginDataCollection = _db.GetCollection<PluginData>("Plugin_Data_Table");
         _ = _pluginDataCollection.EnsureIndexAsync(x => x.Id);

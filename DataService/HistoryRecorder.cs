@@ -28,6 +28,8 @@ public class HistoryRecorder : IDisposable
         _objectStorage = new FileSystemObjectStorage(storagePath);
         _logger = logger ?? SimpleLog.Default;
         database = new LiteDatabaseAsync(dbPath);
+        // 读取时直接返回 UTC，避免 LiteDB 按机器本地时区转换（UTC_DATE pragma）。底层存储始终是 UTC。
+        database.UtcDate = true;
         messagesCollection = database.GetCollection<GroupMessage>("messages");
         imageBedCollection = database.GetCollection<ImageEntry>("images");
         fileBedCollection = database.GetCollection<FileEntry>("files");
