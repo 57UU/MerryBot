@@ -45,4 +45,23 @@ public sealed class ResponsesBackendTests
         Assert.Equal("call_1", functionOutput.GetProperty("call_id").GetString());
         Assert.Equal("{\"error\":\"failed\"}", functionOutput.GetProperty("output").GetString());
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-json")]
+    public void BuildInput_NormalizesInvalidFunctionArguments(string arguments)
+    {
+        IList<Message> messages =
+        [
+            new Message
+            {
+                role = Role.Assistant,
+                toolCalls = [new ToolCall("call_1", "send_markdown", arguments)],
+            },
+        ];
+
+        JsonElement json = JsonSerializer.SerializeToElement(ResponsesBackend.BuildInput(messages));
+
+        Assert.Equal("{}", json[0].GetProperty("arguments").GetString());
+    }
 }

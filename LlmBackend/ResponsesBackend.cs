@@ -348,7 +348,7 @@ public class ResponsesBackend : Backend
                             ["type"] = "function_call",
                             ["call_id"] = call.Id,
                             ["name"] = call.Name,
-                            ["arguments"] = call.Arguments,
+                            ["arguments"] = NormalizeFunctionArguments(call.Arguments),
                         });
                     }
                     break;
@@ -400,6 +400,30 @@ public class ResponsesBackend : Backend
 
     private static string ExtractText(IEnumerable<MessagePart>? parts)
         => string.Concat((parts ?? []).OfType<MessagePartText>().Select(t => t.text ?? string.Empty));
+
+    /// <summary>
+    /// Responses API 要求 function_call.arguments 是合法 JSON 字符串。
+    /// 个别模型可能返回空参数或截断/损坏的参数；工具执行层会将空参数按
+    /// {} 处理，但回放历史时仍必须传合法 JSON，否则下一轮请求会被 provider
+    /// 以 "arguments must be valid JSON" 拒绝。
+    /// </summary>
+    private static string NormalizeFunctionArguments(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments))
+        {
+            return "{}";
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(arguments);
+            return arguments;
+        }
+        catch (JsonException)
+        {
+            return "{}";
+        }
+    }
 }
 
 #pragma warning disable CS8618 // 响应 DTO，非空字段由 JSON 反序列化填充
