@@ -188,8 +188,19 @@ internal partial class Logic
         {
             dispose();
         }
-        webUiApplication.StopAsync().GetAwaiter().GetResult();
-        webUiApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        // Ctrl+C/SIGTERM 会先被内嵌 WebUI 的 ConsoleLifetime 捕获并启动
+        // StopAsync。此时再次同步调用 StopAsync 可能与 WebUI 自己的停止流程
+        // 互相等待，导致整个进程无法退出。重载/更新则不会经过该信号路径，
+        // 仍执行完整的同步停止与释放，以确保端口和资源及时释放。
+        if (webUiApplication.Lifetime.ApplicationStopping.IsCancellationRequested)
+        {
+            logger.Warn("WebUI 已在响应进程停止信号，跳过重复的同步 StopAsync");
+        }
+        else
+        {
+            webUiApplication.StopAsync().GetAwaiter().GetResult();
+            webUiApplication.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
         historyRecorder.Dispose();
         // 调度器在数据库释放前停止：等待运行中的定时任务（≤5s）收敛
         clockService.DisposeAsync().AsTask().GetAwaiter().GetResult();
