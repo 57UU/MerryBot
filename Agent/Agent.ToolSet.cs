@@ -265,6 +265,8 @@ public class ToolSetBridge : ToolSet
         /// [JsonRequired] 强制必填。
         /// </summary>
         private static readonly NullabilityInfoContext Nullability = new();
+        /// <summary>NullabilityInfoContext 非线程安全（内部缓存字典），并发构建 ToolSet（如会话并发创建）时须串行化</summary>
+        private static readonly object NullabilityLock = new();
 
         private static bool IsPropertyRequired(PropertyInfo prop)
         {
@@ -272,7 +274,10 @@ public class ToolSetBridge : ToolSet
             var type = prop.PropertyType;
             if (Nullable.GetUnderlyingType(type) != null) return false; // Nullable<T> → 可选
             if (type.IsValueType) return true;                           // 非空值类型 → 必填
-            return Nullability.Create(prop).WriteState == NullabilityState.NotNull; // 引用类型按 NRT 判定
+            lock (NullabilityLock)
+            {
+                return Nullability.Create(prop).WriteState == NullabilityState.NotNull; // 引用类型按 NRT 判定
+            }
         }
     }
 }
