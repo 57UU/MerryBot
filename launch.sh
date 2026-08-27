@@ -24,8 +24,33 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 slot_dir="$project_dir/build"
 active_slot_file="$slot_dir/active_slot"
 
-# Handle interrupt signals gracefully
-trap 'echo "[launch] Interrupted, exiting"; exit 0' INT TERM
+# PID of the currently running MerryBot process.
+child_pid=""
+stopping=false
+
+# Stop MerryBot before leaving the supervisor script.  MerryBot may receive
+# the same signal from the terminal, so all operations here are idempotent.
+stop_child() {
+    if [ "$stopping" = true ]; then
+        return
+    fi
+    stopping=true
+
+    echo "[launch] Interrupted, stopping MerryBot..."
+
+    if [ -n "$child_pid" ]; then
+        kill -TERM "$child_pid" 2>/dev/null || true
+        wait "$child_pid" 2>/dev/null || true
+        child_pid=""
+    fi
+
+    echo "[launch] Exiting"
+    exit 0
+}
+
+# Handle Ctrl+C and normal process termination.  MerryBot is started in the
+# background below so Bash can run this trap immediately while it is running.
+trap stop_child INT TERM
 
 # Read active slot (default A)
 read_active_slot() {
@@ -81,8 +106,11 @@ while true; do
     echo "[launch] Starting from slot $active ($active_path)..."
     cd "$active_path"
 
-    ./MerryBot
+    ./MerryBot &
+    child_pid=$!
+    wait "$child_pid"
     exit_code=$?
+    child_pid=""
 
     cd "$project_dir"
 
