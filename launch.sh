@@ -27,10 +27,15 @@ active_slot_file="$slot_dir/active_slot"
 # PID of the currently running MerryBot process.
 child_pid=""
 stopping=false
+shutdown_grace_seconds=5
 
-# Stop MerryBot before leaving the supervisor script.  MerryBot may receive
-# the same signal from the terminal, so all operations here are idempotent.
+# Stop MerryBot before leaving the supervisor script.  Ctrl+C is delivered to
+# the foreground process group, so MerryBot has already received SIGINT when
+# this handler runs.  Sending another signal here can re-enter its shutdown
+# path (the embedded WebUI also has its own signal handler).
 stop_child() {
+    local signal="${1:-TERM}"
+
     if [ "$stopping" = true ]; then
         return
     fi
@@ -39,7 +44,24 @@ stop_child() {
     echo "[launch] Interrupted, stopping MerryBot..."
 
     if [ -n "$child_pid" ]; then
-        kill -TERM "$child_pid" 2>/dev/null || true
+        if [ "$signal" != "INT" ]; then
+            kill -TERM "$child_pid" 2>/dev/null || true
+        fi
+
+        # Do not wait indefinitely inside the signal handler.  A graceful
+        # shutdown can get stuck while another host component is stopping;
+        # force-kill the child after the short grace period in that case.
+        for ((i = 0; i < shutdown_grace_seconds * 10; i++)); do
+            if ! kill -0 "$child_pid" 2>/dev/null; then
+                break
+            fi
+            sleep 0.1
+        done
+        if kill -0 "$child_pid" 2>/dev/null; then
+            echo "[launch] MerryBot did not stop gracefully, forcing exit"
+            kill -KILL "$child_pid" 2>/dev/null || true
+        fi
+
         wait "$child_pid" 2>/dev/null || true
         child_pid=""
     fi
@@ -50,7 +72,8 @@ stop_child() {
 
 # Handle Ctrl+C and normal process termination.  MerryBot is started in the
 # background below so Bash can run this trap immediately while it is running.
-trap stop_child INT TERM
+trap 'stop_child INT' INT
+trap 'stop_child TERM' TERM
 
 # Read active slot (default A)
 read_active_slot() {
