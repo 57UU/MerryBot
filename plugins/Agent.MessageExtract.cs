@@ -27,63 +27,13 @@ internal static class AgentMessageExtract
         HashSet<string> visitedMessages)
     {
         StringBuilder sb = new();
-        foreach (var message in messageChain)
+        foreach (TypedMessage message in messageChain)
         {
-            string text;
-            switch (message)
+            string text = message switch
             {
-                case TextData textData:
-                    text = textData.Text;
-                    break;
-                case AtData atData when atData.Qq == selfId.ToString():
-                    text = string.Empty;
-                    break;
-                case AtData:
-                    text = string.Empty;
-                    break;
-                case ReplyData replyData:
-                    text = await ExpandReplyAsync(replyData, selfId, groupId, remainingDepth, messageService, visitedMessages);
-                    break;
-                case ForwardData forwardData:
-                    text = $"[转发消息 {forwardData.Id}]";
-                    break;
-                case FaceData faceData:
-                    text = $"[表情: {faceData.ToChinese()}]";
-                    break;
-                case MfaceData mfaceData:
-                    text = $"[商城表情: {mfaceData.Summary ?? mfaceData.EmojiId}]";
-                    break;
-                case DiceData diceData:
-                    text = $"[骰子: {diceData.Result}点]";
-                    break;
-                case RpsData rpsData:
-                    text = $"[猜拳: {rpsData.Result switch { "1" => "石头", "2" => "剪刀", _ => "布" }}]";
-                    break;
-                case PokeData:
-                    text = "[戳一戳]";
-                    break;
-                case ImageData imageData:
-                    text = $"[图片: {imageData.Summary ?? imageData.File}]";
-                    break;
-                case RecordData:
-                    text = "[语音]";
-                    break;
-                case VideoData videoData:
-                    text = $"[视频: {videoData.File}]";
-                    break;
-                case FileData fileData:
-                    text = $"[文件: {fileData.File}]";
-                    break;
-                case JsonData jsonData:
-                    text = $"[卡片消息: {jsonData.Data}]";
-                    break;
-                case MusicData musicData:
-                    text = $"[音乐: {musicData.Title ?? musicData.Id ?? musicData.Url}]";
-                    break;
-                default:
-                    text = message.ToString() ?? string.Empty;
-                    break;
-            }
+                ReplyData replyData => await ExpandReplyAsync(replyData, selfId, groupId, remainingDepth, messageService, visitedMessages),
+                _ => MessageUtils.FormatMessagePart(message),
+            };
             sb.Append(text);
         }
         return sb.ToString();
@@ -97,7 +47,7 @@ internal static class AgentMessageExtract
         IMessageService? messageService,
         HashSet<string> visitedMessages)
     {
-        var placeholder = $"[引用消息 {replyData.Id}]";
+        var placeholder = MessageUtils.FormatMessagePart(replyData);
         if (remainingDepth <= 0 || messageService == null || groupId == 0)
         {
             return placeholder;

@@ -171,6 +171,32 @@ public static class MessageUtils
         }
         return true;
     }
+
+    /// <summary>将消息链转换为 Agent 使用的统一文本格式。</summary>
+    public static string FormatMessageChain(IEnumerable<TypedMessage> messageChain)
+        => string.Concat(messageChain.Select(FormatMessagePart));
+
+    /// <summary>转换单个消息段，供引用展开和消息读取工具复用。</summary>
+    internal static string FormatMessagePart(TypedMessage message)
+        => message switch
+        {
+            TextData textData => textData.Text,
+            AtData => string.Empty,
+            ReplyData replyData => $"[引用消息 {replyData.Id}]",
+            ForwardData forwardData => $"[转发消息 {forwardData.Id}]",
+            FaceData faceData => $"[表情: {faceData.ToChinese()}]",
+            MfaceData mfaceData => $"[商城表情: {mfaceData.Summary ?? mfaceData.EmojiId}]",
+            DiceData diceData => $"[骰子: {diceData.Result}点]",
+            RpsData rpsData => $"[猜拳: {rpsData.Result switch { "1" => "石头", "2" => "剪刀", _ => "布" }}]",
+            PokeData => "[戳一戳]",
+            ImageData imageData => $"[图片: {imageData.Summary ?? imageData.File}]",
+            RecordData => "[语音]",
+            VideoData videoData => $"[视频: {videoData.File}]",
+            FileData fileData => $"[文件: {fileData.File}]",
+            JsonData jsonData => $"[卡片消息: {jsonData.Data}]",
+            MusicData musicData => $"[音乐: {musicData.Title ?? musicData.Id ?? musicData.Url}]",
+            _ => message.ToString() ?? string.Empty,
+        };
 }
 
 

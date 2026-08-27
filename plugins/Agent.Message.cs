@@ -276,7 +276,7 @@ public class MessageTool : ToolSet
     {
         var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
         var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
-        var content = string.Join("", m.MessageChain.Select(tm => tm.ToString()));
+        var content = MessageUtils.FormatMessageChain(m.MessageChain);
         var isRecalled = m.IsDeleted ? "（已撤回）" : "";
         return $"[{timeStr}]{isRecalled} [用户 {m.SenderId}(昵称:{name})]: {content}";
     }

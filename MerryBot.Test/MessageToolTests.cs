@@ -28,7 +28,7 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, browser, groupId);
         string reference = LocalMessageReference.Message(groupId, messageId);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageId\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
 
         Assert.Contains("价格 10 元", result);
         Assert.Equal(groupId, messageService.MessageGroupId);
@@ -59,7 +59,7 @@ public sealed class MessageToolTests
         using Browser browser = new();
         MessageTool tool = CreateTool(messageService, browser, groupId);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageId\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
 
         Assert.Contains("报价 20 元", result);
         Assert.Equal(groupId, messageService.ForwardGroupId);
@@ -74,12 +74,48 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, browser, 123);
 
         ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
-            () => InvokeAsync(tool, "get_message", "{\"messageId\":\"456\"}"));
+            () => InvokeAsync(tool, "get_message", "{\"messageUrl\":\"456\"}"));
 
         Assert.Contains("merrybot://message/...", exception.Message);
         Assert.Contains("不能使用裸 ID 或外部 URL", exception.Message);
         Assert.Null(messageService.MessageReference);
         Assert.Null(messageService.ForwardReference);
+    }
+
+    [Fact]
+    public async Task GetMessage_UsesSameMessagePartFormattingAsMessageExtract()
+    {
+        const long groupId = 123;
+        IReadOnlyList<TypedMessage> chain =
+        [
+            TextData.FromText("正文"),
+            AtData.FromAt("789"),
+            new FaceData { Id = "14" },
+            new ForwardData { Id = LocalMessageReference.Forward("forward-id") },
+            ReplyData.FromReply(LocalMessageReference.Message(groupId, 999)),
+            new ImageData { File = "image.jpg", Summary = "一张图片" },
+        ];
+        string expectedContent = AgentMessageExtract.BuildMessage(chain, selfId: 0);
+        StubMessageService messageService = new()
+        {
+            MessageResult = new ProcessedMessage(
+                groupId,
+                456,
+                789,
+                "昵称",
+                string.Empty,
+                string.Empty,
+                chain,
+                DateTime.UtcNow,
+                false),
+        };
+        using Browser browser = new();
+        MessageTool tool = CreateTool(messageService, browser, groupId);
+        string reference = LocalMessageReference.Message(groupId, 456);
+
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
+
+        Assert.EndsWith($": {expectedContent}", result);
     }
 
     private static MessageTool CreateTool(StubMessageService messageService, Browser browser, long groupId)
