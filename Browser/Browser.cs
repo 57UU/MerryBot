@@ -182,6 +182,9 @@ public partial class Browser : IDisposable
         driver.Manage().Timeouts().PageLoad = browserOptions.Timeout;
         driver.Manage().Timeouts().AsynchronousJavaScript = browserOptions.Timeout;
         driverPack = new(driver, browserOptions.Timeout + TimeSpan.FromSeconds(5));
+
+        // Bing 首次搜索结果相关性不稳定，浏览器实例创建时先执行一次无关搜索预热。
+        await Search("java 漏洞", false);
         return driver;
     }
 
