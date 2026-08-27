@@ -3,6 +3,7 @@ using MerryBot.WebUI.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Hosting;
 
 namespace MerryBot.WebUI;
 
@@ -16,7 +17,8 @@ public class Program
         await app.RunAsync();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000",
-        Action<IServiceCollection>? configureServices = null)
+        Action<IServiceCollection>? configureServices = null,
+        bool disableProcessSignalHandling = false)
     {
         // 执行数据库 schema 迁移（幂等，已是最新版本时直接返回）
         historyRecorder.MigrateAsync().GetAwaiter().GetResult();
@@ -42,6 +44,13 @@ public class Program
 
         // 宿主（Logic）注入的进程内服务（如 IContextSnapshotService）
         configureServices?.Invoke(builder.Services);
+
+        if (disableProcessSignalHandling)
+        {
+            // 内嵌模式由 MerryBot 外层统一接收 Ctrl+C/SIGTERM；否则默认的
+            // ConsoleLifetime 会与外层的 Logic.Shutdown 同时执行关闭流程。
+            builder.Services.AddSingleton<IHostLifetime, NoopHostLifetime>();
+        }
 
         var app = builder.Build();
 

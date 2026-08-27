@@ -45,7 +45,8 @@ internal partial class Logic
         // 避免页面经 JS 互操作 + HTTP 回调自己的 API——大快照 JSON 超过 SignalR 32KB 默认上限会导致断连/取消
         var contextSnapshotService = new ContextSnapshotService(PluginStorageDatabase.CreateScope("agent"));
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress,
-            services => services.AddSingleton<IContextSnapshotService>(contextSnapshotService));
+            services => services.AddSingleton<IContextSnapshotService>(contextSnapshotService),
+            disableProcessSignalHandling: true);
         // 在 WebUI 启动前缓存生命周期对象。WebUI 启动失败后其 IServiceProvider
         // 可能已释放，Shutdown 不能再通过 webUiApplication.Lifetime 反查服务。
         webUiLifetime = webUiApplication.Lifetime;

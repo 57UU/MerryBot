@@ -5,6 +5,7 @@ using CommonLib;
 using MerryBot;
 using NapcatClient;
 using NLog;
+using System.Runtime.InteropServices;
 
 // --- data path ---
 string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
