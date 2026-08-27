@@ -335,7 +335,9 @@ public class ResponsesBackend : Backend
                         input.Add(new Dictionary<string, object>
                         {
                             ["role"] = "assistant",
-                            ["content"] = BuildContent(assistantContent, imageType: "input_image", textType: "input_text"),
+                            // assistant 是模型历史输出，Responses provider 要求其文本块
+                            // 使用 output_text；input_text 仅适用于 user 输入消息。
+                            ["content"] = BuildContent(assistantContent, imageType: "input_image", textType: "output_text"),
                         });
                     }
 

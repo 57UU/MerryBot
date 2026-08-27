@@ -13,6 +13,7 @@ public sealed class ResponsesBackendTests
             new Message
             {
                 role = Role.Assistant,
+                content = [new MessagePartText { text = "准备调用工具" }],
                 toolCalls = [new ToolCall("call_1", "send_markdown", "{\"markdown\":\"hello\"}")],
             },
             new Message
@@ -27,15 +28,19 @@ public sealed class ResponsesBackendTests
         JsonElement json = JsonSerializer.SerializeToElement(input);
 
         Assert.Equal(JsonValueKind.Array, json.ValueKind);
-        Assert.Equal(2, json.GetArrayLength());
+        Assert.Equal(3, json.GetArrayLength());
 
-        JsonElement functionCall = json[0];
+        JsonElement assistant = json[0];
+        Assert.Equal("assistant", assistant.GetProperty("role").GetString());
+        Assert.Equal("output_text", assistant.GetProperty("content")[0].GetProperty("type").GetString());
+
+        JsonElement functionCall = json[1];
         Assert.Equal("function_call", functionCall.GetProperty("type").GetString());
         Assert.Equal("call_1", functionCall.GetProperty("call_id").GetString());
         Assert.Equal("send_markdown", functionCall.GetProperty("name").GetString());
-        Assert.False(functionCall.TryGetProperty("tool_calls", out _));
+        Assert.False(assistant.TryGetProperty("tool_calls", out _));
 
-        JsonElement functionOutput = json[1];
+        JsonElement functionOutput = json[2];
         Assert.Equal("function_call_output", functionOutput.GetProperty("type").GetString());
         Assert.Equal("call_1", functionOutput.GetProperty("call_id").GetString());
         Assert.Equal("{\"error\":\"failed\"}", functionOutput.GetProperty("output").GetString());
