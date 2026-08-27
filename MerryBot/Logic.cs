@@ -6,6 +6,7 @@ using DataService;
 using MerryBot.WebUI.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NapcatClient;
 using NapcatClient.MessageType;
 using System.Collections.Immutable;
@@ -23,6 +24,7 @@ internal partial class Logic
     private readonly HistoryRecorder historyRecorder;
     private readonly MessageService messageService;
     private readonly WebApplication webUiApplication;
+    private readonly IHostApplicationLifetime webUiLifetime;
     private readonly ConfigRegistry configRegistry;
     /// <summary>core 拥有的进程生命周期服务（版本/更新/重启/重载/退出），插件与 WebUI 共用</summary>
     private readonly HostLifecycle hostLifecycle;
@@ -44,6 +46,9 @@ internal partial class Logic
         var contextSnapshotService = new ContextSnapshotService(PluginStorageDatabase.CreateScope("agent"));
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress,
             services => services.AddSingleton<IContextSnapshotService>(contextSnapshotService));
+        // 在 WebUI 启动前缓存生命周期对象。WebUI 启动失败后其 IServiceProvider
+        // 可能已释放，Shutdown 不能再通过 webUiApplication.Lifetime 反查服务。
+        webUiLifetime = webUiApplication.Lifetime;
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
         ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
         // 高级配置面板：原始 BSON 查看/删除插件数据库条目（排查残留数据用）
