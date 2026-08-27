@@ -306,8 +306,14 @@ public class ResponsesBackend : Backend
         }
     }
 
-    /// <summary>构造 input 数组：user/assistant 消息 + function_call_output 工具结果条目。</summary>
-    private static List<object> BuildInput(IList<Message> messages)
+    /// <summary>
+    /// 构造 Responses API 的 input 数组。
+    ///
+    /// Responses API 的 function_call 与 function_call_output 都是 input 数组
+    /// 中的顶层条目，不能使用 Chat Completions 的 assistant.tool_calls 结构；
+    /// 否则 provider 找不到对应的 function_call，就会拒绝后续 output。
+    /// </summary>
+    internal static List<object> BuildInput(IList<Message> messages)
     {
         var input = new List<object>(messages.Count);
         foreach (var message in messages)
@@ -323,22 +329,26 @@ public class ResponsesBackend : Backend
                     });
                     break;
                 case "assistant":
-                    var assistant = new Dictionary<string, object>
+                    var assistantContent = message.content?.ToList() ?? [];
+                    if (assistantContent.Count > 0)
                     {
-                        ["role"] = "assistant",
-                        ["content"] = BuildContent(message.content, imageType: "input_image", textType: "output_text"),
-                    };
-                    if (message.toolCalls?.Any() == true)
+                        input.Add(new Dictionary<string, object>
+                        {
+                            ["role"] = "assistant",
+                            ["content"] = BuildContent(assistantContent, imageType: "input_image", textType: "input_text"),
+                        });
+                    }
+
+                    foreach (var call in message.toolCalls ?? [])
                     {
-                        assistant["tool_calls"] = message.toolCalls.Select(call => (object)new Dictionary<string, object>
+                        input.Add(new Dictionary<string, object>
                         {
                             ["type"] = "function_call",
                             ["call_id"] = call.Id,
                             ["name"] = call.Name,
                             ["arguments"] = call.Arguments,
-                        }).ToList();
+                        });
                     }
-                    input.Add(assistant);
                     break;
                 default:
                     input.Add(new Dictionary<string, object>
