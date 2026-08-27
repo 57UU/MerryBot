@@ -234,7 +234,7 @@ sequenceDiagram
 | ToolSet | 项目 | 工具 |
 | --- | --- | --- |
 | `WebTools` | `Agent.Tools/` | web_search / web_fetch（Bing） |
-| `MessageTool` | `plugins/` | get_forward / get_reply / get_group_context / send_markdown；可用视觉模型时提供 load_image |
+| `MessageTool` | `plugins/` | get_message / get_group_context / send_markdown；可用视觉模型时提供 load_image |
 | `SkillToolSet` | `Agent.Tools/` | 技能（Skills）调用 |
 | `Cron` | `Agent.Session/` | 当前会话的 clock_create / list / get / update / delete / log |
 | `MemoryToolSet` | `plugins/` | 当前会话的持久记忆读写 |

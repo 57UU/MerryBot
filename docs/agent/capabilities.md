@@ -20,7 +20,7 @@ Skills 位于 `<data>/skills/`。可上传单个 `.md`，或包含唯一 `SKILL.
 
 ## 消息、视觉与网络
 
-`MessageTool` 可读取回复、合并转发和群历史，并将 Markdown 渲染后发送。只有主模型具备 `ImageInput`，或配置了可用辅助视觉模型时，才注册 `load_image`；辅助模型按 `VisionLlmModels` 顺序降级。图片读取受 `MaxImageSizeMb` 限制。
+`MessageTool` 通过统一的 `get_message` 读取普通消息和合并转发：参数必须原样填写消息文本中显示的 `merrybot://message/...` 或 `merrybot://forward/...` 内部引用，裸 ID 和外部 URL 会作为工具错误返回给模型；它也能读取群历史并将 Markdown 渲染后发送。只有主模型具备 `ImageInput`，或配置了可用辅助视觉模型时，才注册 `load_image`；辅助模型按 `VisionLlmModels` 顺序降级。图片读取受 `MaxImageSizeMb` 限制。
 
 `WebTools` 使用本地 Chrome/Edge 进行搜索与网页抓取；浏览器不可用时工具调用会返回错误，其他会话能力不受影响。
 

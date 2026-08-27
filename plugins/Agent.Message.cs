@@ -9,7 +9,7 @@ using NapcatClient.MessageType;
 namespace BotPlugin;
 
 /// <summary>
-/// 消息工具集：读取引用消息，或在用户明确要求时将 Markdown 渲染为图片发送到当前群。
+/// 消息工具集：读取本地消息引用，或在用户明确要求时将 Markdown 渲染为图片发送到当前群。
 /// </summary>
 public class MessageTool : ToolSet
 {
@@ -44,8 +44,10 @@ public class MessageTool : ToolSet
         _logger = logger ?? SimpleLog.Default;
 
         var builder = new ToolSetBridge.Builder();
-        builder.AddFunction<MessageArgs>("get_forward", "获取合并转发消息的完整内容", args => GetForwardMessage(args.messageId));
-        builder.AddFunction<MessageArgs>("get_refer", "获取被引用消息的完整内容", args => GetReferMessage(args.messageId));
+        builder.AddFunction<MessageArgs>(
+            "get_message",
+            "获取消息的完整内容",
+            args => GetMessageAsync(args.messageUrl));
         builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按时间倒序，第 1 页为最近的消息", args => GetGroupContextAsync(args));
         // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
         if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
@@ -56,11 +58,11 @@ public class MessageTool : ToolSet
         bridge = builder.Build();
     }
 
-    /// <summary>工具参数：消息 ID</summary>
+    /// <summary>工具参数：消息内部引用 URI。</summary>
     private sealed class MessageArgs
     {
-        [Description("消息ID")]
-        public string messageId { get; set; } = string.Empty;
+        [Description("消息内部引用地址，只能填写 merrybot://...")]
+        public string messageUrl { get; set; } = string.Empty;
     }
 
     private sealed class GetMessageImageArgs
@@ -91,29 +93,37 @@ public class MessageTool : ToolSet
     public override string? Prompt() => bridge.Prompt();
 
     /// <summary>
-    /// 读取合并转发消息的完整内容。数据来自本地历史库（消息进入时已随资源一起落库）。
+    /// 通过本地消息引用读取普通消息或合并转发消息的完整内容。
+    /// 只接受处理链暴露的内部 URI，避免模型自行猜测 ID 或把外部地址交给消息读取接口。
     /// </summary>
-    private async Task<string> GetForwardMessage(string messageId)
+    private async Task<string> GetMessageAsync(string messageId)
     {
-        var entry = await messageService.GetForwardAsync(messageId, groupId);
+        var reference = messageId?.Trim() ?? string.Empty;
+        var isMessage = LocalMessageReference.TryParseMessage(reference, out _, out _);
+        var isForward = LocalMessageReference.TryParseForward(reference, out _);
+        if (!isMessage && !isForward)
+        {
+            throw new ArgumentException(
+                $"消息引用格式错误：必须填写消息文本中的 merrybot://message/... 或 merrybot://forward/... 内部引用，不能使用裸 ID 或外部 URL。收到：{reference}",
+                nameof(messageId));
+        }
+
+        if (isMessage)
+        {
+            var message = await messageService.GetMessageAsync(groupId, reference);
+            if (message == null)
+            {
+                return $"未找到消息: {reference}（可能已未记录或不在当前群）";
+            }
+            return FormatMessage(message);
+        }
+
+        var entry = await messageService.GetForwardAsync(reference, groupId);
         if (entry == null || entry.Messages.Count == 0)
         {
-            return $"未找到转发消息: {messageId}";
+            return $"未找到转发消息: {reference}";
         }
         return Cap(string.Join("\n", entry.Messages.Select(FormatMessage)));
-    }
-
-    /// <summary>
-    /// 读取被回复消息的完整内容。支持消息 ID 或处理链提供的本地 URI。
-    /// </summary>
-    private async Task<string> GetReferMessage(string messageId)
-    {
-        var message = await messageService.GetReplyAsync(groupId, messageId);
-        if (message == null)
-        {
-            return $"未找到消息: {messageId}（可能已被撤回、未记录或不在当前群）";
-        }
-        return FormatMessage(message);
     }
 
     /// <summary>
@@ -267,7 +277,8 @@ public class MessageTool : ToolSet
         var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
         var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
         var content = string.Join("", m.MessageChain.Select(tm => tm.ToString()));
-        return $"[{timeStr}] [用户 {m.SenderId}(昵称:{name})]: {content}";
+        var isRecalled = m.IsDeleted ? "（已撤回）" : "";
+        return $"[{timeStr}]{isRecalled} [用户 {m.SenderId}(昵称:{name})]: {content}";
     }
     private async Task<string> SendMarkdownMessage(string message)
     {
