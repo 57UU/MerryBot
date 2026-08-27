@@ -163,8 +163,9 @@ public class ResponsesBackend : Backend
     /// <summary>
     /// 流式生成（SSE）。output_text.delta → OnTextDelta、reasoning_text/summary 摘要
     /// delta → OnReasoningDelta；function_call 的 id/name 在 output_item.added 到达，
-    /// 参数经 function_call_arguments.delta 按 item_id 累积；response.completed 携带
-    /// 完整 usage。中途的网络/超时/解析异常归一化为 LlmException。
+    /// 参数经 function_call_arguments.delta 按 item_id 累积，并以 arguments.done /
+    /// output_item.done 中的完整参数做最终兜底；response.completed 携带完整 usage。
+    /// 中途的网络/超时/解析异常归一化为 LlmException。
     /// </summary>
     public async Task GenerateStream(
         IStreamSink sink,
@@ -239,20 +240,79 @@ public class ResponsesBackend : Backend
                     case "response.output_item.added":
                         if (streamEvent.Item is { Type: "function_call" } item)
                         {
-                            toolCallItems[streamEvent.ItemId ?? string.Empty] = (
-                                streamEvent.OutputIndex,
-                                item.CallId ?? string.Empty,
-                                item.Name ?? string.Empty,
-                                new StringBuilder());
+                            string itemId = streamEvent.ItemId ?? item.Id ?? string.Empty;
+                            if (itemId.Length > 0)
+                            {
+                                toolCallItems[itemId] = (
+                                    streamEvent.OutputIndex,
+                                    item.CallId ?? string.Empty,
+                                    item.Name ?? string.Empty,
+                                    new StringBuilder());
+                            }
                         }
                         break;
                     case "response.function_call_arguments.delta":
-                        if (streamEvent.ItemId is { Length: > 0 }
-                            && streamEvent.Delta is { Length: > 0 } args
-                            && toolCallItems.TryGetValue(streamEvent.ItemId, out var toolCall))
+                        if (streamEvent.ItemId is { Length: > 0 } deltaItemId
+                            && streamEvent.Delta is { Length: > 0 } args)
                         {
+                            if (!toolCallItems.TryGetValue(deltaItemId, out var toolCall))
+                            {
+                                // 兼容 provider 省略 output_item.added 的情况；后续
+                                // output_item.done 会补齐 call_id/name/完整 arguments。
+                                toolCall = (streamEvent.OutputIndex, string.Empty, string.Empty, new StringBuilder());
+                            }
                             toolCall.Arguments.Append(args);
-                            toolCallItems[streamEvent.ItemId] = toolCall;
+                            toolCallItems[deltaItemId] = toolCall;
+                        }
+                        break;
+                    case "response.function_call_arguments.done":
+                        if (streamEvent.ItemId is { Length: > 0 } doneItemId)
+                        {
+                            if (!toolCallItems.TryGetValue(doneItemId, out var toolCall))
+                            {
+                                toolCall = (streamEvent.OutputIndex, string.Empty, string.Empty, new StringBuilder());
+                            }
+                            // done.arguments 是完整 JSON，不能再与 delta 拼接；以它为准。
+                            if (streamEvent.Arguments is { } completeArguments)
+                            {
+                                toolCall.Arguments.Clear();
+                                toolCall.Arguments.Append(completeArguments);
+                            }
+                            if (streamEvent.Name is { Length: > 0 } name)
+                            {
+                                toolCall.Name = name;
+                            }
+                            toolCallItems[doneItemId] = toolCall;
+                        }
+                        break;
+                    case "response.output_item.done":
+                        if (streamEvent.Item is { Type: "function_call" } completedItem)
+                        {
+                            string itemId = streamEvent.ItemId ?? completedItem.Id ?? string.Empty;
+                            if (itemId.Length == 0)
+                            {
+                                break;
+                            }
+                            if (!toolCallItems.TryGetValue(itemId, out var toolCall))
+                            {
+                                toolCall = (streamEvent.OutputIndex, string.Empty, string.Empty, new StringBuilder());
+                            }
+                            if (completedItem.CallId is { } callId)
+                            {
+                                toolCall.CallId = callId;
+                            }
+                            if (completedItem.Name is { } name)
+                            {
+                                toolCall.Name = name;
+                            }
+                            // output_item.done 也是完整条目；如果 provider 只在这里
+                            // 携带 arguments，必须覆盖之前的增量缓冲。
+                            if (completedItem.Arguments is { } completeArguments)
+                            {
+                                toolCall.Arguments.Clear();
+                                toolCall.Arguments.Append(completeArguments);
+                            }
+                            toolCallItems[itemId] = toolCall;
                         }
                         break;
                     case "response.completed":
@@ -505,6 +565,12 @@ internal class ResponsesStreamEvent
     [JsonPropertyName("delta")]
     public string? Delta { get; set; }
 
+    [JsonPropertyName("arguments")]
+    public string? Arguments { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
     [JsonPropertyName("item")]
     public ResponsesStreamItem? Item { get; set; }
 
@@ -528,6 +594,9 @@ internal class ResponsesStreamItem
 
     [JsonPropertyName("name")]
     public string? Name { get; set; }
+
+    [JsonPropertyName("arguments")]
+    public string? Arguments { get; set; }
 }
 
 internal class ResponsesStreamResponse

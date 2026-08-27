@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using LlmBackend;
 using LlmClient;
 
@@ -10,6 +12,13 @@ namespace Agent;
 /// </summary>
 public partial class Agent
 {
+    // 审计和 tool 回填都要给出可读的中文；默认 JsonSerializer 会把非 ASCII
+    // 字符编码成 \uXXXX，虽然语义正确，但会让 ai_messages 页面难以阅读。
+    private static readonly JsonSerializerOptions ErrorJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     /// <summary>
     /// 单次对话迭代：生成回复并回填工具调用结果。
     /// 返回本次用量与最终回复；result 为 null 表示模型请求了工具调用，还需继续迭代。
@@ -181,7 +190,7 @@ public partial class Agent
         {
             // 工具执行异常不回抛：转为截断/消毒后的 error JSON 回填，模型可自纠后重试；
             // OperationCanceledException 已被上方两个分支处理，不会到这里
-            var errorResult = $"{{\"error\": {System.Text.Json.JsonSerializer.Serialize(exception.Message)}}}";
+            var errorResult = $"{{\"error\": {JsonSerializer.Serialize(exception.Message, ErrorJsonOptions)}}}";
             Log(new AgentLogEvent(
                 AgentLogEventKind.ToolCallFailed,
                 DateTimeOffset.UtcNow,

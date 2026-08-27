@@ -47,6 +47,7 @@ public sealed class ToolSetFailureTests
         var toolText = string.Concat(toolMessage.content.OfType<MessagePartText>().Select(t => t.text));
         Assert.Contains("\"error\"", toolText);
         Assert.Contains("by-design failure", toolText);
+        Assert.DoesNotContain("\\u", toolText, StringComparison.OrdinalIgnoreCase);
 
         // 工具失败后 error JSON 回填，模型返回最终回复，对话正常收尾
         Assert.Equal("最终回复", reply);
