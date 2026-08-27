@@ -21,8 +21,6 @@ public partial class AgentPlugin : Plugin
     private readonly ConcurrentDictionary<string, PendingGroupMessages> pendingMessages = new();
     /// <summary>插件生命周期取消源：随 Dispose 取消，贯穿会话调用链（Agent → LLM → 工具）</summary>
     private readonly CancellationTokenSource disposeCts = new();
-    /// <summary>群消息调用限速（默认 5 次/20 秒），防止消息刷屏打爆模型 API</summary>
-    private readonly RateLimiter rateLimiter = new();
 
     private sealed class PendingGroupMessages
     {
@@ -190,20 +188,6 @@ public partial class AgentPlugin : Plugin
             var session = await sessionManager.GetSessionAsync(sessionId);
             while (true)
             {
-                // 限速：超过阈值时等待窗口过期再继续，避免消息刷屏打爆模型 API
-                if (rateLimiter.CheckIsLimited(groupId))
-                {
-                    try
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(rateLimiter.LimitTime), disposeCts.Token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                    continue;
-                }
-
                 List<PendingGroupMessage> batch;
                 lock (pending.SyncRoot)
                 {
@@ -222,10 +206,8 @@ public partial class AgentPlugin : Plugin
                     batch = [.. pending.Items];
                     pending.Items.Clear();
                 }
-                rateLimiter.Increase(groupId);
-
                 // 控制命令与对话互斥执行（本循环是会话唯一消费者）：
-                // Reset 为本地操作，Compact 调 LLM（已受循环顶部限速保护）
+                // Reset 为本地操作，Compact 调 LLM
                 foreach (var item in batch)
                 {
                     switch (item.Kind)
@@ -358,7 +340,6 @@ public partial class AgentPlugin : Plugin
         disposeCts.Cancel();
         disposeCts.Dispose();
         sessionManager.Dispose();
-        rateLimiter.Dispose();
         browser.Dispose();
     }
 }
