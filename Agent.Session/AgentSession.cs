@@ -1,5 +1,6 @@
 using CommonLib;
 using LlmBackend;
+using System.Collections.Generic;
 
 namespace Agent.Session;
 
@@ -13,12 +14,16 @@ public class AgentSession
     private readonly ISimpleLogger _logger;
     public TokenUsage SessionUsage = TokenUsage.Zero;
 
+    /// <summary>非 stackable 入队用的自增序号，保证每条 Chat/ChatAndWaitAsync 获得唯一 key、各自成节点</summary>
+    private int _seq;
+
     public AgentSession(Agent agent, Action<string> defaultMessageChannel, ISimpleLogger? logger = null)
     {
         _Agent = agent;
         _defaultMessageChannel = defaultMessageChannel;
         _logger = logger ?? SimpleLog.Default;
     }
+
     /// <summary>
     /// 是否正在处理消息（供 AgentSessionManager 空闲清理判断，会话不忙时才允许释放）。
     /// 即排空循环是否在运行：从首条消息入队启动排空，到最后一次判空退出期间为 true。
@@ -38,84 +43,52 @@ public class AgentSession
     }
 
     private void MarkActive() => Interlocked.Exchange(ref _lastActiveTicks, DateTime.UtcNow.Ticks);
-    private sealed class PendingMessage
-    {
-        public required string Type { get; init; }
-        public required string Message { get; init; }
-        public required Action<string> MessageChannel { get; init; }
-        public required CancellationToken Token { get; init; }
-        public TaskCompletionSource<(string Result, TokenUsage Usage)>? Completion { get; init; }
-    }
 
-    // 队列：随消息保存各自的 CancellationToken 和可选完成通知。
-    // 用 LinkedList + 单一 _gate 锁实现，支持"合并同类型 stackable 消息"（正文拼接，不限队尾）。
+    // 队列：有序字典，key 为 type（stackable 通知按 type 合并为单节点；普通 Chat/ChatAndWaitAsync
+    // 用 type#序号 唯一 key，各自成节点、保持 FIFO 与各自的完成通知）。value 为 IStackableMessage，
+    // 承载信封（Channel/Token/Completion）与一个或多个内容块。
     //
-    // 调度不变式：入队方"追加/合并 + 检查是否需要启动排空"与排空方"判空 + 复位 _draining"
+    // 调度不变式：入队方"新增/合并 + 检查是否启动排空"与排空方"判空 + 复位 _draining"
     // 在同一把 _gate 锁内原子完成，保证任何入队的消息要么被运行中的排空循环消费、
-    // 要么触发新的排空循环。旧实现（SemaphoreSlim Wait(0) 失败后再入队）存在竞态窗口：
-    // 排空循环恰好在最后一次判空之后、释放信号量之前退出，新消息入队后无任何消费者，
-    // 会卡死到下一条消息到来（且届时反序处理），或随会话空闲淘汰静默丢失。
+    // 要么触发新的排空循环。
     private readonly object _gate = new();
-    private readonly LinkedList<PendingMessage> MessageQueue = new();
+    private readonly OrderedDictionary<string, IStackableMessage> _queue = new();
     /// <summary>排空循环运行标志：true 表示有且仅有一个消费者在排空队列</summary>
     private volatile bool _draining;
 
     /// <summary>
-    /// 入队。stackable 消息与队列中已有的同类型节点合并（正文拼接，收敛为每类型至多一个节点）：
-    /// 后台任务通知（subagent_result / task_result）的各块自含 task_id/status/output，
-    /// 拼接后模型一轮即可处理全部结果，既防积压也不丢内容（旧"替换队尾"语义会静默丢弃被覆盖的通知，
-    /// 且 subagent_output 查全文仅有 5 分钟保留期）。合并不限队尾——队列中同类型节点与异类消息
-    /// 交错时（群消息批 wait 与通知交替入队是常态）同样收敛。
-    /// 非 stackable、或队列中无同类型节点时追加到队尾。会话空闲（无排空循环）时启动排空。
+    /// 唯一入队入口。type 为合并键：同 type 已存在则把内容块追加进已有节点（合并）；
+    /// 不存在则经 onCreate 工厂建信封并追加首块。
     /// </summary>
-    private void Enqueue(PendingMessage pending, bool stackable)
+    /// <returns>true=已存在同 type 节点并合并（即已经在排队）；false=新建节点</returns>
+    public bool EnqueueStackable(string type, string? messageId, string content, Func<IStackableMessage> onCreate)
     {
-        bool startDrain = false;
+        bool merged, startDrain = false;
         lock (_gate)
         {
-            bool merged = false;
-            if (stackable)
+            if (_queue.TryGetValue(type, out var existing))
             {
-                // FIFO 下队首方向第一个同类型节点即最旧；合并进它的原位置，
-                // 维持不变式"每类型至多一个节点"，新通知的结果在时间线上随首个同类通知交付
-                for (var node = MessageQueue.First; node != null; node = node.Next)
-                {
-                    if (node.Value.Type != pending.Type)
-                    {
-                        continue;
-                    }
-                    node.Value = new PendingMessage
-                    {
-                        Type = node.Value.Type,
-                        Message = node.Value.Message + "\n" + pending.Message,
-                        // 通道/Token/完成通知沿用原节点：stackable 调用方（后台任务完成通知）
-                        // 不携带自定义通道与等待者，两者实际取值一致
-                        MessageChannel = node.Value.MessageChannel,
-                        Token = node.Value.Token,
-                        Completion = node.Value.Completion,
-                    };
-                    merged = true;
-                    break;
-                }
+                existing.Append(messageId, content); // 合并：仅追加内容块
+                merged = true;
             }
-
-            if (!merged)
+            else
             {
-                if (MessageQueue.Count >= MaxQueued)
+                if (_queue.Count >= MaxQueued)
                 {
                     // 队列已满：丢弃最旧的一条（其等待者按取消处理），保证最新消息不被阻塞
-                    var oldest = MessageQueue.First!.Value;
-                    MessageQueue.RemoveFirst();
-                    oldest.Completion?.TrySetCanceled();
+                    var oldest = _queue.First();
+                    _queue.Remove(oldest.Key);
+                    oldest.Value.Completion?.TrySetCanceled();
                 }
-                MessageQueue.AddLast(pending);
-                // 合并路径无需检查：队列已有同类型节点 ⇒ 排空循环必然在运行
-                //（_draining 仅在锁内队列判空时复位）
-                if (!_draining)
-                {
-                    _draining = true;
-                    startDrain = true;
-                }
+                var msg = onCreate();            // 工厂建信封（Channel/Token/Completion）
+                msg.Append(messageId, content);  // 追加首块
+                _queue[type] = msg;
+                merged = false;
+            }
+            if (!_draining)
+            {
+                _draining = true;
+                startDrain = true;
             }
         }
         if (startDrain)
@@ -124,23 +97,27 @@ public class AgentSession
             _ = DrainQueueAsync();
         }
         MarkActive();
+        return merged;
     }
 
     /// <summary>
-    /// 入队一条消息并立即返回（不等待处理完成）。排空由会话自动调度：
-    /// 空闲时入队即启动排空循环，忙时由运行中的排空循环按 FIFO 消费。
+    /// 撤回已入队的某 type 下指定 messageId 的结果块（模型用 task_output/subagent_output 拉取全文后调用，
+    /// 避免同一结果经"推送"与"拉取"双通道重复投递给模型）。块撤空则节点整体移除；
+    /// 块不存在（尚未推送或已投递）时为幂等 noop。
     /// </summary>
-    public Task Chat(string message, Action<string>? messageChannel = null, string type = "default", bool stackable = false, CancellationToken cancellationToken = default)
+    public void RemoveQueued(string type, string messageId)
     {
-        var pending = new PendingMessage
+        lock (_gate)
         {
-            Message = message,
-            MessageChannel = messageChannel ?? _defaultMessageChannel,
-            Token = cancellationToken,
-            Type = type,
-        };
-        Enqueue(pending, stackable);
-        return Task.CompletedTask;
+            if (_queue.TryGetValue(type, out var entry))
+            {
+                entry.Delete(messageId);
+                if (entry.IsEmpty)
+                {
+                    _queue.Remove(type);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -154,16 +131,8 @@ public class AgentSession
     {
         var completion = new TaskCompletionSource<(string Result, TokenUsage Usage)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        var pending = new PendingMessage
-        {
-            // 使用保留类型 wait，避免被 stackable 的同类消息合并（wait 等待方需要独立的完成通知）
-            Type = "wait",
-            Message = message,
-            MessageChannel = messageChannel ?? _defaultMessageChannel,
-            Token = cancellationToken,
-            Completion = completion,
-        };
-        Enqueue(pending, stackable: false);
+        EnqueueStackable("wait#" + Interlocked.Increment(ref _seq), null, message,
+            () => new StackableMessage(messageChannel ?? _defaultMessageChannel, cancellationToken, completion));
         return completion.Task;
     }
 
@@ -177,37 +146,37 @@ public class AgentSession
     {
         while (true)
         {
-            PendingMessage pending;
+            IStackableMessage message;
             lock (_gate)
             {
-                var first = MessageQueue.First;
-                if (first == null)
+                if (_queue.Count == 0)
                 {
                     _draining = false;
                     return;
                 }
-                pending = first.Value;
-                MessageQueue.RemoveFirst();
+                var first = _queue.First();
+                message = first.Value;
+                _queue.Remove(first.Key);
             }
 
             try
             {
-                var (result, usage) = await Process(pending.Message, pending.MessageChannel, pending.Token);
-                pending.Completion?.TrySetResult((result, usage));
+                var (result, usage) = await Process(message.Build(), message.Channel ?? _defaultMessageChannel, message.Token);
+                message.Completion?.TrySetResult((result, usage));
             }
-            catch (OperationCanceledException) when (pending.Token.IsCancellationRequested)
+            catch (OperationCanceledException) when (message.Token.IsCancellationRequested)
             {
-                pending.Completion?.TrySetCanceled(pending.Token);
+                message.Completion?.TrySetCanceled(message.Token);
             }
             catch (Exception ex)
             {
                 // 无等待者的消息（如 subagent/终端通知）：排空循环吞掉异常前必须留痕，
                 // 否则 LLM 失败等信息完全静默
-                if (pending.Completion == null)
+                if (message.Completion == null)
                 {
                     _logger.Error($"会话消息处理失败: {ex.Message}");
                 }
-                pending.Completion?.TrySetException(ex);
+                message.Completion?.TrySetException(ex);
             }
         }
     }
@@ -270,12 +239,11 @@ public class AgentSession
         // 丢弃积压消息，等待者（如 Cron 的 ChatAndWaitAsync）按取消处理
         lock (_gate)
         {
-            while (MessageQueue.First != null)
+            foreach (var entry in _queue)
             {
-                var pending = MessageQueue.First.Value;
-                MessageQueue.RemoveFirst();
-                pending.Completion?.TrySetCanceled();
+                entry.Value.Completion?.TrySetCanceled();
             }
+            _queue.Clear();
         }
         return cancelled;
     }

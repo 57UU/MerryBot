@@ -92,16 +92,23 @@ public partial class AgentPlugin : Plugin
             OnLog = e => AgentLogBridge.Log(e, Logger),
         };
         // 子任务工具：复用父会话同一模型客户端、options 与工具列表（不含自身，不允许嵌套派生子任务）；
-        // 完成/失败时以 stackable 消息注入本会话，主 Agent 拿到结果后继续处理
+        // 完成/失败时经 EnqueueStackable 把结果块注入本会话队列（同 type 合并），主 Agent 拿到结果后继续处理；
+        // 模型用 subagent_output 拉取全文后，withdraw 撤销已入队块，避免推送与拉取双通道重复投递
         tools.Add(new SubAgentToolSet(
             resolved.Client,
             Math.Max(resolved.Model.ContextLength, 1024),
             agentOptions,
             [.. tools],// 不包含自身，不允许嵌套派生子任务
-            async msg =>
+            async (taskId, msg) =>
             {
                 var session = await sessionManager.GetSessionAsync(sessionId);
-                await session.Chat(msg, type: "subagent_result", stackable: true);
+                session.EnqueueStackable("tool_result", taskId, msg,
+                    () => new StackableMessage(null, CancellationToken.None, null));
+            },
+            async taskId =>
+            {
+                var session = await sessionManager.GetSessionAsync(sessionId);
+                session.RemoveQueued("tool_result", taskId);
             },
             disposeCts.Token,
             maxSubagents: Math.Clamp(agentConfig.MaxSubagents, 1, 64)));

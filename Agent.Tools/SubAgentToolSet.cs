@@ -11,8 +11,9 @@ namespace Agent.Tools;
 /// 派发子任务时通过 Agent.Agent.Create 构造一个全新上下文（不持久化）的 Agent，
 /// 但复用父会话同一个模型客户端（Client）与 AgentOptions，并为每个子任务复制工具列表
 /// （不含本工具集自身，因此不允许嵌套派生子任务），在后台执行。
-/// 子任务完成或失败时通过 notifyAsync 回调注入所属主会话
-/// （type: "subagent_result"，stackable 合并同类），正文使用 &lt;SUBAGENT_RESULT&gt; XML 标签，主 Agent 可继续处理。
+/// 子任务完成或失败时通过 notifyAsync 回调（携带 task_id）经主会话 EnqueueStackable 注入结果块
+/// （type: "subagent_result"，同 type 合并为单节点），正文使用 &lt;SUBAGENT_RESULT&gt; XML 标签，主 Agent 可继续处理；
+/// 模型用 subagent_output 拉取全文后，withdrawAsync 撤销已入队块，避免推送与拉取双通道重复投递。
 /// </summary>
 public class SubAgentToolSet : ToolSet, IDisposable
 {
@@ -26,7 +27,8 @@ public class SubAgentToolSet : ToolSet, IDisposable
     private readonly int _tokenLimit;
     private readonly AgentOptions _options;
     private readonly IList<ToolSet> _tools;
-    private readonly Func<string, Task> _notifyAsync;
+    private readonly Func<string, string, Task> _notifyAsync;
+    private readonly Func<string, Task> _withdrawAsync;
     private readonly CancellationToken _shutdownToken;
     /// <summary>同时运行中的子任务数上限（每个子任务=一次完整 LLM 调用），防成本失控</summary>
     private readonly int _maxSubagents;
@@ -41,7 +43,9 @@ public class SubAgentToolSet : ToolSet, IDisposable
     /// <summary>
     /// 创建子任务工具集。llmClient / options / tools 均来自父会话；
     /// 子任务执行时通过 ToolSet.Copy() 隔离带状态的工具；
-    /// notifyAsync 由宿主注入：通常为"向所属主会话 Chat 注入消息（type: subagent_result, stackable: true）"；
+    /// notifyAsync 由宿主注入：通常为"向所属主会话 EnqueueStackable 注入结果块（type: subagent_result）"，
+    /// 其 (taskId, message) 携带任务 id 以便 withdrawAsync 按 task_id 撤回；
+    /// withdrawAsync 由宿主注入：模型用 subagent_output 拉取全文后调用，撤回已入队的通知块避免双通道重复投递；
     /// shutdownToken 在宿主（插件）生命周期结束时取消全部运行中的子任务。
     /// </summary>
     public SubAgentToolSet(
@@ -49,7 +53,8 @@ public class SubAgentToolSet : ToolSet, IDisposable
         int tokenLimit,
         AgentOptions options,
         IList<ToolSet> tools,
-        Func<string, Task> notifyAsync,
+        Func<string, string, Task> notifyAsync,
+        Func<string, Task> withdrawAsync,
         CancellationToken shutdownToken,
         int maxSubagents = 3)
     {
@@ -58,6 +63,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _notifyAsync = notifyAsync ?? throw new ArgumentNullException(nameof(notifyAsync));
+        _withdrawAsync = withdrawAsync ?? throw new ArgumentNullException(nameof(withdrawAsync));
         _shutdownToken = shutdownToken;
         _maxSubagents = Math.Max(1, maxSubagents);
 
@@ -218,7 +224,7 @@ public class SubAgentToolSet : ToolSet, IDisposable
 
         try
         {
-            await _notifyAsync(message);
+            await _notifyAsync(info.Id, message);
         }
         catch (Exception ex)
         {
@@ -261,6 +267,18 @@ public class SubAgentToolSet : ToolSet, IDisposable
         catch (Exception ex)
         {
             return $"子任务 {id} 执行失败：{ex.Message}";
+        }
+        finally
+        {
+            // 已通过拉取拿到全文：撤回排队中的完成通知，避免同一结果经"推送"与"拉取"双通道重复投递
+            try
+            {
+                await _withdrawAsync(id);
+            }
+            catch (Exception ex)
+            {
+                SimpleLog.Default.Warn($"子任务 {id} 撤回排队通知失败: {ex.Message}");
+            }
         }
     }
 

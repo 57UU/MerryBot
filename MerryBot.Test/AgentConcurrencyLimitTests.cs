@@ -81,7 +81,8 @@ public sealed class AgentConcurrencyLimitTests
             tokenLimit: 10000,
             options,
             tools: Array.Empty<ToolSet>(),
-            notifyAsync: _ => Task.CompletedTask,
+            notifyAsync: (_, _) => Task.CompletedTask,
+            withdrawAsync: _ => Task.CompletedTask,
             shutdownToken: CancellationToken.None,
             maxSubagents: 1);
 

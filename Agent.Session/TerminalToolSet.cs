@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using CommonLib;
 using LlmBackend;
 
 namespace Agent.Session;
@@ -446,7 +447,8 @@ public class TerminalToolSet : ToolSet, IDisposable
         try
         {
             var session = await _sessionManager.GetSessionAsync(_sessionId);
-            await session.Chat(message, type: "task_result", stackable: true);
+            session.EnqueueStackable("tool_result", info.Id, message,
+                () => new StackableMessage(null, CancellationToken.None, null));
         }
         catch (Exception)
         {
@@ -499,6 +501,17 @@ public class TerminalToolSet : ToolSet, IDisposable
         _tasks.TryRemove(id, out _);
         info.Owner.Dispose();
         var result = await info.Task;
+        // 已通过拉取拿到全文：撤回排队中的完成通知，避免同一结果经"推送"与"拉取"双通道重复投递
+        try
+        {
+            var session = await _sessionManager.GetSessionAsync(_sessionId);
+            session.RemoveQueued("tool_result", id);
+        }
+        catch (Exception ex)
+        {
+            // 撤回失败不影响拉取结果本身
+            SimpleLog.Default.Warn($"任务 {id} 撤回排队通知失败: {ex.Message}");
+        }
         return $"任务 {id} 已完成：\n{result}";
     }
 
