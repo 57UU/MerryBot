@@ -644,11 +644,56 @@ public partial class HistoryRecorder : IDisposable
     /// <summary>
     /// 执行 LiteDB Rebuild（碎片整理/压缩）：重写整个数据库文件，回收空洞并重建索引。
     /// 需独占数据库，执行期间会阻塞其他读写；返回减少的字节数（before - after）。
+    /// 索引损坏（如 Detected loop）时改用容错模式（IncludeErrorReport）并记录警告，避免直接 500。
     /// </summary>
     public async Task<long> RebuildAsync()
     {
         long before = GetDatabaseFileSize();
-        await database.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        try
+        {
+            await database.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        }
+        catch (Exception ex) when (IsLoopException(ex))
+        {
+            _logger.Warn($"[HistoryRecorder] 检测到索引损坏（{ex.GetBaseException().Message}），尝试容错 Rebuild（IncludeErrorReport=true）...");
+            var opts = new LiteDB.Engine.RebuildOptions { IncludeErrorReport = true };
+            await database.RebuildAsync(opts);
+            var errors = opts.GetErrorReport().ToList();
+            if (errors.Count > 0)
+            {
+                _logger.Warn($"[HistoryRecorder] 容错 Rebuild 完成，但有 {errors.Count} 条错误被跳过（部分数据可能丢失），首条: {errors[0]}");
+            }
+            else
+            {
+                _logger.Warn("[HistoryRecorder] 容错 Rebuild 完成，未报告错误。");
+            }
+        }
+        long after = GetDatabaseFileSize();
+        return before - after;
+    }
+
+    private static bool IsLoopException(Exception ex)
+    {
+        var msg = ex.GetBaseException().Message ?? "";
+        return msg.Contains("loop", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("Detected loop", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>尝试执行 Checkpoint（截断 WAL/journal），不重建索引，可在 Rebuild 失败时回收部分空间。</summary>
+    public async Task<long> CheckpointAsync()
+    {
+        long before = GetDatabaseFileSize();
+        try
+        {
+            // LiteDatabaseAsync 未直接暴露 Checkpoint，通过底层 LiteDatabase 调用
+            // 使用同步 API 包装为 Task，避免阻塞
+            await database.CheckpointAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[HistoryRecorder] Checkpoint 失败: {ex.GetBaseException().Message}");
+            throw;
+        }
         long after = GetDatabaseFileSize();
         return before - after;
     }

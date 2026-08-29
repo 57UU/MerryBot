@@ -155,12 +155,42 @@ public partial class PluginStorageDatabase : IDisposable
     /// <summary>
     /// 执行 LiteDB Rebuild（碎片整理/压缩）：重写整个数据库文件，回收删除/更新产生的空洞并重建索引。
     /// 需独占数据库，执行期间会阻塞其他读写；返回减少的字节数（before - after，可能为 0 或负数）。
+    /// 索引损坏时自动切换为容错模式（IncludeErrorReport=true）。
     /// </summary>
     public async Task<long> RebuildAsync()
     {
         long before = GetDatabaseFileSize();
-        // LiteDB.Async 的 RebuildAsync 需传入 RebuildOptions；无密码时用默认构造
-        await _db.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        try
+        {
+            await _db.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        }
+        catch (Exception ex) when (IsLoopException(ex))
+        {
+            var opts = new LiteDB.Engine.RebuildOptions { IncludeErrorReport = true };
+            await _db.RebuildAsync(opts);
+            var errors = opts.GetErrorReport().ToList();
+            if (errors.Count > 0)
+            {
+                // 容错模式下错误已收集，不再抛异常，仅记录
+                System.Diagnostics.Debug.WriteLine($"[PluginStorageDatabase] 容错 Rebuild 跳过 {errors.Count} 条错误");
+            }
+        }
+        long after = GetDatabaseFileSize();
+        return before - after;
+    }
+
+    private static bool IsLoopException(Exception ex)
+    {
+        var msg = ex.GetBaseException().Message ?? "";
+        return msg.Contains("loop", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("Detected loop", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>执行 Checkpoint，截断 WAL，轻量回收空间。</summary>
+    public async Task<long> CheckpointAsync()
+    {
+        long before = GetDatabaseFileSize();
+        await _db.CheckpointAsync();
         long after = GetDatabaseFileSize();
         return before - after;
     }
