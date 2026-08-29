@@ -17,6 +17,35 @@
     </div>
 </div>
 
+<section class="advanced-section">
+    <h2>数据库维护</h2>
+    <p class="text-muted-custom small-custom">对 plugin_data.db / group_history.db 执行 LiteDB Rebuild（碎片整理），回收空洞并重建索引。执行时阻塞读写，大库可能耗时数秒。</p>
+    @if (!string.IsNullOrEmpty(DbSizesText))
+    {
+        <div class="message-item-custom mb-3-custom">@DbSizesText</div>
+    }
+    @if (!string.IsNullOrEmpty(RebuildResult))
+    {
+        <div class="message-item-custom mb-3-custom">@RebuildResult</div>
+    }
+    @if (!string.IsNullOrEmpty(RebuildError))
+    {
+        <div class="message-item-custom mb-3-custom" style="color:var(--danger)">@RebuildError</div>
+    }
+    <div class="d-flex gap-2" style="flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("plugin")' disabled="@IsRebuilding">
+            @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
+        </button>
+        <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("history")' disabled="@IsRebuilding">
+            @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
+        </button>
+        <button class="btn btn-primary btn-sm" @onclick='() => RebuildAsync("all")' disabled="@IsRebuilding">
+            @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
+        </button>
+        <button class="btn btn-secondary btn-sm" @onclick="LoadDbSizesAsync" disabled="@IsRebuilding">刷新大小</button>
+    </div>
+</section>
+
 @if (Error != null)
 {
     <div class="message-item-custom mb-3-custom">@Error</div>
@@ -80,6 +109,11 @@
     private string? Error;
     private bool IsLoading;
     private bool _initialized;
+    private string? DbSizesText;
+    private string? RebuildResult;
+    private string? RebuildError;
+    private bool IsRebuilding;
+    private string? RebuildingTarget;
 
     // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -88,6 +122,7 @@
         {
             _initialized = true;
             await LoadAsync();
+            await LoadDbSizesAsync();
             StateHasChanged();
         }
     }
@@ -128,5 +163,63 @@
         {
             Error = $"删除失败：{ex.Message}";
         }
+    }
+
+    private async Task LoadDbSizesAsync()
+    {
+        try
+        {
+            var sizes = await JSRuntime.InvokeAsync<DatabaseSizesPayload>("configApi.request", "GET", "/api/database/sizes");
+            DbSizesText = $"插件库：{sizes.PluginDbSize}  ·  历史库：{sizes.HistoryDbSize}";
+        }
+        catch (Exception ex)
+        {
+            DbSizesText = $"大小加载失败：{ex.Message}";
+        }
+    }
+
+    private async Task RebuildAsync(string target)
+    {
+        string label = target == "plugin" ? "插件库 (plugin_data.db)" : target == "history" ? "历史库 (group_history.db)" : "全部数据库";
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定要整理 {label} 吗？\n整理期间数据库会被独占，操作可能耗时数秒。")) return;
+        IsRebuilding = true;
+        RebuildingTarget = target;
+        RebuildResult = null;
+        RebuildError = null;
+        try
+        {
+            var results = await JSRuntime.InvokeAsync<List<RebuildResultPayload>>("configApi.request", "POST", "/api/database/rebuild", new { target });
+            if (results == null || results.Count == 0) RebuildResult = "整理完成，未返回结果。";
+            else RebuildResult = string.Join("； ", results.Select(r => $"{r.Target}: {r.BeforeSize} → {r.AfterSize}，{r.ReducedSize}"));
+            await LoadDbSizesAsync();
+        }
+        catch (Exception ex)
+        {
+            RebuildError = $"整理失败：{ex.Message}";
+        }
+        finally
+        {
+            IsRebuilding = false;
+            RebuildingTarget = null;
+        }
+    }
+
+    private sealed class DatabaseSizesPayload
+    {
+        public long PluginDbBytes { get; set; }
+        public string PluginDbSize { get; set; } = "";
+        public long HistoryDbBytes { get; set; }
+        public string HistoryDbSize { get; set; } = "";
+    }
+
+    private sealed class RebuildResultPayload
+    {
+        public string Target { get; set; } = "";
+        public long BeforeBytes { get; set; }
+        public string BeforeSize { get; set; } = "";
+        public long AfterBytes { get; set; }
+        public string AfterSize { get; set; } = "";
+        public long ReducedBytes { get; set; }
+        public string ReducedSize { get; set; } = "";
     }
 }

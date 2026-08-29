@@ -12,6 +12,7 @@ public partial class PluginStorageDatabase : IDisposable
 
     public PluginStorageDatabase(string databasePath = "plugin_data.db")
     {
+        _dbPath = databasePath;
         _mapper = new BsonMapper { IncludeFields = true };
         _db = new LiteDatabaseAsync(databasePath, _mapper);
         // 读取时直接返回 UTC，避免 LiteDB 按机器本地时区转换（UTC_DATE pragma）。底层存储始终是 UTC。
@@ -133,7 +134,36 @@ public partial class PluginStorageDatabase : IDisposable
         return collection.DeleteAsync(new BsonValue(id));
     }
 
+    private readonly string _dbPath;
 
+    /// <summary>返回数据库文件大小（字节），文件不存在时返回 0。</summary>
+    public long GetDatabaseFileSize()
+    {
+        try
+        {
+            return File.Exists(_dbPath) ? new FileInfo(_dbPath).Length : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>返回数据库文件大小的友好字符串（如 "12.3 MB"）。</summary>
+    public string GetDatabaseSize() => CommonLib.Format.FormatFileSize(GetDatabaseFileSize());
+
+    /// <summary>
+    /// 执行 LiteDB Rebuild（碎片整理/压缩）：重写整个数据库文件，回收删除/更新产生的空洞并重建索引。
+    /// 需独占数据库，执行期间会阻塞其他读写；返回减少的字节数（before - after，可能为 0 或负数）。
+    /// </summary>
+    public async Task<long> RebuildAsync()
+    {
+        long before = GetDatabaseFileSize();
+        // LiteDB.Async 的 RebuildAsync 需传入 RebuildOptions；无密码时用默认构造
+        await _db.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        long after = GetDatabaseFileSize();
+        return before - after;
+    }
 
     public void Dispose() => _db?.Dispose();
 

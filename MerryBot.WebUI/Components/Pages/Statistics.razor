@@ -5,6 +5,7 @@
 @using Microsoft.Extensions.Logging
 @inject HistoryRecorder HistoryRecorder
 @inject ILogger<Statistics> Logger
+@inject IJSRuntime JSRuntime
 
 <PageTitle>数据统计</PageTitle>
 
@@ -34,6 +35,13 @@
         </div>
     </div>
     <div class="storage-card">
+        <span class="storage-icon tone-indigo"><Icon Name="database" /></span>
+        <div>
+            <div class="storage-label">插件数据库</div>
+            <div class="storage-value">@PluginDbSize</div>
+        </div>
+    </div>
+    <div class="storage-card">
         <span class="storage-icon tone-green"><Icon Name="image" /></span>
         <div>
             <div class="storage-label">图片存储</div>
@@ -49,6 +57,35 @@
     </div>
 </div>
 
+<h2 class="page-title">数据库维护</h2>
+<div class="card-full-height">
+    <div class="card-body-custom">
+        <p class="text-muted-custom small-custom" style="margin-bottom:12px">
+            LiteDB 碎片整理（Rebuild）：重写整个数据库文件，回收删除/更新产生的空洞并重建索引，可减小文件体积。执行期间会阻塞数据库读写，大库可能耗时数秒，请勿频繁操作。
+        </p>
+        @if (!string.IsNullOrEmpty(RebuildError))
+        {
+            <div class="message-item-custom mb-3-custom" style="color:var(--danger)">@RebuildError</div>
+        }
+        @if (!string.IsNullOrEmpty(RebuildMessage))
+        {
+            <div class="message-item-custom mb-3-custom">@RebuildMessage</div>
+        }
+        <div class="d-flex gap-2" style="flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("history")' disabled="@IsRebuilding">
+                @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
+            </button>
+            <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("plugin")' disabled="@IsRebuilding">
+                @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
+            </button>
+            <button class="btn btn-primary btn-sm" @onclick='() => RebuildAsync("all")' disabled="@IsRebuilding">
+                @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
+            </button>
+            <button class="btn btn-secondary btn-sm" @onclick="LoadDbSizesAsync" disabled="@IsRebuilding">刷新大小</button>
+        </div>
+    </div>
+</div>
+
 @code {
     private List<long> GroupIds { get; set; } = new List<long>();
     private int GroupCount { get; set; } = 0;
@@ -57,10 +94,15 @@
     private int ImageCount { get; set; } = 0;
     private int FileCount { get; set; } = 0;
     private string GroupHistoryDbSize { get; set; } = "加载中";
+    private string PluginDbSize { get; set; } = "加载中";
     private string ImageStorageSize { get; set; } = "加载中";
     private string FileStorageSize { get; set; } = "加载中";
 
     private bool IsLoadingStats { get; set; } = true;
+    private bool IsRebuilding { get; set; }
+    private string? RebuildingTarget { get; set; }
+    private string? RebuildMessage { get; set; }
+    private string? RebuildError { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,7 +162,18 @@
     {
         try
         {
-            GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
+            // 优先走 API（可同时拿到 plugin 库大小），失败则回退到直接读取 history 库
+            try
+            {
+                var sizes = await JSRuntime.InvokeAsync<DatabaseSizesPayload>("configApi.request", "GET", "/api/database/sizes");
+                GroupHistoryDbSize = sizes.HistoryDbSize;
+                PluginDbSize = sizes.PluginDbSize;
+            }
+            catch
+            {
+                GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
+                PluginDbSize = "未知";
+            }
             ImageStorageSize = await HistoryRecorder.GetImageStorageSizeAsync();
             FileStorageSize = await HistoryRecorder.GetFileStorageSizeAsync();
         }
@@ -128,8 +181,71 @@
         {
             Logger.LogError(ex, "加载文件大小失败");
             GroupHistoryDbSize = "加载失败";
+            PluginDbSize = "加载失败";
             ImageStorageSize = "加载失败";
             FileStorageSize = "加载失败";
         }
+    }
+
+    private async Task RebuildAsync(string target)
+    {
+        string label = target == "plugin" ? "插件库 (plugin_data.db)" : target == "history" ? "历史库 (group_history.db)" : "全部数据库";
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定要整理 {label} 吗？\n\n整理期间数据库会被独占，操作可能耗时数秒。");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed) return;
+
+        IsRebuilding = true;
+        RebuildingTarget = target;
+        RebuildMessage = null;
+        RebuildError = null;
+        try
+        {
+            var results = await JSRuntime.InvokeAsync<List<RebuildResultPayload>>("configApi.request", "POST", "/api/database/rebuild", new { target });
+            if (results == null || results.Count == 0)
+            {
+                RebuildMessage = "整理完成，未返回结果。";
+            }
+            else
+            {
+                RebuildMessage = string.Join("； ", results.Select(r => $"{r.Target}: {r.BeforeSize} → {r.AfterSize}，{r.ReducedSize}"));
+            }
+            await LoadDbSizesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "数据库整理失败");
+            RebuildError = $"整理失败：{ex.Message}";
+        }
+        finally
+        {
+            IsRebuilding = false;
+            RebuildingTarget = null;
+        }
+    }
+
+    private sealed class DatabaseSizesPayload
+    {
+        public long PluginDbBytes { get; set; }
+        public string PluginDbSize { get; set; } = "";
+        public long HistoryDbBytes { get; set; }
+        public string HistoryDbSize { get; set; } = "";
+    }
+
+    private sealed class RebuildResultPayload
+    {
+        public string Target { get; set; } = "";
+        public long BeforeBytes { get; set; }
+        public string BeforeSize { get; set; } = "";
+        public long AfterBytes { get; set; }
+        public string AfterSize { get; set; } = "";
+        public long ReducedBytes { get; set; }
+        public string ReducedSize { get; set; } = "";
     }
 }

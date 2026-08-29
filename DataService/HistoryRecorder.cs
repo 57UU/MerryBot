@@ -627,21 +627,30 @@ public partial class HistoryRecorder : IDisposable
         return await fileBedCollection.CountAsync();
     }
 
-    public string GetDatabaseSize()
+    public long GetDatabaseFileSize()
     {
         try
         {
-            if (File.Exists(_dbPath))
-            {
-                var fileInfo = new FileInfo(_dbPath);
-                return Format.FormatFileSize(fileInfo.Length);
-            }
-            return "0 B";
+            return File.Exists(_dbPath) ? new FileInfo(_dbPath).Length : 0;
         }
         catch
         {
-            return "Unknown";
+            return 0;
         }
+    }
+
+    public string GetDatabaseSize() => Format.FormatFileSize(GetDatabaseFileSize());
+
+    /// <summary>
+    /// 执行 LiteDB Rebuild（碎片整理/压缩）：重写整个数据库文件，回收空洞并重建索引。
+    /// 需独占数据库，执行期间会阻塞其他读写；返回减少的字节数（before - after）。
+    /// </summary>
+    public async Task<long> RebuildAsync()
+    {
+        long before = GetDatabaseFileSize();
+        await database.RebuildAsync(new LiteDB.Engine.RebuildOptions());
+        long after = GetDatabaseFileSize();
+        return before - after;
     }
 
     public async Task<string> GetObjectStorageSizeAsync()
