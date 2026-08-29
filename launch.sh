@@ -24,6 +24,12 @@ project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 slot_dir="$project_dir/build"
 active_slot_file="$slot_dir/active_slot"
 
+# 默认数据目录：未显式设置 MERRY_BOT 时统一落在 build/data，避免随 AB 槽切换
+if [ -z "${MERRY_BOT:-}" ]; then
+    export MERRY_BOT="$project_dir/build/data"
+fi
+echo "[launch] Data dir: $MERRY_BOT"
+
 # PID of the currently running MerryBot process.
 child_pid=""
 stopping=false
