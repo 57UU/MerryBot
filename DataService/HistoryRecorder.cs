@@ -94,14 +94,6 @@ public partial class HistoryRecorder : IDisposable
         {
             _logger.Warn($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
         }
-        try
-        {
-            await messagesCollection.EnsureIndexAsync("GroupId_MessageId_Time", "GroupId, MessageId, Time", true);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn($"[HistoryRecorder] messages.GroupId_MessageId_Time 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
-        }
     }
 
     private long GenerateId()

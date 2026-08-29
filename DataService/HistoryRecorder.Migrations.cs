@@ -147,6 +147,11 @@ public partial class HistoryRecorder
     /// <summary>迁移 v3 → v4：移除 MessageKey/DedupKey 字段，统一使用 ObjectId Id。</summary>
     private async Task MigrateMessageKeysV4Async()
     {
+        // 先删除旧 MessageKey 唯一索引，避免移除字段后产生大量 null 导致唯一冲突
+        try { await database.GetCollection("messages").DropIndexAsync("MessageKey"); } catch { }
+        try { await database.GetCollection("messages").DropIndexAsync("DedupKey"); } catch { }
+        try { await database.GetCollection("messages").DropIndexAsync("GroupId_MessageId_Time"); } catch { }
+
         var collection = database.GetCollection("messages");
         var documents = await collection.FindAllAsync();
         foreach (var document in documents)
