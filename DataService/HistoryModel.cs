@@ -9,8 +9,6 @@ public class GroupMessage
 {
     [BsonId]
     public ObjectId Id { get; set; }
-    /// <summary>群号与消息 ID 组成的稳定业务键，用于幂等写入。</summary>
-    public string MessageKey { get; set; } = string.Empty;
     public long MessageId { get; set; }
     public long GroupId { get; set; }
     public long SenderId { get; set; }
@@ -50,10 +48,8 @@ public class GroupMessage
         Messages = messages;
         Time = time;
         IsDeleted = isDeleted;
-        MessageKey = CreateMessageKey(groupId, messageId);
+        if (Id == ObjectId.Empty) Id = ObjectId.NewObjectId();
     }
-
-    public static string CreateMessageKey(long groupId, long messageId) => $"g:{groupId}:m:{messageId}";
 
     public static GroupMessage FromReceivedGroupMessage(ReceivedGroupMessage receivedGroupMessage)
     {

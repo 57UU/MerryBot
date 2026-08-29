@@ -22,6 +22,7 @@
     <ProjectReference Include="..\Agent.Tools\Agent.Tools.csproj" />
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\DataProvider\DataProvider.csproj" />
+    <ProjectReference Include="..\DataService\DataService.csproj" />
     <ProjectReference Include="..\LlmClient\LlmClient.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
   </ItemGroup>

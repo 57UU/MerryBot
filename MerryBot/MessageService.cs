@@ -84,6 +84,27 @@ internal sealed class MessageService : IMessageService
         return result;
     }
 
+    public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        var result = new List<ProcessedMessage>(pageSize);
+        var cursorKey = beforeMessageKey;
+        while (result.Count < pageSize)
+        {
+            var need = pageSize - result.Count;
+            var stored = await history.GetMessagesByGroupIdBeforeKeyAsync(groupId, cursorKey, need);
+            if (stored.Count == 0) break;
+            foreach (var m in stored)
+            {
+                if (!m.IsDeleted) result.Add(FromStoredMessage(m));
+                if (result.Count == pageSize) break;
+            }
+            cursorKey = stored[^1].Id.ToString();
+            if (stored.Count < need) break;
+        }
+        return result;
+    }
+
     /// <summary>群聊历史消息总数（含撤回消息）。</summary>
     public Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default)
         => history.GetMessageCountByGroupIdAsync(groupId);
@@ -142,12 +163,33 @@ internal sealed class MessageService : IMessageService
     public Task<ProcessedMessage?> GetReplyAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default)
         => GetMessageAsync(groupId, messageIdOrReference, cancellationToken);
 
+    public async Task<ProcessedMessage?> GetMessageByObjectIdAsync(string objectIdHex, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(objectIdHex)) return null;
+        if (TryParseObjectId(objectIdHex, out _))
+        {
+            var stored = await history.GetMessageByObjectIdAsync(objectIdHex);
+            if (stored != null) return FromStoredMessage(stored);
+        }
+        if (LocalMessageReference.TryParseMessage(objectIdHex, out var g, out var mid))
+        {
+            var byRef = await history.GetMessageByIdAsync(mid, g);
+            if (byRef != null) return FromStoredMessage(byRef);
+        }
+        return null;
+    }
+
     public async Task<ProcessedMessage?> GetMessageAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default)
     {
         if (LocalMessageReference.TryParseMessage(messageIdOrReference, out var referenceGroupId, out var referenceMessageId))
         {
             groupId = referenceGroupId;
             messageIdOrReference = referenceMessageId.ToString();
+        }
+        if (TryParseObjectId(messageIdOrReference, out _))
+        {
+            var byKey = await history.GetMessageByObjectIdAsync(messageIdOrReference);
+            if (byKey != null) return FromStoredMessage(byKey);
         }
         if (!long.TryParse(messageIdOrReference, out var messageId)) return null;
 
@@ -614,8 +656,11 @@ internal sealed class MessageService : IMessageService
         catch (Exception ex) { logger.Warn(ex, "标记撤回消息失败: {0}", messageId); }
     }
 
+    private static ProcessedMessage CreateSnapshot(LiteDB.ObjectId id, long groupId, long messageId, long senderId, string nickname, string card, string role, IReadOnlyList<TypedMessage> chain, DateTime time, bool deleted)
+        => new(id, groupId, messageId, senderId, nickname ?? string.Empty, card ?? string.Empty, role ?? string.Empty, CloneChain(chain), time, deleted);
+
     private static ProcessedMessage CreateSnapshot(long groupId, long messageId, long senderId, string nickname, string card, string role, IReadOnlyList<TypedMessage> chain, DateTime time, bool deleted)
-        => new(groupId, messageId, senderId, nickname ?? string.Empty, card ?? string.Empty, role ?? string.Empty, CloneChain(chain), time, deleted);
+        => CreateSnapshot(LiteDB.ObjectId.NewObjectId(), groupId, messageId, senderId, nickname, card, role, chain, time, deleted);
 
     private static ProcessedMessage CloneSnapshot(ProcessedMessage source)
         => source with { MessageChain = CloneChain(source.MessageChain) };
@@ -627,13 +672,17 @@ internal sealed class MessageService : IMessageService
         => source.Select(item => item.Clone()).ToList();
 
     private static StoredMessage ToStoredMessage(ProcessedMessage source)
-        => new(source.GroupId, source.SenderId, source.SenderNickname, source.SenderGroupNickname, source.SenderGroupRole, source.MessageId, CloneChain(source.MessageChain).ToList(), source.Time, source.IsDeleted);
+    {
+        var gm = new StoredMessage(source.GroupId, source.SenderId, source.SenderNickname, source.SenderGroupNickname, source.SenderGroupRole, source.MessageId, CloneChain(source.MessageChain).ToList(), source.Time, source.IsDeleted);
+        gm.Id = source.Id;
+        return gm;
+    }
 
     private ProcessedMessage FromStoredMessage(StoredMessage source)
     {
         var localized = LocalizeStoredChain(source.Messages, source.GroupId);
         foreach (var resource in localized.Resources) resourceDescriptors.TryAdd(resource.LocalUri, resource);
-        return CreateSnapshot(source.GroupId, source.MessageId, source.SenderId, source.SenderNickname, source.SenderGroupNickname, source.SenderGroupRole, localized.Chain, source.Time, source.IsDeleted);
+        return CreateSnapshot(source.Id, source.GroupId, source.MessageId, source.SenderId, source.SenderNickname, source.SenderGroupNickname, source.SenderGroupRole, localized.Chain, source.Time, source.IsDeleted);
     }
 
     private static StoredForward ToStoredForward(ProcessedForwardMessage source)
@@ -678,4 +727,9 @@ internal sealed class MessageService : IMessageService
     internal sealed record ForwardSource(long MessageId, long SenderId, string Nickname, string Card, string Role, DateTime Time, IReadOnlyList<TypedMessage> MessageChain);
     private sealed record LocalizedChain(IReadOnlyList<TypedMessage> Chain, IReadOnlyList<ResourceDescriptor> Resources, IReadOnlyList<ForwardSeed> Forwards);
     private readonly record struct MessageKey(long GroupId, long MessageId);
+    private static bool TryParseObjectId(string s, out LiteDB.ObjectId result)
+    {
+        try { result = new LiteDB.ObjectId(s); return true; }
+        catch { result = LiteDB.ObjectId.Empty; return false; }
+    }
 }

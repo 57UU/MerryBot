@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace DataService;
 
-public class HistoryRecorder : IDisposable
+public partial class HistoryRecorder : IDisposable
 {
     readonly LiteDatabaseAsync database;
     readonly ILiteCollectionAsync<GroupMessage> messagesCollection;
@@ -94,6 +94,14 @@ public class HistoryRecorder : IDisposable
         {
             _logger.Warn($"[HistoryRecorder] files.Hash 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
         }
+        try
+        {
+            await messagesCollection.EnsureIndexAsync("GroupId_MessageId_Time", "GroupId, MessageId, Time", true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[HistoryRecorder] messages.GroupId_MessageId_Time 唯一索引创建失败（可能存在历史重复数据）: {ex.GetBaseException().Message}");
+        }
     }
 
     private long GenerateId()
@@ -116,149 +124,21 @@ public class HistoryRecorder : IDisposable
         _objectStorage?.Dispose();
     }
 
-    /// <summary>
-    /// 数据库 schema 版本。每次新增迁移步骤时递增。
-    /// - 0: 初始版本（未迁移）
-    /// - 1: 修正 ForwardData.Content 旧格式（JsonElement? → List&lt;GroupMessage&gt;?）
-    /// - 2: 补齐消息业务键并增加本地资源引用集合
-    /// - 3: ai_messages 主键从 GroupId 改为 SessionKey（统一会话标识）
-    /// </summary>
-    private const int CurrentSchemaVersion = 3;
-
-    /// <summary>
-    /// 单个迁移步骤：从 <paramref name="FromVersion"/> 迁移到 FromVersion+1。
-    /// 委托执行实际的数据变更，幂等执行无副作用。
-    /// </summary>
-    private record DbMigration(int FromVersion, string Name, Func<HistoryRecorder, Task> Action);
-
-    /// <summary>
-    /// 有序迁移步骤表。只追加新条目，不修改已有条目。
-    /// 索引 i 的迁移将数据库从版本 i 升级到 i+1。
-    /// </summary>
-    private static readonly DbMigration[] Migrations =
-    {
-        new(0, "ForwardData.Content: JsonElement? → List<GroupMessage>?",
-            static self => self.MigrateForwardDataContentV1Async()),
-        new(1, "MessageKey and resource references",
-            static self => self.MigrateMessageKeysV2Async()),
-        new(2, "ai_messages: GroupId → SessionKey",
-            static self => self.MigrateAiMessageSessionKeysV3Async()),
-    };
-
-    /// <summary>
-    /// 执行数据库迁移。根据 LiteDB 的 UserVersion 字段判断当前版本，
-    /// 依次执行未完成的迁移步骤，每完成一步立即写入新版本号。
-    /// 幂等：已是最新版本时直接返回。
-    /// </summary>
-    public async Task MigrateAsync()
-    {
-        int current = database.UserVersion;
-        for (int i = current; i < CurrentSchemaVersion; i++)
-        {
-            var step = Migrations[i];
-            await step.Action(this);
-            // 每完成一步立即持久化版本号，避免中途失败重复执行已完成的步骤
-            database.UserVersion = i + 1;
-        }
-    }
-
-    /// <summary>
-    /// 迁移 v0 → v1：修正旧版 ForwardData.Content 字段。
-    /// 旧版 Content 为 JsonElement?，LiteDB 以非 BsonArray 格式存储；
-    /// 新版改为 List&lt;GroupMessage&gt;? 后旧数据无法反序列化。
-    /// 迁移将所有非 BsonArray 的 Content 置空，允许新类型正常读取。
-    /// </summary>
-    private async Task MigrateForwardDataContentV1Async()
-    {
-        foreach (var colName in new[] { "messages", "forward_messages" })
-        {
-            var col = database.GetCollection(colName);
-            var docs = await col.FindAllAsync();
-            foreach (var doc in docs)
-            {
-                if (MigrateForwardDataContentRecursive(doc))
-                {
-                    await col.UpdateAsync(doc);
-                }
-            }
-        }
-    }
-
-    private static bool MigrateForwardDataContentRecursive(BsonDocument doc)
-    {
-        bool changed = false;
-
-        // 检查是否为 ForwardData（通过 _type 鉴别器识别）
-        if (doc.TryGetValue("_type", out var typeVal) && typeVal.IsString
-            && typeVal.AsString.Contains("ForwardData"))
-        {
-            if (doc.TryGetValue("Content", out var contentVal) && !contentVal.IsNull)
-            {
-                // 新类型 List<GroupMessage> 需要 BsonArray；非 BsonArray 的旧数据置空
-                if (!contentVal.IsArray)
-                {
-                    doc["Content"] = BsonValue.Null;
-                    changed = true;
-                }
-            }
-        }
-
-        // 递归遍历 Messages 数组（GroupMessage.Messages / ForwardMessageEntry.Messages）
-        if (doc.TryGetValue("Messages", out var messagesVal) && messagesVal.IsArray)
-        {
-            foreach (var item in messagesVal.AsArray)
-            {
-                if (item.IsDocument && MigrateForwardDataContentRecursive(item.AsDocument))
-                {
-                    changed = true;
-                }
-            }
-        }
-
-        return changed;
-    }
-
-    private async Task MigrateMessageKeysV2Async()
-    {
-        var collection = database.GetCollection("messages");
-        var documents = await collection.FindAllAsync();
-        foreach (var document in documents)
-        {
-            if (document.TryGetValue("MessageKey", out var key) && key.IsString && !string.IsNullOrEmpty(key.AsString))
-            {
-                continue;
-            }
-
-            if (!document.TryGetValue("GroupId", out var groupId) || !document.TryGetValue("MessageId", out var messageId))
-            {
-                continue;
-            }
-
-            document["MessageKey"] = GroupMessage.CreateMessageKey(groupId.AsInt64, messageId.AsInt64);
-            await collection.UpdateAsync(document);
-        }
-
-        await messagesCollection.EnsureIndexAsync(x => x.MessageKey, true);
-        await forwardMessagesCollection.EnsureIndexAsync(x => x.ForwardId, true);
-        await resourceReferencesCollection.EnsureIndexAsync(x => x.LocalUri, true);
-    }
-
     public async Task<bool> RecordMessageAsync(GroupMessage message)
     {
         return await UpsertMessageAsync(message);
     }
 
-    /// <summary>按群号 + 消息 ID 幂等保存消息；返回 true 表示新增。</summary>
     public async Task<bool> UpsertMessageAsync(GroupMessage message)
     {
-        message.MessageKey = GroupMessage.CreateMessageKey(message.GroupId, message.MessageId);
-        var existing = await messagesCollection.FindOneAsync(x => x.MessageKey == message.MessageKey);
-        if (existing != null)
+        var dedup = await messagesCollection.FindOneAsync(x => x.GroupId == message.GroupId && x.MessageId == message.MessageId && x.Time == message.Time);
+        if (dedup != null)
         {
-            message.Id = existing.Id;
+            message.Id = dedup.Id;
             await messagesCollection.UpdateAsync(message);
             return false;
         }
+        if (message.Id == ObjectId.Empty) message.Id = ObjectId.NewObjectId();
 
         try
         {
@@ -267,14 +147,21 @@ public class HistoryRecorder : IDisposable
         }
         catch (Exception exception) when (IsLiteDatabaseException(exception))
         {
-            // 唯一索引与另一条并发写入竞争时，读取并覆盖现有记录。
-            // LiteDB.Async 会将 LiteException 包装成 LiteAsyncException。
-            existing = await messagesCollection.FindOneAsync(x => x.MessageKey == message.MessageKey);
-            if (existing == null) throw;
-            message.Id = existing.Id;
-            await messagesCollection.UpdateAsync(message);
-            return false;
+            dedup = await messagesCollection.FindOneAsync(x => x.GroupId == message.GroupId && x.MessageId == message.MessageId && x.Time == message.Time);
+            if (dedup != null)
+            {
+                message.Id = dedup.Id;
+                await messagesCollection.UpdateAsync(message);
+                return false;
+            }
+            throw;
         }
+    }
+
+    public async Task<GroupMessage?> GetMessageByObjectIdAsync(string objectIdHex)
+    {
+        if (string.IsNullOrWhiteSpace(objectIdHex) || !TryParseObjectId(objectIdHex, out var oid)) return null;
+        return await messagesCollection.FindOneAsync(x => x.Id == oid);
     }
 
     public async Task<bool> MessageExistsAsync(long messageId)
@@ -282,12 +169,29 @@ public class HistoryRecorder : IDisposable
         return await messagesCollection.ExistsAsync(x => x.MessageId == messageId);
     }
 
+    public async Task<bool> MessageExistsAsync(long messageId, long groupId)
+    {
+        return await messagesCollection.ExistsAsync(x => x.MessageId == messageId && x.GroupId == groupId);
+    }
+
     /// <summary>
-    /// 按消息 ID 与群号查找单条消息（用于读取"回复"引用的原始消息）
+    /// 按消息 ID 与群号查找单条消息（用于读取"回复"引用的原始消息）。回绕时同 Id 多条，取 Time 最新。
     /// </summary>
     public async Task<GroupMessage?> GetMessageByIdAsync(long messageId, long groupId)
     {
-        return await messagesCollection.FindOneAsync(x => x.MessageId == messageId && x.GroupId == groupId);
+        var list = await messagesCollection.Query().Where(x => x.MessageId == messageId && x.GroupId == groupId).OrderByDescending(x => x.Time).Limit(1).ToListAsync();
+        return list.FirstOrDefault();
+    }
+
+    public async Task<GroupMessage?> GetMessageByKeyOrIdAsync(string keyOrId, long groupId)
+    {
+        if (TryParseObjectId(keyOrId, out _))
+        {
+            var byKey = await GetMessageByObjectIdAsync(keyOrId);
+            if (byKey != null) return byKey;
+        }
+        if (long.TryParse(keyOrId, out var mid)) return await GetMessageByIdAsync(mid, groupId);
+        return null;
     }
 
     public async Task<bool> MarkMessageAsDeletedAsync(long messageId, long? groupId = null)
@@ -352,6 +256,31 @@ public class HistoryRecorder : IDisposable
         }
 
         var anchorTime = anchor.Time;
+        var list = await baseQuery.Where(x => x.Time < anchorTime || (x.Time == anchorTime && x.MessageId < anchorId))
+            .OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+        list.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+        return list;
+    }
+
+    public async Task<List<GroupMessage>> GetMessagesByGroupIdBeforeKeyAsync(long groupId, string? beforeMessageKey, int limit = 50)
+    {
+        limit = Math.Clamp(limit, 1, 200);
+        var baseQuery = messagesCollection.Query().Where(x => x.GroupId == groupId);
+        if (string.IsNullOrWhiteSpace(beforeMessageKey) || !TryParseObjectId(beforeMessageKey, out var oid))
+        {
+            var first = await baseQuery.OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+            first.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+            return first;
+        }
+        var anchor = await messagesCollection.FindOneAsync(x => x.Id == oid);
+        if (anchor == null)
+        {
+            var first = await baseQuery.OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+            first.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+            return first;
+        }
+        var anchorTime = anchor.Time;
+        var anchorId = anchor.MessageId;
         var list = await baseQuery.Where(x => x.Time < anchorTime || (x.Time == anchorTime && x.MessageId < anchorId))
             .OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
         list.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
@@ -631,6 +560,12 @@ public class HistoryRecorder : IDisposable
         exception is LiteException ||
         exception is LiteAsyncException { InnerException: LiteException };
 
+    private static bool TryParseObjectId(string s, out ObjectId result)
+    {
+        try { result = new ObjectId(s); return true; }
+        catch { result = ObjectId.Empty; return false; }
+    }
+
     public async Task<ForwardMessageEntry?> GetForwardMessageByIdAsync(string forwardId)
     {
         forwardId = NormalizeForwardId(forwardId);
@@ -755,30 +690,6 @@ public class HistoryRecorder : IDisposable
         catch
         {
             return "Unknown";
-        }
-    }
-
-    /// <summary>
-    /// 迁移 v2 → v3：ai_messages 的 GroupId 改为统一会话标识 SessionKey。
-    /// 旧文档按「qq/group/{群号}」补齐 SessionKey 并移除 GroupId。
-    /// </summary>
-    private async Task MigrateAiMessageSessionKeysV3Async()
-    {
-        var collection = database.GetCollection("ai_messages");
-        var documents = await collection.FindAllAsync();
-        foreach (var document in documents)
-        {
-            if (document.TryGetValue("SessionKey", out var sessionKey) && sessionKey.IsString && !string.IsNullOrEmpty(sessionKey.AsString))
-            {
-                continue;
-            }
-            if (!document.TryGetValue("GroupId", out var groupId) || !groupId.IsInt64)
-            {
-                continue;
-            }
-            document["SessionKey"] = $"qq/group/{groupId.AsInt64}";
-            document.Remove("GroupId");
-            await collection.UpdateAsync(document);
         }
     }
 

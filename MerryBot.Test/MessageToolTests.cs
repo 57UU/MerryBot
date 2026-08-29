@@ -14,6 +14,7 @@ public sealed class MessageToolTests
         const long groupId = 123;
         const long messageId = 456;
         ProcessedMessage expected = new(
+            LiteDB.ObjectId.NewObjectId(),
             groupId,
             messageId,
             789,
@@ -43,6 +44,7 @@ public sealed class MessageToolTests
         const long groupId = 123;
         string reference = LocalMessageReference.Forward("forward-id");
         ProcessedMessage message = new(
+            LiteDB.ObjectId.NewObjectId(),
             groupId,
             456,
             789,
@@ -99,6 +101,7 @@ public sealed class MessageToolTests
         StubMessageService messageService = new()
         {
             MessageResult = new ProcessedMessage(
+                LiteDB.ObjectId.NewObjectId(),
                 groupId,
                 456,
                 789,
@@ -149,6 +152,9 @@ public sealed class MessageToolTests
         public Task<ProcessedMessage?> GetReplyAsync(long groupId, string messageIdOrReference, CancellationToken cancellationToken = default)
             => Task.FromResult<ProcessedMessage?>(null);
 
+        public Task<ProcessedMessage?> GetMessageByObjectIdAsync(string objectIdHex, CancellationToken cancellationToken = default)
+            => Task.FromResult<ProcessedMessage?>(null);
+
         public Task<ProcessedForwardMessage?> GetForwardAsync(string forwardIdOrReference, long sourceGroupId, CancellationToken cancellationToken = default)
         {
             ForwardGroupId = sourceGroupId;
@@ -160,6 +166,9 @@ public sealed class MessageToolTests
             => Task.FromResult<LocalMessageResource?>(null);
 
         public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProcessedMessage>>(Array.Empty<ProcessedMessage>());
+
+        public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ProcessedMessage>>(Array.Empty<ProcessedMessage>());
 
         public Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default)
