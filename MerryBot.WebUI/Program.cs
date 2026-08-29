@@ -91,7 +91,7 @@ public class Program
                 return Results.NotFound();
             }
 
-            var contentType = GetImageContentType(image.OriginalUrl);
+            var contentType = GetImageContentType(image.FileType);
             return Results.File(data, contentType);
         });
 
@@ -109,7 +109,7 @@ public class Program
                 return Results.NotFound();
             }
 
-            var contentType = GetFileContentType(file.OriginalUrl);
+            var contentType = GetFileContentType(file.FileType);
             var fileName = name ?? id.ToString();
             return Results.File(data, contentType, fileName);
         });
@@ -129,15 +129,17 @@ public class Program
                 var image = await historyRecorder.GetImageByIdAsync(objectId);
                 if (image == null) return Results.NotFound();
                 var data = await historyRecorder.GetImageDataAsync(image.Hash);
-                return data == null ? Results.NotFound() : Results.File(data, GetImageContentType(image.OriginalUrl));
+                var ext = string.IsNullOrEmpty(image.FileType) ? (resource.OriginalName ?? resource.Source) : image.FileType;
+                return data == null ? Results.NotFound() : Results.File(data, GetImageContentType(ext));
             }
 
             var file = await historyRecorder.GetFileByIdAsync(objectId);
             if (file == null) return Results.NotFound();
             var fileData = await historyRecorder.GetFileDataAsync(file.Hash);
+            var fileExt = string.IsNullOrEmpty(file.FileType) ? (resource.OriginalName ?? resource.Source) : file.FileType;
             return fileData == null
                 ? Results.NotFound()
-                : Results.File(fileData, GetFileContentType(file.OriginalUrl), resource.OriginalName ?? objectId.ToString());
+                : Results.File(fileData, GetFileContentType(fileExt), resource.OriginalName ?? objectId.ToString());
         });
 
         return app;

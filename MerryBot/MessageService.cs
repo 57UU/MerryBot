@@ -408,15 +408,16 @@ internal sealed class MessageService : IMessageService
             return null;
         }
 
+        string fileType = GetFileExtension(descriptor.OriginalName ?? descriptor.Source);
         if (descriptor.IsImage)
         {
-            var image = await history.RecordImageAsync(descriptor.Source, bytes);
+            var image = await history.RecordImageAsync(bytes, fileType);
             reference.StoredObjectId = image.Id;
             reference.IsImage = true;
         }
         else
         {
-            var file = await history.RecordFileAsync(descriptor.Source, bytes);
+            var file = await history.RecordFileAsync(bytes, fileType);
             reference.StoredObjectId = file.Id;
             reference.IsImage = false;
         }
@@ -469,13 +470,15 @@ internal sealed class MessageService : IMessageService
             var image = await history.GetImageByIdAsync(objectId);
             if (image == null) return null;
             var data = await history.GetImageDataAsync(image.Hash);
-            return data == null ? null : new LocalMessageResource(localUri, kind, originalName, GetContentType(kind, image.OriginalUrl), data);
+            var ext = string.IsNullOrEmpty(image.FileType) ? originalName : image.FileType;
+            return data == null ? null : new LocalMessageResource(localUri, kind, originalName, GetContentType(kind, ext), data);
         }
 
         var file = await history.GetFileByIdAsync(objectId);
         if (file == null) return null;
         var fileData = await history.GetFileDataAsync(file.Hash);
-        return fileData == null ? null : new LocalMessageResource(localUri, kind, originalName, GetContentType(kind, file.OriginalUrl), fileData);
+        var fileExt = string.IsNullOrEmpty(file.FileType) ? originalName : file.FileType;
+        return fileData == null ? null : new LocalMessageResource(localUri, kind, originalName, GetContentType(kind, fileExt), fileData);
     }
 
     private LocalizedChain LocalizeChain(IEnumerable<TypedMessage> source, long groupId)
@@ -697,9 +700,20 @@ internal sealed class MessageService : IMessageService
     private static ForwardSource CreateForwardSource(NapcatClient.GroupMessage source)
         => new(source.MessageId, source.UserId, source.SenderInfo.nickname, source.SenderInfo.card, source.SenderInfo.role, source.Time > 0 ? DateTimeOffset.FromUnixTimeSeconds(source.Time).UtcDateTime : DateTime.UtcNow, source.Message.Select(item => item.Clone()).ToList());
 
+    private static string GetFileExtension(string? name)
+    {
+        var ext = Path.GetExtension(name ?? string.Empty).ToLowerInvariant();
+        // 去掉 URL 查询串干扰：Path.GetExtension 会把 "?xxx" 当扩展名一部分，手动截断
+        var q = ext.IndexOf('?');
+        if (q >= 0) ext = ext[..q];
+        var hash = ext.IndexOf('#');
+        if (hash >= 0) ext = ext[..hash];
+        return ext;
+    }
+
     private static string GetContentType(string kind, string? name)
     {
-        var extension = Path.GetExtension(name ?? string.Empty).ToLowerInvariant();
+        var extension = GetFileExtension(name);
         if (kind == "image") return extension switch { ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", _ => "image/jpeg" };
         return extension switch { ".mp3" => "audio/mpeg", ".wav" => "audio/wav", ".mp4" => "video/mp4", ".pdf" => "application/pdf", _ => "application/octet-stream" };
     }

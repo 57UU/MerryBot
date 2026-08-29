@@ -85,8 +85,9 @@ public class GroupMessage
 public class ImageEntry
 {
     public long Id { get; set; }
-    public string OriginalUrl { get; set; }
     public string Hash { get; set; }
+    /// <summary>文件扩展名（含点，小写，如 .png），空表示未知，用于 MIME 推断。</summary>
+    public string FileType { get; set; }
     /// <summary>
     /// 图片文字描述，由 vision 模型生成后写入。null 表示尚未解析或解析失败。
     /// </summary>
@@ -94,35 +95,52 @@ public class ImageEntry
 
     public ImageEntry()
     {
-        OriginalUrl = string.Empty;
         Hash = string.Empty;
+        FileType = string.Empty;
     }
 
-    public ImageEntry(long id, string originalUrl, string hash)
+    public ImageEntry(long id, string hash, string fileType = "")
     {
         Id = id;
-        OriginalUrl = originalUrl;
         Hash = hash;
+        FileType = NormalizeExt(fileType);
+    }
+
+    private static string NormalizeExt(string? ext)
+    {
+        if (string.IsNullOrWhiteSpace(ext)) return string.Empty;
+        ext = ext.Trim().ToLowerInvariant();
+        if (!ext.StartsWith('.')) ext = "." + ext;
+        return ext;
     }
 }
 
 public class FileEntry
 {
     public long Id { get; set; }
-    public string OriginalUrl { get; set; }
     public string Hash { get; set; }
+    /// <summary>文件扩展名（含点，小写，如 .png/.pdf）。</summary>
+    public string FileType { get; set; }
 
     public FileEntry()
     {
-        OriginalUrl = string.Empty;
         Hash = string.Empty;
+        FileType = string.Empty;
     }
 
-    public FileEntry(long id, string originalUrl, string hash)
+    public FileEntry(long id, string hash, string fileType = "")
     {
         Id = id;
-        OriginalUrl = originalUrl;
         Hash = hash;
+        FileType = NormalizeExt(fileType);
+    }
+
+    private static string NormalizeExt(string? ext)
+    {
+        if (string.IsNullOrWhiteSpace(ext)) return string.Empty;
+        ext = ext.Trim().ToLowerInvariant();
+        if (!ext.StartsWith('.')) ext = "." + ext;
+        return ext;
     }
 }
 

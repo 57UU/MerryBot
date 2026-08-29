@@ -315,18 +315,24 @@ public partial class HistoryRecorder : IDisposable
             .ToListAsync();
     }
 
-    public async Task<ImageEntry> RecordImageAsync(string originalUrl, byte[] data)
+    public async Task<ImageEntry> RecordImageAsync(byte[] data, string? fileType = null)
     {
         var hash = CalculateHash(data);
         var existingImage = await imageBedCollection.FindOneAsync(x => x.Hash == hash);
         if (existingImage != null)
         {
+            // 已有记录但 FileType 为空时，补上扩展名
+            if (string.IsNullOrEmpty(existingImage.FileType) && !string.IsNullOrWhiteSpace(fileType))
+            {
+                existingImage.FileType = fileType;
+                try { await imageBedCollection.UpdateAsync(existingImage); } catch { }
+            }
             return existingImage;
         }
 
         var id = GenerateId();
         await _objectStorage.StoreAsync(ImageBucket, hash, data);
-        var imageEntry = new ImageEntry(id, originalUrl, hash);
+        var imageEntry = new ImageEntry(id, hash, fileType ?? string.Empty);
         try
         {
             await imageBedCollection.InsertAsync(imageEntry);
@@ -363,18 +369,23 @@ public partial class HistoryRecorder : IDisposable
         await imageBedCollection.UpdateAsync(entry);
     }
 
-    public async Task<FileEntry> RecordFileAsync(string originalUrl, byte[] data)
+    public async Task<FileEntry> RecordFileAsync(byte[] data, string? fileType = null)
     {
         var hash = CalculateHash(data);
         var existingFile = await fileBedCollection.FindOneAsync(x => x.Hash == hash);
         if (existingFile != null)
         {
+            if (string.IsNullOrEmpty(existingFile.FileType) && !string.IsNullOrWhiteSpace(fileType))
+            {
+                existingFile.FileType = fileType;
+                try { await fileBedCollection.UpdateAsync(existingFile); } catch { }
+            }
             return existingFile;
         }
 
         var id = GenerateId();
         await _objectStorage.StoreAsync(FileBucket, hash, data);
-        var fileEntry = new FileEntry(id, originalUrl, hash);
+        var fileEntry = new FileEntry(id, hash, fileType ?? string.Empty);
         try
         {
             await fileBedCollection.InsertAsync(fileEntry);
