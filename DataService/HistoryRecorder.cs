@@ -327,24 +327,35 @@ public class HistoryRecorder : IDisposable
     }
 
     /// <summary>
-    /// 游标分页：以 messageId 为锚点向前翻页。
-    /// beforeMessageId == null 时返回最新 limit 条；否则返回同群且 MessageId &lt; anchor 的前一页。
-    /// 按 MessageId 倒序（与 Time 正相关且单调，适合 Skip-free 分页），O(limit)。
+    /// 游标分页：按 Time 倒序，锚点为 messageId（随机）时先查其 Time 再按 Time 翻页，保证时间顺序。
+    /// beforeMessageId == null 返回最新；否则返回同群且 Time 更早（同秒则 MessageId 更小，避免丢同秒消息）的前一页。O(limit)。
     /// </summary>
     public async Task<List<GroupMessage>> GetMessagesByGroupIdBeforeAsync(long groupId, long? beforeMessageId, int limit = 50)
     {
         limit = Math.Clamp(limit, 1, 200);
-        var query = messagesCollection.Query()
-            .Where(x => x.GroupId == groupId);
-        if (beforeMessageId.HasValue)
+        var baseQuery = messagesCollection.Query().Where(x => x.GroupId == groupId);
+
+        if (!beforeMessageId.HasValue)
         {
-            var anchor = beforeMessageId.Value;
-            query = query.Where(x => x.MessageId < anchor);
+            var first = await baseQuery.OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+            first.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+            return first;
         }
-        return await query
-            .OrderByDescending(x => x.MessageId)
-            .Limit(limit)
-            .ToListAsync();
+
+        var anchorId = beforeMessageId.Value;
+        var anchor = await messagesCollection.FindOneAsync(x => x.GroupId == groupId && x.MessageId == anchorId);
+        if (anchor == null)
+        {
+            var fallback = await baseQuery.Where(x => x.MessageId < anchorId).OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+            fallback.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+            return fallback;
+        }
+
+        var anchorTime = anchor.Time;
+        var list = await baseQuery.Where(x => x.Time < anchorTime || (x.Time == anchorTime && x.MessageId < anchorId))
+            .OrderByDescending(x => x.Time).Limit(limit).ToListAsync();
+        list.Sort((a, b) => { var c = b.Time.CompareTo(a.Time); return c != 0 ? c : b.MessageId.CompareTo(a.MessageId); });
+        return list;
     }
 
     public async Task<List<GroupMessage>> GetMessagesBySenderIdAsync(long senderId, int limit = 100)
