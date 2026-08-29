@@ -1,4 +1,5 @@
 using CommonLib;
+using System.Diagnostics;
 using System.IO.Compression;
 
 namespace Agent.Tools;
@@ -8,6 +9,7 @@ public sealed class FileSkillManagementService : ISkillManagementService
 {
     private const int MaxZipEntries = 2_000;
     private const long MaxUploadBytes = 20 * 1024 * 1024;
+    private const int GitTimeoutSeconds = 120;
     private readonly string skillsPath;
     private readonly SemaphoreSlim operationLock = new(1, 1);
 
@@ -127,6 +129,96 @@ public sealed class FileSkillManagementService : ISkillManagementService
                 ?? throw new InvalidOperationException("无法确定 Skill 目录。");
             EnsureWithinSkillsPath(directory);
             Directory.Delete(directory, recursive: true);
+        }
+        finally
+        {
+            operationLock.Release();
+        }
+    }
+
+    public async Task CloneGitSkillAsync(string gitUrl, string? name = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gitUrl);
+        gitUrl = gitUrl.Trim();
+        ValidateGitUrl(gitUrl);
+
+        await operationLock.WaitAsync(cancellationToken);
+        try
+        {
+            var resolvedName = string.IsNullOrWhiteSpace(name) ? DeriveNameFromGitUrl(gitUrl) : name!.Trim();
+            ValidateSkillName(resolvedName);
+            EnsureSkillDoesNotExist(resolvedName);
+
+            var destination = Path.Combine(skillsPath, resolvedName);
+            // 防止并发残留
+            if (Directory.Exists(destination) || File.Exists(destination))
+            {
+                throw new InvalidOperationException($"同名 Skill 已存在: {resolvedName}");
+            }
+
+            var tempDir = Path.Combine(skillsPath, ".clone-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                // shallow clone，加速并限制体积
+                await RunGitAsync(["clone", "--depth", "1", gitUrl, tempDir], cancellationToken, GitTimeoutSeconds);
+
+                // 校验克隆结果包含 SKILL.md（启用或禁用形态均可）
+                var entry = Path.Combine(tempDir, "SKILL.md");
+                var disabledEntry = entry + ".disable";
+                if (!File.Exists(entry) && !File.Exists(disabledEntry))
+                {
+                    throw new InvalidOperationException("Git 仓库中未找到 SKILL.md，请确认该仓库为合法 Skill。");
+                }
+
+                Directory.Move(tempDir, destination);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            }
+        }
+        finally
+        {
+            operationLock.Release();
+        }
+    }
+
+    public async Task UpdateGitSkillAsync(string name, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        await operationLock.WaitAsync(cancellationToken);
+        try
+        {
+            var skill = GetSkill(ScanSkills(), name);
+            if (skill.Layout != SkillLayout.GitRepository)
+            {
+                throw new InvalidOperationException($"该 Skill 不是 Git 仓库: {skill.Name}");
+            }
+            var repoRoot = Path.GetDirectoryName(skill.EntryPath)
+                ?? throw new InvalidOperationException("无法确定 Skill 目录。");
+            EnsureWithinSkillsPath(repoRoot);
+            if (!Directory.Exists(Path.Combine(repoRoot, ".git")))
+            {
+                throw new InvalidOperationException($"Git 仓库元数据缺失: {skill.Name}");
+            }
+
+            // 先 fetch，再 hard reset 到 origin/HEAD，保证即使本地有修改也能更新
+            // 使用 --depth 1 保持 shallow
+            try
+            {
+                await RunGitAsync(["-C", repoRoot, "fetch", "--depth", "1", "origin"], cancellationToken, GitTimeoutSeconds);
+                // 尝试 reset 到 FETCH_HEAD 或 origin/HEAD
+                var resetResult = await TryRunGitAsync(["-C", repoRoot, "reset", "--hard", "origin/HEAD"], cancellationToken, GitTimeoutSeconds);
+                if (!resetResult)
+                {
+                    await RunGitAsync(["-C", repoRoot, "reset", "--hard", "FETCH_HEAD"], cancellationToken, GitTimeoutSeconds);
+                }
+            }
+            catch
+            {
+                // 兜底：尝试 pull --ff-only
+                await RunGitAsync(["-C", repoRoot, "pull", "--ff-only"], cancellationToken, GitTimeoutSeconds);
+            }
         }
         finally
         {
@@ -267,15 +359,21 @@ public sealed class FileSkillManagementService : ISkillManagementService
         foreach (var directory in Directory.EnumerateDirectories(skillsPath, "*", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileName(directory);
+            if (name.StartsWith('.')) continue; // 跳过 .clone- / .upload- 临时目录
             var enabledEntry = Path.Combine(directory, "SKILL.md");
             var disabledEntry = enabledEntry + ".disable";
+            var isGit = Directory.Exists(Path.Combine(directory, ".git"));
             if (File.Exists(enabledEntry))
             {
-                result[name] = StoredSkill.ForDirectory(name, enabledEntry, enabled: true);
+                result[name] = isGit
+                    ? StoredSkill.ForGit(name, enabledEntry, enabled: true)
+                    : StoredSkill.ForDirectory(name, enabledEntry, enabled: true);
             }
             else if (File.Exists(disabledEntry))
             {
-                result[name] = StoredSkill.ForDirectory(name, disabledEntry, enabled: false);
+                result[name] = isGit
+                    ? StoredSkill.ForGit(name, disabledEntry, enabled: false)
+                    : StoredSkill.ForDirectory(name, disabledEntry, enabled: false);
             }
         }
         return result;
@@ -320,6 +418,122 @@ public sealed class FileSkillManagementService : ISkillManagementService
         }
     }
 
+    private static void ValidateGitUrl(string url)
+    {
+        // 允许 https/http、git@、ssh://、git://，拒绝含 shell 元字符
+        if (url.IndexOfAny([';', '&', '|', '`', '$', '\n', '\r']) >= 0)
+        {
+            throw new ArgumentException("Git 地址包含非法字符。", nameof(url));
+        }
+        var ok = url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("git@", StringComparison.Ordinal)
+            || url.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("git://", StringComparison.OrdinalIgnoreCase);
+        if (!ok)
+        {
+            throw new ArgumentException("Git 地址仅支持 https://、http://、git@、ssh://、git://。", nameof(url));
+        }
+        // 额外长度限制防超长
+        if (url.Length > 2048) throw new ArgumentException("Git 地址过长。", nameof(url));
+    }
+
+    private static string DeriveNameFromGitUrl(string gitUrl)
+    {
+        var trimmed = gitUrl.Trim().TrimEnd('/');
+        // git@host:owner/repo.git -> 取 repo
+        var lastSlash = trimmed.LastIndexOf('/');
+        var lastColon = trimmed.LastIndexOf(':');
+        var idx = Math.Max(lastSlash, lastColon);
+        var name = idx >= 0 ? trimmed[(idx + 1)..] : trimmed;
+        if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name[..^4];
+        }
+        // 去除可能的查询参数
+        var q = name.IndexOf('?');
+        if (q >= 0) name = name[..q];
+        ValidateSkillName(name);
+        return name;
+    }
+
+    private static async Task RunGitAsync(string[] args, CancellationToken cancellationToken, int timeoutSeconds)
+    {
+        var ok = await TryRunGitAsync(args, cancellationToken, timeoutSeconds);
+        if (!ok) throw new InvalidOperationException($"Git 命令执行失败: git {string.Join(' ', args)}");
+    }
+
+    private static async Task<bool> TryRunGitAsync(string[] args, CancellationToken cancellationToken, int timeoutSeconds)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        using var process = new Process { StartInfo = psi };
+        try
+        {
+            if (!process.Start()) return false;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"未找到 git 或启动失败: {ex.Message}", ex);
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"Git 命令超时: git {string.Join(' ', args)}");
+        }
+
+        if (process.ExitCode != 0)
+        {
+            var err = await process.StandardError.ReadToEndAsync(cancellationToken);
+            var outStr = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            SimpleLog.Default.Warn($"git {string.Join(' ', args)} 失败 (exit {process.ExitCode}): {err} {outStr}");
+            return false;
+        }
+        return true;
+    }
+
+    private static async Task<string?> TryGetGitInfoAsync(string repoRoot, string[] gitArgs, CancellationToken cancellationToken)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var a in gitArgs) psi.ArgumentList.Add(a);
+        using var process = new Process { StartInfo = psi };
+        try
+        {
+            if (!process.Start()) return null;
+        }
+        catch { return null; }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
+        try { await process.WaitForExitAsync(cts.Token); } catch { try { process.Kill(true); } catch { } return null; }
+        if (process.ExitCode != 0) return null;
+        var output = (await process.StandardOutput.ReadToEndAsync(cancellationToken)).Trim();
+        return string.IsNullOrWhiteSpace(output) ? null : output;
+    }
+
     private void EnsureWithinSkillsPath(string path) => EnsureWithinDirectory(path, skillsPath);
 
     private static void EnsureWithinDirectory(string path, string directory)
@@ -340,6 +554,9 @@ public sealed class FileSkillManagementService : ISkillManagementService
         public static StoredSkill ForDirectory(string name, string entryPath, bool enabled)
             => new(name, entryPath, enabled, SkillLayout.Directory);
 
+        public static StoredSkill ForGit(string name, string entryPath, bool enabled)
+            => new(name, entryPath, enabled, SkillLayout.GitRepository);
+
         public Task<ManagedSkill> ToDtoAsync(CancellationToken cancellationToken)
             => ToDtoAsyncCore(cancellationToken);
 
@@ -350,8 +567,23 @@ public sealed class FileSkillManagementService : ISkillManagementService
                 ? info.Length
                 : Directory.EnumerateFiles(Path.GetDirectoryName(EntryPath)!, "*", SearchOption.AllDirectories)
                     .Sum(path => new FileInfo(path).Length);
-            var description = await TryExtractDescriptionAsync(EntryPath, cancellationToken);
-            return new ManagedSkill(Name, description, Enabled, Layout, size, info.LastWriteTimeUtc);
+
+            // description 与 git 信息并发获取
+            var descTask = TryExtractDescriptionAsync(EntryPath, cancellationToken);
+            Task<string?> gitUrlTask = Task.FromResult<string?>(null);
+            Task<string?> gitHeadTask = Task.FromResult<string?>(null);
+            if (Layout == SkillLayout.GitRepository)
+            {
+                var repoRoot = Path.GetDirectoryName(EntryPath)!;
+                gitUrlTask = TryGetGitInfoAsync(repoRoot, ["config", "--get", "remote.origin.url"], cancellationToken);
+                gitHeadTask = TryGetGitInfoAsync(repoRoot, ["rev-parse", "--short", "HEAD"], cancellationToken);
+            }
+
+            await Task.WhenAll(descTask, gitUrlTask, gitHeadTask);
+            var description = await descTask;
+            var gitUrl = gitUrlTask.Result;
+            var gitHead = gitHeadTask.Result;
+            return new ManagedSkill(Name, description, Enabled, Layout, size, info.LastWriteTimeUtc, gitUrl, gitHead);
         }
 
         private static async Task<string?> TryExtractDescriptionAsync(string entryPath, CancellationToken cancellationToken)

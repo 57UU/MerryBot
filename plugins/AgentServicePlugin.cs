@@ -44,6 +44,12 @@ public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemor
     public Task DeleteSkillAsync(string name, CancellationToken cancellationToken = default)
         => skillService.DeleteSkillAsync(name, cancellationToken);
 
+    public Task CloneGitSkillAsync(string gitUrl, string? name = null, CancellationToken cancellationToken = default)
+        => skillService.CloneGitSkillAsync(gitUrl, name, cancellationToken);
+
+    public Task UpdateGitSkillAsync(string name, CancellationToken cancellationToken = default)
+        => skillService.UpdateGitSkillAsync(name, cancellationToken);
+
     // ── IMemoryManagementService 转发 ────────────────────────────────────────
 
     public Task<IReadOnlyList<ManagedMemorySession>> ListMemorySessionsAsync(CancellationToken cancellationToken = default)

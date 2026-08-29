@@ -6,11 +6,15 @@
 
 <div class="container-custom skill-page">
     <h1>技能管理</h1>
-    <p class="text-muted-custom">支持直接上传单文件 <code>.md</code>，或上传目录型 Skill 的 <code>.zip</code>。禁用会将入口文件标记为 <code>.disable</code>，运行中的新会话只会读取启用的 Skill。</p>
+    <p class="text-muted-custom">支持直接上传单文件 <code>.md</code>，或上传目录型 Skill 的 <code>.zip</code>，或从 Git 仓库克隆。禁用会将入口文件标记为 <code>.disable</code>，运行中的新会话只会读取启用的 Skill。Git 形式的 Skill 支持一键更新（<code>git pull --ff-only</code>）。</p>
 
     @if (!string.IsNullOrWhiteSpace(Error))
     {
         <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Success))
+    {
+        <div class="message-item-custom mb-3-custom" style="border-left:3px solid var(--bs-success,#198754);">@Success</div>
     }
 
     <section class="message-item-custom mb-3-custom">
@@ -19,6 +23,16 @@
             <input id="skill-upload-file" class="form-control" type="file" accept=".md,.zip" />
             <button class="btn btn-primary" @onclick="UploadAsync" disabled="@IsUploading">@(IsUploading ? "上传中…" : "上传")</button>
         </div>
+    </section>
+
+    <section class="message-item-custom mb-3-custom">
+        <div class="message-header-custom"><strong>从 Git 导入</strong></div>
+        <div class="message-content-custom skill-git-row">
+            <input class="form-control" placeholder="Git 地址，如 https://github.com/owner/repo.git" @bind="GitUrl" @bind:event="oninput" />
+            <input class="form-control" style="max-width:14rem" placeholder="名称（可选，默认取仓库名）" @bind="GitName" @bind:event="oninput" />
+            <button class="btn btn-primary" @onclick="CloneGitAsync" disabled="@IsCloning">@(IsCloning ? "克隆中…" : "克隆")</button>
+        </div>
+        <div class="text-muted-custom" style="font-size:.85rem;margin-top:.35rem">支持 https、git at、ssh、git 协议；以 shallow clone 方式克隆。</div>
     </section>
 
     @if (SkillItems is null)
@@ -39,12 +53,22 @@
                     @foreach (var skill in SkillItems)
                     {
                         <tr @key="skill.Name">
-                            <td><code>@skill.Name</code></td>
+                            <td>
+                                <code>@skill.Name</code>
+                                @if (skill.Layout == SkillLayout.GitRepository && !string.IsNullOrWhiteSpace(skill.GitUrl))
+                                {
+                                    <div class="skill-git-meta" title="@skill.GitUrl">@skill.GitUrl @if (!string.IsNullOrWhiteSpace(skill.GitHead)) { <span class="skill-git-head">(@skill.GitHead)</span> }</div>
+                                }
+                            </td>
                             <td class="skill-desc" title="@(skill.Description ?? string.Empty)">@(string.IsNullOrWhiteSpace(skill.Description) ? "—" : skill.Description)</td>
-                            <td>@(skill.Layout == SkillLayout.Directory ? "目录" : "Markdown")</td>
+                            <td>@LayoutLabel(skill.Layout)</td>
                             <td>@(skill.Enabled ? "启用" : "禁用")</td>
                             <td>@skill.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
                             <td class="skill-actions">
+                                @if (skill.Layout == SkillLayout.GitRepository)
+                                {
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => UpdateGitAsync(skill)" disabled="@IsMutating" title="git pull 更新">更新</button>
+                                }
                                 <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(skill)" disabled="@IsMutating">@(skill.Enabled ? "禁用" : "启用")</button>
                                 <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(skill)" disabled="@IsMutating">删除</button>
                             </td>
@@ -60,8 +84,12 @@
 @code {
     private IReadOnlyList<ManagedSkill>? SkillItems;
     private string? Error;
+    private string? Success;
     private bool IsUploading;
+    private bool IsCloning;
     private bool IsMutating;
+    private string GitUrl = string.Empty;
+    private string GitName = string.Empty;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -80,12 +108,44 @@
         IsUploading = true;
         try
         {
-            Error = null;
+            Error = null; Success = null;
             await JSRuntime.InvokeVoidAsync("skillApi.upload", "skill-upload-file", "/api/skills/upload");
             await LoadAsync();
+            Success = "上传成功。";
         }
         catch (Exception exception) { Error = $"上传失败: {exception.Message}"; }
         finally { IsUploading = false; }
+    }
+
+    private async Task CloneGitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GitUrl)) { Error = "请填写 Git 地址。"; return; }
+        IsCloning = true;
+        try
+        {
+            Error = null; Success = null;
+            var payload = new { gitUrl = GitUrl.Trim(), name = string.IsNullOrWhiteSpace(GitName) ? null : GitName.Trim() };
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/skills/clone", payload);
+            GitUrl = string.Empty; GitName = string.Empty;
+            await LoadAsync();
+            Success = "Git 克隆成功。";
+        }
+        catch (Exception exception) { Error = $"克隆失败: {exception.Message}"; }
+        finally { IsCloning = false; }
+    }
+
+    private async Task UpdateGitAsync(ManagedSkill skill)
+    {
+        IsMutating = true;
+        try
+        {
+            Error = null; Success = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/skills/update?name={Uri.EscapeDataString(skill.Name)}");
+            await LoadAsync();
+            Success = $"已更新 Git Skill “{skill.Name}”。";
+        }
+        catch (Exception exception) { Error = $"更新失败: {exception.Message}"; }
+        finally { IsMutating = false; }
     }
 
     private async Task ToggleAsync(ManagedSkill skill)
@@ -93,7 +153,7 @@
         IsMutating = true;
         try
         {
-            Error = null;
+            Error = null; Success = null;
             await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/skills/enabled", new SkillEnabledRequest(skill.Name, !skill.Enabled));
             await LoadAsync();
         }
@@ -107,7 +167,7 @@
         IsMutating = true;
         try
         {
-            Error = null;
+            Error = null; Success = null;
             await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/skills/delete?name={Uri.EscapeDataString(skill.Name)}");
             await LoadAsync();
         }
@@ -115,5 +175,10 @@
         finally { IsMutating = false; }
     }
 
-
+    private static string LayoutLabel(SkillLayout layout) => layout switch
+    {
+        SkillLayout.GitRepository => "Git",
+        SkillLayout.Directory => "目录",
+        _ => "Markdown",
+    };
 }

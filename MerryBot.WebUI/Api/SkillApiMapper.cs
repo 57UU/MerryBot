@@ -38,6 +38,26 @@ public static class SkillApiMapper
             }
             catch (Exception exception) { return ToError(exception); }
         });
+        routes.MapPost("/clone", async (SkillCloneRequest request, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.GitUrl)) return Results.BadRequest("请填写 Git 地址。");
+                await manager.CloneGitSkillAsync(request.GitUrl, request.Name, cancellationToken);
+                return Results.NoContent();
+            }
+            catch (Exception exception) { return ToError(exception); }
+        });
+        routes.MapPost("/update", async (string name, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest("请指定要更新的 Skill 名称。");
+                await manager.UpdateGitSkillAsync(name, cancellationToken);
+                return Results.NoContent();
+            }
+            catch (Exception exception) { return ToError(exception); }
+        });
         routes.MapPost("/enabled", async (SkillEnabledRequest request, CancellationToken cancellationToken) =>
         {
             try
@@ -67,6 +87,7 @@ public static class SkillApiMapper
             ArgumentException or ArgumentOutOfRangeException => Results.BadRequest(exception.Message),
             KeyNotFoundException => Results.NotFound(exception.Message),
             InvalidOperationException => Results.Conflict(exception.Message),
+            TimeoutException => Results.Problem(exception.Message, statusCode: 504),
             _ => Results.Problem(exception.Message),
         };
     }

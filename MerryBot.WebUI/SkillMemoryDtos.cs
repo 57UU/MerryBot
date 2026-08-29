@@ -1,6 +1,7 @@
 namespace MerryBot.WebUI;
 
 public sealed record SkillEnabledRequest(string Name, bool Enabled);
+public sealed record SkillCloneRequest(string GitUrl, string? Name);
 
 public sealed record MemorySessionDto(
     string SessionKey,

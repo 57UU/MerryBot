@@ -1,3 +1,7 @@
 .skill-upload-row, .skill-actions { display: flex; gap: .5rem; align-items: center; }
 .skill-upload-row .form-control { max-width: 38rem; }
+.skill-git-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.skill-git-row .form-control:first-child { flex: 1 1 22rem; }
 .skill-desc { max-width: 32rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-git-meta { font-size: .75rem; color: var(--bs-secondary-color,#6c757d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18rem; }
+.skill-git-head { opacity: .8; }

@@ -8,6 +8,8 @@ public interface ISkillManagementService
     Task UploadSkillAsync(SkillUpload upload, CancellationToken cancellationToken = default);
     Task SetSkillEnabledAsync(string name, bool enabled, CancellationToken cancellationToken = default);
     Task DeleteSkillAsync(string name, CancellationToken cancellationToken = default);
+    Task CloneGitSkillAsync(string gitUrl, string? name = null, CancellationToken cancellationToken = default);
+    Task UpdateGitSkillAsync(string name, CancellationToken cancellationToken = default);
 }
 
 public sealed record ManagedSkill(
@@ -16,12 +18,15 @@ public sealed record ManagedSkill(
     bool Enabled,
     SkillLayout Layout,
     long SizeBytes,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? GitUrl = null,
+    string? GitHead = null);
 
 public enum SkillLayout
 {
     MarkdownFile,
     Directory,
+    GitRepository,
 }
 
 public sealed record SkillUpload(string FileName, byte[] Content);
