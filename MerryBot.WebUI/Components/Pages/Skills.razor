@@ -34,15 +34,15 @@
         <div class="message-item-custom">
             <div class="message-content-custom" style="overflow-x:auto">
                 <table class="table">
-                    <thead><tr><th>名称</th><th>形式</th><th>状态</th><th>大小</th><th>更新时间</th><th></th></tr></thead>
+                    <thead><tr><th>名称</th><th>描述</th><th>形式</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
                     <tbody>
                     @foreach (var skill in SkillItems)
                     {
                         <tr @key="skill.Name">
                             <td><code>@skill.Name</code></td>
+                            <td class="skill-desc" title="@(skill.Description ?? string.Empty)">@(string.IsNullOrWhiteSpace(skill.Description) ? "—" : skill.Description)</td>
                             <td>@(skill.Layout == SkillLayout.Directory ? "目录" : "Markdown")</td>
                             <td>@(skill.Enabled ? "启用" : "禁用")</td>
-                            <td>@FormatSize(skill.SizeBytes)</td>
                             <td>@skill.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
                             <td class="skill-actions">
                                 <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(skill)" disabled="@IsMutating">@(skill.Enabled ? "禁用" : "启用")</button>
@@ -115,10 +115,5 @@
         finally { IsMutating = false; }
     }
 
-    private static string FormatSize(long size) => size switch
-    {
-        < 1024 => $"{size} B",
-        < 1024 * 1024 => $"{size / 1024d:F1} KB",
-        _ => $"{size / 1024d / 1024d:F1} MB",
-    };
+
 }

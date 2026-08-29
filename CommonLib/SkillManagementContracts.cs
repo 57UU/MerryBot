@@ -12,6 +12,7 @@ public interface ISkillManagementService
 
 public sealed record ManagedSkill(
     string Name,
+    string? Description,
     bool Enabled,
     SkillLayout Layout,
     long SizeBytes,

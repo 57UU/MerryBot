@@ -76,8 +76,16 @@ public class SkillToolSet : ToolSet
         {
             return "技能目录为空，没有可用技能。";
         }
-        var sb = new StringBuilder("可用技能：");
-        sb.AppendJoin("、", skills.Keys);
+        var sb = new StringBuilder("可用技能：\n");
+        foreach (var skill in skills.Values.OrderBy(static s => s.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.Append("- ").Append(skill.Name);
+            if (!string.IsNullOrWhiteSpace(skill.Description))
+            {
+                sb.Append(": ").Append(skill.Description!.Trim());
+            }
+            sb.Append('\n');
+        }
         sb.Append($"（共 {skills.Count} 个）。如需使用某技能，调用 skill_list 查看、skill_read 读取其内容后再执行。");
         return sb.ToString();
     }
@@ -103,8 +111,16 @@ public class SkillToolSet : ToolSet
             return "技能目录为空，没有可用技能。";
         }
         var sb = new StringBuilder($"可用技能（共 {skills.Count} 个）：\n");
-        sb.AppendJoin('\n', skills.Keys);
-        return sb.ToString();
+        foreach (var skill in skills.Values.OrderBy(static s => s.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.Append("- ").Append(skill.Name);
+            if (!string.IsNullOrWhiteSpace(skill.Description))
+            {
+                sb.Append(": ").Append(skill.Description!.Trim());
+            }
+            sb.Append('\n');
+        }
+        return sb.ToString().TrimEnd();
     }
 
     private async Task<string> ReadSkillAsync(SkillReadArgs args)

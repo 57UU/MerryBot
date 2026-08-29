@@ -23,10 +23,12 @@ public sealed class FileSkillManagementService : ISkillManagementService
         await operationLock.WaitAsync(cancellationToken);
         try
         {
-            return ScanSkills().Values
+            var ordered = ScanSkills().Values
                 .OrderBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(skill => skill.ToDto())
                 .ToList();
+            // 并发异步读取所有入口文件的 description / 元信息，避免 N 个文件串行 I/O
+            var dtos = await Task.WhenAll(ordered.Select(skill => skill.ToDtoAsync(cancellationToken)));
+            return dtos;
         }
         finally
         {
@@ -338,14 +340,80 @@ public sealed class FileSkillManagementService : ISkillManagementService
         public static StoredSkill ForDirectory(string name, string entryPath, bool enabled)
             => new(name, entryPath, enabled, SkillLayout.Directory);
 
-        public ManagedSkill ToDto()
+        public Task<ManagedSkill> ToDtoAsync(CancellationToken cancellationToken)
+            => ToDtoAsyncCore(cancellationToken);
+
+        private async Task<ManagedSkill> ToDtoAsyncCore(CancellationToken cancellationToken)
         {
             var info = new FileInfo(EntryPath);
             var size = Layout == SkillLayout.MarkdownFile
                 ? info.Length
                 : Directory.EnumerateFiles(Path.GetDirectoryName(EntryPath)!, "*", SearchOption.AllDirectories)
                     .Sum(path => new FileInfo(path).Length);
-            return new ManagedSkill(Name, Enabled, Layout, size, info.LastWriteTimeUtc);
+            var description = await TryExtractDescriptionAsync(EntryPath, cancellationToken);
+            return new ManagedSkill(Name, description, Enabled, Layout, size, info.LastWriteTimeUtc);
+        }
+
+        private static async Task<string?> TryExtractDescriptionAsync(string entryPath, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // 仅读取文件头部，避免大文件全量 I/O；frontmatter 位于文件开头
+                const int maxHeadBytes = 8 * 1024;
+                await using var stream = new FileStream(entryPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
+                var toRead = (int)Math.Min(maxHeadBytes, stream.Length == 0 ? 0 : stream.Length);
+                if (toRead == 0) return null;
+                var buffer = new byte[toRead];
+                var read = await stream.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken);
+                if (read == 0) return null;
+                var head = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+
+                // frontmatter 必须以 --- 开头
+                var trimmed = head.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+                if (!trimmed.StartsWith("---", StringComparison.Ordinal)) return null;
+                // 找到第一行结束后的内容与闭合 ---
+                var firstLineEnd = trimmed.IndexOf('\n');
+                if (firstLineEnd < 0) return null;
+                var afterFirst = trimmed[(firstLineEnd + 1)..];
+                // 查找闭合分隔行：单独一行的 ---
+                var lines = afterFirst.Split('\n');
+                int endIndex = -1;
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    if (lines[i].Trim().Equals("---", StringComparison.Ordinal) || lines[i].Trim().Equals("...", StringComparison.Ordinal))
+                    {
+                        endIndex = i;
+                        break;
+                    }
+                }
+                if (endIndex < 0) return null;
+                var frontmatter = string.Join('\n', lines, 0, endIndex);
+                // 轻量解析：按行查找 description 键，避免引入 YamlDotNet 依赖
+                foreach (var rawLine in frontmatter.Split('\n'))
+                {
+                    var line = rawLine.Trim();
+                    if (line.Length == 0 || line.StartsWith('#')) continue;
+                    if (!line.StartsWith("description", StringComparison.OrdinalIgnoreCase)) continue;
+                    var colon = line.IndexOf(':');
+                    if (colon < 0) continue;
+                    var key = line[..colon].Trim();
+                    if (!key.Equals("description", StringComparison.OrdinalIgnoreCase)) continue;
+                    var value = line[(colon + 1)..].Trim();
+                    // 去除引号包裹
+                    if (value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\'')))
+                    {
+                        value = value[1..^1];
+                    }
+                    // 处理 YAML 转义的常见情况：双引号内的 \" 
+                    value = value.Replace("\\\"", "\"").Replace("\\'", "'").Trim();
+                    return string.IsNullOrWhiteSpace(value) ? null : value;
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }
