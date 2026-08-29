@@ -48,7 +48,7 @@ public class MessageTool : ToolSet
             "get_message",
             "获取消息的完整内容",
             args => GetMessageAsync(args.messageUrl));
-        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按时间倒序，第 1 页为最近的消息", args => GetGroupContextAsync(args));
+        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按 MessageId 倒序，最新在前；首次传 beforeMessageId 为空取最新，翻更早时传入上一页返回的 lastMessageId）", args => GetGroupContextAsync(args));
         // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
         if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
         {
@@ -71,11 +71,11 @@ public class MessageTool : ToolSet
         public string image { get; set; } = string.Empty;
     }
 
-    /// <summary>群聊上下文分页参数：按时间倒序，第 1 页为最近的消息。</summary>
+    /// <summary>群聊上下文游标分页参数：按 MessageId 倒序，最新在前。</summary>
     private sealed class GetGroupContextArgs
     {
-        [Description("页码，从 1 开始，第 1 页为最近的消息")]
-        public int page { get; set; } = 1;
+        [Description("锚点消息ID，传上一页返回的 lastMessageId 来获取更早的消息；首次获取传空或0取最新")]
+        public long? beforeMessageId { get; set; }
 
         [Description("每页消息条数，默认 20，范围 1-50")]
         public int pageSize { get; set; } = 20;
@@ -127,25 +127,27 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 分页获取群聊历史消息上下文：按时间倒序，第 1 页为最近的消息。
-    /// 附带总条数与页码信息，便于模型逐页翻看早期对话。
+    /// 游标分页获取群聊历史：按 MessageId 倒序，最新在前。
+    /// 返回体末尾附带 lastMessageId，供下次翻页使用。
     /// </summary>
     private async Task<string> GetGroupContextAsync(GetGroupContextArgs args)
     {
-        var page = Math.Max(1, args.page);
         var pageSize = Math.Clamp(args.pageSize, 1, 50);
-        var messages = await messageService.GetGroupMessagesAsync(groupId, page, pageSize);
+        var before = args.beforeMessageId.HasValue && args.beforeMessageId.Value != 0 ? args.beforeMessageId.Value : (long?)null;
+        var messages = await messageService.GetGroupMessagesBeforeAsync(groupId, before, pageSize);
         var total = await messageService.GetGroupMessageCountAsync(groupId);
         if (messages.Count == 0)
         {
+            var anchorInfo = before.HasValue ? $"beforeMessageId={before.Value}" : "beforeMessageId=null(最新)";
             return total == 0
                 ? "当前群暂无历史消息。"
-                : $"没有更多历史消息了（共 {total} 条，当前第 {page} 页）。";
+                : $"没有更多历史消息了（共 {total} 条，{anchorInfo}）。";
         }
 
-        var totalPages = Math.Max(1, (total + pageSize - 1) / pageSize);
         var body = string.Join("\n", messages.Select(FormatMessage));
-        return Cap($"群聊历史消息（共 {total} 条，第 {page}/{totalPages} 页，每页 {pageSize} 条）：\n{body}");
+        var lastMessageId = messages[^1].MessageId;
+        var anchor = before.HasValue ? $"beforeMessageId={before.Value}" : "beforeMessageId=null(最新)";
+        return Cap($"群聊历史消息（共 {total} 条，本页 {messages.Count} 条，{anchor}，lastMessageId={lastMessageId}）：\n{body}\n\n[翻页提示] 下次取更早消息请传 beforeMessageId={lastMessageId}");
     }
 
     /// <summary>按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，</summary>

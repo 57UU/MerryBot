@@ -159,7 +159,7 @@ public sealed class MessageToolTests
         public Task<LocalMessageResource?> GetResourceAsync(string localUri, CancellationToken cancellationToken = default)
             => Task.FromResult<LocalMessageResource?>(null);
 
-        public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesAsync(long groupId, int page, int pageSize, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ProcessedMessage>>(Array.Empty<ProcessedMessage>());
 
         public Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default)

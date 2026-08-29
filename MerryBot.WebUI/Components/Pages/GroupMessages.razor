@@ -23,7 +23,8 @@
 								   Key="@(SelectedGroupId > 0 ? SelectedGroupId.ToString() : string.Empty)"
 								   EmptySelectionHint="请从左侧选择一个群聊"
 								   EmptyText="暂无消息"
-								   LoadPageAsync="LoadGroupMessagesPage">
+								   LoadBeforeAsync="LoadGroupMessagesBefore"
+								   AnchorSelector="GetGroupMessageAnchor">
 				<HeaderContent>
 					@if (SelectedGroupId > 0)
 					{
@@ -115,8 +116,10 @@
 		return Task.CompletedTask;
 	}
 
-	private Task<List<GroupMessage>> LoadGroupMessagesPage(int page, int pageSize)
-		=> HistoryRecorder.GetMessagesByGroupIdAsync(SelectedGroupId, page, pageSize);
+	private Task<List<GroupMessage>> LoadGroupMessagesBefore(long? beforeMessageId, int pageSize)
+		=> HistoryRecorder.GetMessagesByGroupIdBeforeAsync(SelectedGroupId, beforeMessageId, pageSize);
+
+	private static long GetGroupMessageAnchor(GroupMessage message) => message.MessageId;
 
 	private async Task OpenForwardModal(string forwardId)
 	{

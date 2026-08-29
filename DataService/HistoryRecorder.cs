@@ -313,6 +313,7 @@ public class HistoryRecorder : IDisposable
             .ToListAsync();
     }
 
+    [Obsolete("Skip 分页深度变慢，请改用 GetMessagesByGroupIdBeforeAsync 游标分页")]
     public async Task<List<GroupMessage>> GetMessagesByGroupIdAsync(long groupId, int page, int pageSize)
     {
         page = Math.Max(1, page);
@@ -322,6 +323,27 @@ public class HistoryRecorder : IDisposable
             .OrderByDescending(x => x.Time)
             .Skip(skip)
             .Limit(pageSize)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// 游标分页：以 messageId 为锚点向前翻页。
+    /// beforeMessageId == null 时返回最新 limit 条；否则返回同群且 MessageId &lt; anchor 的前一页。
+    /// 按 MessageId 倒序（与 Time 正相关且单调，适合 Skip-free 分页），O(limit)。
+    /// </summary>
+    public async Task<List<GroupMessage>> GetMessagesByGroupIdBeforeAsync(long groupId, long? beforeMessageId, int limit = 50)
+    {
+        limit = Math.Clamp(limit, 1, 200);
+        var query = messagesCollection.Query()
+            .Where(x => x.GroupId == groupId);
+        if (beforeMessageId.HasValue)
+        {
+            var anchor = beforeMessageId.Value;
+            query = query.Where(x => x.MessageId < anchor);
+        }
+        return await query
+            .OrderByDescending(x => x.MessageId)
+            .Limit(limit)
             .ToListAsync();
     }
 

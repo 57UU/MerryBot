@@ -58,11 +58,30 @@ internal sealed class MessageService : IMessageService
         => history.AiMessages.RecordAiMessageAsync(sessionKey, messageType, content,
             usage.promptUsage, usage.completionUsage, usage.cachedUsage);
 
-    /// <summary>分页查询群聊历史消息（按时间倒序，第 1 页为最新；过滤已撤回消息）。</summary>
-    public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesAsync(long groupId, int page, int pageSize, CancellationToken cancellationToken = default)
+    /// <summary>游标分页查询（按 MessageId 倒序）。before==null 取最新；否则取 MessageId &lt; anchor 的更早一页。自动跳过已撤回消息并补齐 pageSize。</summary>
+    public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
     {
-        var stored = await history.GetMessagesByGroupIdAsync(groupId, page, pageSize);
-        return stored.Where(static m => !m.IsDeleted).Select(FromStoredMessage).ToList();
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        var result = new List<ProcessedMessage>(pageSize);
+        var cursor = beforeMessageId;
+        while (result.Count < pageSize)
+        {
+            var need = pageSize - result.Count;
+            var stored = await history.GetMessagesByGroupIdBeforeAsync(groupId, cursor, need);
+            if (stored.Count == 0) break;
+            foreach (var m in stored)
+            {
+                if (!m.IsDeleted)
+                {
+                    result.Add(FromStoredMessage(m));
+                    if (result.Count == pageSize) break;
+                }
+            }
+            cursor = stored[^1].MessageId;
+            if (stored.Count < need) break;
+            // stored 填满 need 但过滤后仍未凑齐，说明有撤回消息占位，需继续取下一段
+        }
+        return result;
     }
 
     /// <summary>群聊历史消息总数（含撤回消息）。</summary>

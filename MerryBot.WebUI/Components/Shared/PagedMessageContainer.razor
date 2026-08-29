@@ -59,9 +59,17 @@
 	[Parameter]
 	public string EmptySelectionHint { get; set; } = "请从左侧选择一个会话";
 
-	/// <summary>分页数据源：(page, pageSize) → 消息列表。</summary>
+	/// <summary>分页数据源：(page, pageSize) → 消息列表。游标模式下可为空。</summary>
 	[Parameter]
-	public Func<int, int, Task<List<TItem>>> LoadPageAsync { get; set; } = null!;
+	public Func<int, int, Task<List<TItem>>>? LoadPageAsync { get; set; }
+
+	/// <summary>游标分页数据源：(beforeAnchor, pageSize) → 更早的消息列表。anchor==null 表示最新页。</summary>
+	[Parameter]
+	public Func<long?, int, Task<List<TItem>>>? LoadBeforeAsync { get; set; }
+
+	/// <summary>从 TItem 提取游标锚点（messageId）。仅游标模式需要。</summary>
+	[Parameter]
+	public Func<TItem, long>? AnchorSelector { get; set; }
 
 	[Parameter]
 	public RenderFragment<IReadOnlyList<TItem>> BodyContent { get; set; } = null!;
@@ -95,6 +103,10 @@
 	private const int PageSize = 50;
 
 	private bool HasMoreMessages { get; set; } = true;
+
+	private long? _oldestAnchor;
+
+	private bool IsCursorMode => LoadBeforeAsync != null && AnchorSelector != null;
 
 	private DotNetObjectReference<PagedMessageContainer<TItem>>? _dotNetRef;
 
@@ -146,6 +158,7 @@
 	{
 		var seq = Interlocked.Increment(ref _loadSeq);
 		CurrentPage = 1;
+		_oldestAnchor = null;
 		HasMoreMessages = true;
 		IsLoadingMessages = true;
 		MessagesLoadError = null;
@@ -153,10 +166,28 @@
 
 		try
 		{
-			var messages = await LoadPageAsync(CurrentPage, PageSize);
+			List<TItem> messages;
+			if (IsCursorMode)
+			{
+				messages = await LoadBeforeAsync!(null, PageSize);
+			}
+			else
+			{
+				if (LoadPageAsync == null) throw new InvalidOperationException("LoadPageAsync 未配置");
+				messages = await LoadPageAsync(CurrentPage, PageSize);
+			}
 			// 过期结果丢弃，防止切换群聊后旧结果覆盖
 			if (seq != Interlocked.Read(ref _loadSeq) || _isDisposed) return;
 			Items = ReverseOrder ? messages.AsEnumerable().Reverse().ToList() : new List<TItem>(messages);
+			if (IsCursorMode && Items.Count > 0)
+			{
+				_oldestAnchor = AnchorSelector!(Items[0]);
+				if (messages.Count < PageSize) HasMoreMessages = false;
+			}
+			else if (IsCursorMode && Items.Count == 0)
+			{
+				HasMoreMessages = false;
+			}
 			_pendingScrollToBottom = true;
 		}
 		catch (Exception ex)
@@ -193,27 +224,60 @@
 			return;
 
 		IsLoadingMore = true;
-		CurrentPage++;
 
 		try
 		{
-			var moreMessages = await LoadPageAsync(CurrentPage, PageSize);
-			if (moreMessages.Any())
+			if (IsCursorMode)
 			{
-				var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
-				Items.AddRange(ReverseOrder ? moreMessages.AsEnumerable().Reverse() : moreMessages);
-				await Task.Delay(50);
-				var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
-				await JSRuntime.InvokeVoidAsync("setScrollTop", ElementId, before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
+				var anchor = _oldestAnchor;
+				// 已到最旧
+				if (anchor == null && Items.Count > 0) { HasMoreMessages = false; return; }
+
+				var moreMessages = await LoadBeforeAsync!(anchor, PageSize);
+				if (moreMessages.Count == 0)
+				{
+					HasMoreMessages = false;
+				}
+				else
+				{
+					var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+					var toInsert = ReverseOrder ? moreMessages.AsEnumerable().Reverse().ToList() : moreMessages;
+					Items.InsertRange(0, toInsert);
+					_oldestAnchor = AnchorSelector!(Items[0]);
+					if (moreMessages.Count < PageSize) HasMoreMessages = false;
+					await InvokeAsync(StateHasChanged);
+					await Task.Delay(50);
+					var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+					await JSRuntime.InvokeVoidAsync("setScrollTop", ElementId, before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
+				}
 			}
 			else
 			{
-				HasMoreMessages = false;
+				CurrentPage++;
+				if (LoadPageAsync == null) throw new InvalidOperationException("LoadPageAsync 未配置");
+				var moreMessages = await LoadPageAsync(CurrentPage, PageSize);
+				if (moreMessages.Any())
+				{
+					var before = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+					var toAppend = ReverseOrder ? moreMessages.AsEnumerable().Reverse().ToList() : moreMessages;
+					// 兼容旧 Skip 分页：仍插到头部，保持“向上翻更早”的语义
+					Items.InsertRange(0, toAppend);
+					await InvokeAsync(StateHasChanged);
+					await Task.Delay(50);
+					var after = await JSRuntime.InvokeAsync<ScrollInfo>("getScrollInfo", ElementId);
+					await JSRuntime.InvokeVoidAsync("setScrollTop", ElementId, before.ScrollTop + after.ScrollHeight - before.ScrollHeight);
+				}
+				else
+				{
+					HasMoreMessages = false;
+				}
 			}
 		}
 		catch (Exception ex)
 		{
 			Logger.LogError(ex, "加载更多消息失败");
+			if (IsCursorMode) { /* 保持 HasMore=true 允许重试 */ }
+			else CurrentPage--;
 		}
 		finally
 		{
