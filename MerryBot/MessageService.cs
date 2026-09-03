@@ -58,7 +58,7 @@ internal sealed class MessageService : IMessageService
         => history.AiMessages.RecordAiMessageAsync(sessionKey, messageType, content,
             usage.promptUsage, usage.completionUsage, usage.cachedUsage);
 
-    /// <summary>游标分页查询（按 MessageId 倒序）。before==null 取最新；否则取 MessageId &lt; anchor 的更早一页。自动跳过已撤回消息并补齐 pageSize。</summary>
+    /// <summary>游标分页查询（按 MessageId 倒序）。before==null 取最新；否则取 MessageId &lt; anchor 的更早一页。已撤回消息保留，由调用方按 IsDeleted 标记展示。</summary>
     public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 50);
@@ -71,19 +71,16 @@ internal sealed class MessageService : IMessageService
             if (stored.Count == 0) break;
             foreach (var m in stored)
             {
-                if (!m.IsDeleted)
-                {
-                    result.Add(FromStoredMessage(m));
-                    if (result.Count == pageSize) break;
-                }
+                result.Add(FromStoredMessage(m));
+                if (result.Count == pageSize) break;
             }
             cursor = stored[^1].MessageId;
             if (stored.Count < need) break;
-            // stored 填满 need 但过滤后仍未凑齐，说明有撤回消息占位，需继续取下一段
         }
         return result;
     }
 
+    /// <summary>游标分页查询（按 ObjectId 倒序）。已撤回消息保留，由调用方按 IsDeleted 标记展示。</summary>
     public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 50);
@@ -96,7 +93,7 @@ internal sealed class MessageService : IMessageService
             if (stored.Count == 0) break;
             foreach (var m in stored)
             {
-                if (!m.IsDeleted) result.Add(FromStoredMessage(m));
+                result.Add(FromStoredMessage(m));
                 if (result.Count == pageSize) break;
             }
             cursorKey = stored[^1].Id.ToString();

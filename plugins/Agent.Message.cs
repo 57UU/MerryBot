@@ -297,14 +297,7 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>与群历史上下文相同的消息渲染格式：[时间] [用户 id(昵称:name)] [key=...]: 内容（key 供 get_message 传入）</summary>
-    private static string FormatMessage(ProcessedMessage m)
-    {
-        var timeStr = m.Time.ToString("yyyy-MM-dd HH:mm");
-        var name = string.IsNullOrEmpty(m.SenderGroupNickname) ? m.SenderNickname : m.SenderGroupNickname;
-        var content = MessageUtils.FormatMessageChain(m.MessageChain);
-        var isRecalled = m.IsDeleted ? "（已撤回）" : "";
-        return $"[{timeStr}]{isRecalled} [用户 {m.SenderId}(昵称:{name})][key={m.Id}]: {content}";
-    }
+    private static string FormatMessage(ProcessedMessage m) => MessageUtils.FormatFullMessage(m, includeKey: true);
     private async Task<string> SendMarkdownMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message))

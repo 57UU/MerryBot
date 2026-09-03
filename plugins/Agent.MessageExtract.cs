@@ -75,9 +75,8 @@ internal static class AgentMessageExtract
             var inner = await BuildMessageWithDepthAsync(
                 referenced.MessageChain, selfId, groupId, remainingDepth - 1, messageService, visitedMessages);
             inner = CapReference(inner);
-            var timeStr = referenced.Time.ToString("yyyy-MM-dd HH:mm");
-            var name = string.IsNullOrEmpty(referenced.SenderGroupNickname) ? referenced.SenderNickname : referenced.SenderGroupNickname;
-            var formatted = $"[{timeStr}] [用户 {referenced.SenderId}(昵称:{name})]: {inner}";
+            var formatted = MessageUtils.FormatFullMessage(
+                referenced with { MessageChain = [TextData.FromText(inner)] }, includeKey: true);
             return $"<reference>{CapReference(formatted)}</reference>";
         }
         finally

@@ -197,6 +197,20 @@ public static class MessageUtils
             MusicData musicData => $"[音乐: {musicData.Title ?? musicData.Id ?? musicData.Url}]",
             _ => message.ToString() ?? string.Empty,
         };
+
+    /// <summary>
+    /// 整消息统一信封：[时间]（已撤回）? [用户 id(昵称)][key=...]?: 内容。
+    /// 消息读取工具与引用展开共用，已撤回消息保留原文并标记，不静默丢弃。
+    /// </summary>
+    internal static string FormatFullMessage(ProcessedMessage message, bool includeKey)
+    {
+        var timeStr = message.Time.ToString("yyyy-MM-dd HH:mm");
+        var name = string.IsNullOrEmpty(message.SenderGroupNickname) ? message.SenderNickname : message.SenderGroupNickname;
+        var content = FormatMessageChain(message.MessageChain);
+        var isRecalled = message.IsDeleted ? "（已撤回）" : "";
+        var key = includeKey ? $"[key={message.Id}]" : "";
+        return $"[{timeStr}]{isRecalled} [用户 {message.SenderId}(昵称:{name})]{key}: {content}";
+    }
 }
 
 

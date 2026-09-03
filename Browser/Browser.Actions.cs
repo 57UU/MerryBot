@@ -92,8 +92,7 @@ public partial class Browser
         await EnsureScriptsLoadedAsync();
         var html = Markdown2Html.MarkdownConverter.ToHtml(md);
         // 一次性替换模板占位符：避免 html 内容里出现 {{fontScale}} 等占位符时被二次替换
-        var styledHtml = Regex.Replace(markdownTemplate, @"\{\{(content|fontScale|mermaidJs|mathJaxJs)\}\}",
-            match => match.Groups[1].Value switch
+        var styledHtml = MyRegex().Replace(markdownTemplate, match => match.Groups[1].Value switch
             {
                 "content" => html,
                 "fontScale" => browserOptions.FontScale.ToString(CultureInfo.InvariantCulture),
@@ -279,4 +278,7 @@ public partial class Browser
             return $"调用失败: {ex.Message}";
         }
     }
+
+    [GeneratedRegex(@"\{\{(content|fontScale|mermaidJs|mathJaxJs)\}\}")]
+    private static partial Regex MyRegex();
 }
