@@ -27,14 +27,19 @@ public class AnthropicBackend : Backend
     private readonly string? _defaultModel;
     private readonly int _defaultMaxTokens;
     private readonly bool _enablePromptCache;
+    private readonly string? _sessionKey;
 
-    public AnthropicBackend(string baseUrl, string apiKey, string? defaultModel = null, int defaultMaxTokens = DefaultMaxTokens, bool enablePromptCache = false)
+    /// <summary>OpenCode 会话亲和 key（非 OpenCode 目标为 null，即不发送）。</summary>
+    internal string? SessionKey => _sessionKey;
+
+    public AnthropicBackend(string baseUrl, string apiKey, string? defaultModel = null, int defaultMaxTokens = DefaultMaxTokens, bool enablePromptCache = false, string? sessionKey = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
         _defaultModel = defaultModel;
         _defaultMaxTokens = defaultMaxTokens > 0 ? defaultMaxTokens : DefaultMaxTokens;
         _enablePromptCache = enablePromptCache;
+        _sessionKey = OpenCodeAffinity.ResolveSessionKey(sessionKey, _baseUrl);
     }
 
     /// <summary>把统一的 ReasoningEffort 档位映射为 Anthropic thinking 预算。</summary>
@@ -75,6 +80,7 @@ public class AnthropicBackend : Backend
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
+            OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
@@ -270,6 +276,7 @@ public class AnthropicBackend : Backend
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/messages");
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
+            OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)

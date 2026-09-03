@@ -38,7 +38,11 @@ public interface ILlmProviderRegistry
 {
     Task<IReadOnlyList<LlmModelDescriptor>> ListModelsAsync(CancellationToken cancellationToken = default);
     Task<LlmModelDescriptor> GetModelAsync(string modelId, CancellationToken cancellationToken = default);
-    Task<ResolvedLlmClient> CreateClientAsync(string? modelId = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// 按模型 Id 解析出可直接使用的客户端。sessionKey 为 OpenCode 会话亲和 key（可选，
+    /// 传入则后端原样使用，未传入则后端实例自动维护一个稳定随机数；非 OpenCode 目标不发送）。
+    /// </summary>
+    Task<ResolvedLlmClient> CreateClientAsync(string? modelId = null, CancellationToken cancellationToken = default, string? sessionKey = null);
 }
 
 /// <summary>

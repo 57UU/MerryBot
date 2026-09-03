@@ -19,7 +19,9 @@ public partial class AgentPlugin : Plugin
         Action<string> sendMessage = (msg) => _ = Channel.SendMessage(sessionKey, msg);
         await persistenceStartTask;
 
-        var resolved = await llmProvider.CreateClientAsync(agentConfig.LlmModel);
+        // 主模型与辅助视觉模型传入同一 sessionId 作 OpenCode 会话亲和 key：
+        // 同一会话的主回合/压缩/视觉请求共享同一 x-opencode-session，后端亲和保持 prompt cache 温热
+        var resolved = await llmProvider.CreateClientAsync(agentConfig.LlmModel, cancellationToken: default, sessionKey: sessionId);
         var skillToolSet = await SkillToolSet.CreateAsync(skillService);
         // 记忆工具集由 memoryService 实例化：内部完成懒创建空 index 记录并注入记忆上下文
         var memoryToolSet = await memoryService.CreateMemoryToolSetAsync(sessionId);
@@ -35,7 +37,7 @@ public partial class AgentPlugin : Plugin
             }
             try
             {
-                visionClients.Add((await llmProvider.CreateClientAsync(modelId)).Client);
+                visionClients.Add((await llmProvider.CreateClientAsync(modelId, cancellationToken: default, sessionKey: sessionId)).Client);
             }
             catch (Exception e)
             {

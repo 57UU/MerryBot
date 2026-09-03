@@ -20,11 +20,13 @@ Directory.CreateDirectory(skillsPath);
 
 var cfg = TuiConfigStore.Load();
 var (activeProvider, activeModel) = cfg.ResolveActive();
-// 直接构造真实后端:运行时切换供应商/模型经 Client.UpdateBackend 生效,无需重建 Client/Agent
+// 直接构造真实后端:运行时切换供应商/模型经 Client.UpdateBackend 生效,无需重建 Client/Agent；
+// TUI 单一会话，亲和 key 固定用 ChatApp.SessionId（未传入时后端自动维护稳定随机数）
 var backend = new ChatCompletionBackend(
     activeProvider?.ApiBase ?? string.Empty,
     activeProvider?.ApiKey ?? string.Empty,
-    activeModel);
+    activeModel,
+    ChatApp.SessionId);
 var llmClient = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
 var history = new PlaceholderContextHistory();
 var catalog = new CatalogService();

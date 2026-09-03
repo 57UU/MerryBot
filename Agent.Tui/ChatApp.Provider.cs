@@ -365,12 +365,13 @@ public sealed partial class ChatApp
         RefreshStatus();
     }
 
-    /// <summary>按供应商配置热替换 Client 的后端（下一次请求生效），保持重试与会话不变。</summary>
+    /// <summary>按供应商配置热替换 Client 的后端（下一次请求生效），保持重试与会话不变；亲和 key 沿用 TUI 单一会话。</summary>
     private void UpdateBackend(ProviderConfig? p, string? modelId)
         => _llmClient.UpdateBackend(new ChatCompletionBackend(
             p?.ApiBase ?? string.Empty,
             p?.ApiKey ?? string.Empty,
-            modelId));
+            modelId,
+            SessionId));
 
     private static int ParseIndex(string numArg)
         => int.TryParse(numArg, out var n) && n >= 1 ? n - 1 : -1;

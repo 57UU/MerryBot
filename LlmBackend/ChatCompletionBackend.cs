@@ -24,12 +24,17 @@ public class ChatCompletionBackend : Backend
     private readonly string _baseUrl;
     private readonly string _apiKey;
     private readonly string? _defaultModel;
+    private readonly string? _sessionKey;
 
-    public ChatCompletionBackend(string baseUrl, string apiKey, string? defaultModel = null)
+    /// <summary>OpenCode 会话亲和 key（非 OpenCode 目标为 null，即不发送）。</summary>
+    internal string? SessionKey => _sessionKey;
+
+    public ChatCompletionBackend(string baseUrl, string apiKey, string? defaultModel = null, string? sessionKey = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
         _defaultModel = defaultModel;
+        _sessionKey = OpenCodeAffinity.ResolveSessionKey(sessionKey, _baseUrl);
     }
 
     public async Task<(GenerateResponse, TokenUsage)> Generate(CancellationToken cancellationToken, IList<Message> messages, string systemPrompt, LlmOptions options)
@@ -51,6 +56,7 @@ public class ChatCompletionBackend : Backend
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
             request.Headers.Authorization = new("Bearer", _apiKey);
+            OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
@@ -118,6 +124,7 @@ public class ChatCompletionBackend : Backend
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
             request.Headers.Authorization = new("Bearer", _apiKey);
+            OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)

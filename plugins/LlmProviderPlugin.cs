@@ -62,7 +62,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
             : ToDescriptor(model);
     }
 
-    public async Task<ResolvedLlmClient> CreateClientAsync(string? modelId = null, CancellationToken cancellationToken = default)
+    public async Task<ResolvedLlmClient> CreateClientAsync(string? modelId = null, CancellationToken cancellationToken = default, string? sessionKey = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         modelId ??= await GetDefaultModelIdAsync(cancellationToken);
@@ -98,9 +98,9 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
         var apiKey = keyProtector.Unprotect(key.ProtectedSecret);
         Backend backend = provider.ApiFormat switch
         {
-            LlmApiFormat.OpenAiChatCompletions => new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
-            LlmApiFormat.OpenAiResponses => new ResponsesBackend(provider.BaseUrl, apiKey, model.RemoteModelId),
-            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens, model.EnablePromptCache),
+            LlmApiFormat.OpenAiChatCompletions => new ChatCompletionBackend(provider.BaseUrl, apiKey, model.RemoteModelId, sessionKey),
+            LlmApiFormat.OpenAiResponses => new ResponsesBackend(provider.BaseUrl, apiKey, model.RemoteModelId, sessionKey),
+            LlmApiFormat.AnthropicMessages => new AnthropicBackend(provider.BaseUrl, apiKey, model.RemoteModelId, model.MaxOutputTokens, model.EnablePromptCache, sessionKey),
             _ => throw new NotSupportedException($"不支持的 API 格式: {provider.ApiFormat}"),
         };
         var client = new Client(backend, new ClientConfig(3, TimeSpan.FromSeconds(1)));
