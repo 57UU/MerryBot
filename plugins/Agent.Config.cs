@@ -51,4 +51,37 @@ public class AgentConfig : IPluginConfig
         get => _maxReferenceDepth;
         set => _maxReferenceDepth = Math.Clamp(value, 0, 10);
     }
+
+    [ConfigDescription("自动水群总开关", "实验性功能：开启后白名单群内的非 @ 消息会被旁观攒批，定时投给 Agent；关闭则保持现有仅 @ 响应行为。")]
+    public bool AutoChatEnable { get; set; } = false;
+
+    [ConfigDescription("自动水群白名单", "启用自动水群的群号列表；为空时不旁观任何群。")]
+    public List<long> AutoChatGroups { get; set; } = [];
+
+    private int _autoChatBatchSize = 10;
+    [ConfigDescription("攒批条数", "旁观消息攒够该条数即触发一次 Agent，范围 2-50。")]
+    public int AutoChatBatchSize
+    {
+        get => _autoChatBatchSize;
+        set => _autoChatBatchSize = Math.Clamp(value, 2, 50);
+    }
+
+    private int _autoChatFlushSeconds = 60;
+    [ConfigDescription("攒批超时", "首条旁观消息到达后经过该秒数即触发一次 Agent（不够条数也触发），范围 10-600 秒。")]
+    public int AutoChatFlushSeconds
+    {
+        get => _autoChatFlushSeconds;
+        set => _autoChatFlushSeconds = Math.Clamp(value, 10, 600);
+    }
+
+    private int _autoChatMaxSendsPerTrigger = 3;
+    [ConfigDescription("单批发送上限", "一次水群触发最多允许调用 send_message 发送的条数，范围 1-5。")]
+    public int AutoChatMaxSendsPerTrigger
+    {
+        get => _autoChatMaxSendsPerTrigger;
+        set => _autoChatMaxSendsPerTrigger = Math.Clamp(value, 1, 5);
+    }
+
+    [ConfigDescription("模拟发送", "开启后 send_message 只记日志不真正发群，用于灰度观察模型想回什么；确认行为符合预期后再关闭。")]
+    public bool AutoChatDryRun { get; set; } = true;
 }

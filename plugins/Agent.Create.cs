@@ -54,10 +54,23 @@ public partial class AgentPlugin : Plugin
                 : $"，辅助视觉模型={string.Join(", ", visionModelIds.Where(id => !string.IsNullOrWhiteSpace(id)))}"));
 
         var dynamicPrompt = $"你当前正在{sessionKey.Platform}平台，类型为{sessionKey.ChannelType}的channel中聊天，你看到的消息格式为 [用户 id(昵称:nickname)] 消息内容";
+        // 自动水群模式判定收敛在 MessageTool 构造参数：启用才传入快照（注册 send_message），
+        // 否则传 null，工具集与原有行为一致；快照在会话创建时确定，开关模式后需 /new 重建会话
+        AutoChatSettings? autoChatSettings = agentConfig.AutoChatEnable
+            ? new AutoChatSettings
+            {
+                DryRun = agentConfig.AutoChatDryRun,
+                Budget = autoChatBudgets.GetOrAdd(sessionId, static _ => new AutoChatSendBudget()),
+            }
+            : null;
+        if (autoChatSettings != null)
+        {
+            dynamicPrompt += "\n自动水群模式已启用：旁观消息没有 @ 你，只有感兴趣、有话想说时才调用 send_message 发送；不感兴趣时直接返回空字符串。在被 @ 的对话轮次中不要调用 send_message（最终回复会自动发送，混用会导致重复发送）。";
+        }
         // bash 工具门禁：AllowShell 默认关闭，未开启时不注册 TerminalToolSet（模型无法执行 shell）
         var tools = new List<ToolSet>
         {
-            new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024, Logger),
+            new MessageTool(Interop.MessageService, Channel, browser, sessionKey, visionRouter, agentConfig.MaxImageSizeMb * 1024 * 1024, Logger, autoChatSettings),
             new TodoListToolSet(),
             new WebTools(browser),
             new PromptToolSet(dynamicPrompt),

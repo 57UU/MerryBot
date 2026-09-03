@@ -31,8 +31,9 @@ public class MessageTool : ToolSet
     private readonly int maxImageBytes;
     private readonly ToolSetBridge bridge;
     private readonly ISimpleLogger _logger;
+    private readonly AutoChatSettings? autoChatSettings;
 
-    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes, ISimpleLogger? logger = null)
+    public MessageTool(IMessageService messageService, MessageChannel channel, Browser browser, SessionKey session, VisionRouter visionRouter, int maxImageBytes, ISimpleLogger? logger = null, AutoChatSettings? autoChat = null)
     {
         this.messageService = messageService;
         this.channel = channel;
@@ -42,6 +43,7 @@ public class MessageTool : ToolSet
         this.visionRouter = visionRouter;
         this.maxImageBytes = maxImageBytes;
         _logger = logger ?? SimpleLog.Default;
+        autoChatSettings = autoChat;
 
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>(
@@ -55,6 +57,11 @@ public class MessageTool : ToolSet
             builder.AddFunction<GetMessageImageArgs>("load_image", "获取对话中的图片并查看。", GetMessageImageAsync);
         }
         builder.AddFunction<MarkdownMessageArgs>("send_markdown", "以MD格式发送文本", args => SendMarkdownMessage(args.markdown));
+        // 自动水群模式才注册 send_message：非 auto 会话保持原有行为（最终回复自动发送），不新增发送口
+        if (autoChat != null)
+        {
+            builder.AddFunction<SendMessageArgs>("send_message", "向当前群发送一条文本消息（自动水群模式下唯一的发送口；不调用则本轮不回复）", SendMessageAsync);
+        }
         bridge = builder.Build();
     }
 
@@ -91,6 +98,12 @@ public class MessageTool : ToolSet
     {
         [Description("markdown内容")]
         public string markdown { get; set; } = string.Empty;
+    }
+
+    private sealed class SendMessageArgs
+    {
+        [Description("要发送到当前群的文本内容")]
+        public string text { get; set; } = string.Empty;
     }
 
     public override IList<ToolDef> Tools() => bridge.Tools();
@@ -312,6 +325,34 @@ public class MessageTool : ToolSet
         var image = await browser.TakeMarkdownScreenshot(message);
         await channel.SendMessage(session, [ImageData.FromBinary(image)]);
         return "Markdown 已渲染为图片并发送到当前群。";
+    }
+
+    /// <summary>
+    /// 自动水群模式的唯一发送口：配额由 AutoChatSendBudget 按轮次控制，超限返回 error 供模型自纠；
+    /// DryRun 开启时只记日志不真正发群。
+    /// </summary>
+    private async Task<string> SendMessageAsync(SendMessageArgs args)
+    {
+        if (autoChatSettings == null)
+        {
+            throw new InvalidOperationException("send_message 仅在自动水群模式下可用。");
+        }
+        if (string.IsNullOrWhiteSpace(args.text))
+        {
+            throw new ArgumentException("发送内容不能为空。", nameof(args));
+        }
+        if (!autoChatSettings.Budget.TryAcquire())
+        {
+            return "{\"error\": \"本轮发送次数已达上限，请停止调用 send_message\"}";
+        }
+        if (autoChatSettings.DryRun)
+        {
+            string preview = args.text.Length > 200 ? args.text[..200] + "…" : args.text;
+            _logger.Info($"[AutoChat] 模拟发送（群 {groupId}）: {preview}");
+            return "已模拟发送（DryRun 开启，未真正发群）。";
+        }
+        await channel.SendMessage(session, [TextData.FromText(args.text)]);
+        return "已发送到当前群。";
     }
 
     private static string Cap(string text) =>
