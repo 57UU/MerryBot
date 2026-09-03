@@ -72,7 +72,7 @@ public partial class AgentPlugin : Plugin
         if (!isMentioned)
         {
             // 非 @ 消息：仅白名单群进入自动水群旁观缓冲，其余保持原有丢弃行为
-            await BufferAutoChatAsync(context, messageChain, command);
+            await BufferAutoChatAsync(context, messageChain);
             return;
         }
 

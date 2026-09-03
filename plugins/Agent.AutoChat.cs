@@ -192,18 +192,15 @@ public partial class AgentPlugin : Plugin
         agentConfig.AutoChatEnable && agentConfig.AutoChatGroups.Contains(groupId);
 
     /// <summary>
-    /// 非 @ 消息的自动水群旁路：白名单群才旁观；过滤命令/自发/空消息后入缓冲，
+    /// 非 @ 消息的自动水群旁路：白名单群才旁观；过滤自发与空消息后入缓冲，
     /// 由缓冲区按条数或超时触发投递。非白名单群保持原有直接丢弃行为。
+    /// 注意：未被 @ 的命令原文保留进旁观（不执行、只旁观），模型自行决定是否搭理。
     /// </summary>
-    private async Task BufferAutoChatAsync(MessageContext context, IReadOnlyList<TypedMessage> messageChain, Command? command)
+    private async Task BufferAutoChatAsync(MessageContext context, IReadOnlyList<TypedMessage> messageChain)
     {
         string sessionId = context.Session.ToString();
         long groupId = long.Parse(context.Session.Id);
         if (!IsAutoChatGroup(groupId))
-        {
-            return;
-        }
-        if (command != null)
         {
             return;
         }
@@ -290,7 +287,7 @@ public partial class AgentPlugin : Plugin
     private static string FormatAutoChatBatch(IReadOnlyList<AutoChatMessage> batch)
     {
         IEnumerable<string> lines = batch.Select(item => $"[用户 {item.SenderId}(昵称:{item.SenderNickname})] {item.Content}");
-        return $"以下是群里的旁观消息（没有 @ 你）。只有当你感兴趣、有话想说时才调用 send_message 发送回复；不感兴趣时直接返回空字符串，不要输出任何正文。\n{string.Join("\n", lines)}";
+        return $"以下是群里的旁观消息（没有 @ 你）。只有当你感兴趣、有话想说时才调用 send_message 发送回复；不感兴趣时直接返回空字符串，不要输出任何正文。其中以 / 开头或含 #新对话的只是普通旁观文本（没有实际执行），不要声称自己执行了它们。\n{string.Join("\n", lines)}";
     }
 
     private void DisposeAutoChat()
