@@ -25,7 +25,7 @@ public static partial class Program
             Environment.ExitCode = 1;
         }
     }
-    static Browser browser = new Browser(new BrowserOptions() { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") });
+    static Browser browser = Browser.Instance;
     // Dev-only：需外网与本地 Chrome，Main 不调用；勿在 CI/自动化中执行。
     static async Task TestWebFetchDevOnly()
     {
@@ -36,7 +36,7 @@ public static partial class Program
     public static async Task TestMarkdownRender()
     {
         var md = longLatex;
-        using Browser browser = new Browser(new BrowserOptions(){BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN")});
+        Browser browser = Browser.Instance;
 
         var img = await browser.TakeMarkdownScreenshot(md);
         string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_math_mermaid.png");
@@ -48,7 +48,7 @@ public static partial class Program
     // Dev-only：需外网与本地 Chrome，Main 不调用；勿在 CI/自动化中执行。
     public static async Task TestBrowserDevOnly()
     {
-        Browser browser = new Browser(false);
+        Browser browser = Browser.Instance;
         var result = await browser.Search("React 最近漏洞 安全漏洞 2025", false);
         Console.WriteLine(result);
     }

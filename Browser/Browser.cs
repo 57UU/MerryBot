@@ -58,6 +58,27 @@ class DriverPack
 /// </summary>
 public partial class Browser : IDisposable
 {
+    private static readonly Lazy<Browser> lazyInstance = new(
+        () => new Browser(new BrowserOptions { BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN") }),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// 进程内唯一的浏览器实例：所有调用方共享，串行复用同一个 driver。
+    /// 生命周期归进程所有，调用方不得 Dispose；进程退出时自动回收。
+    /// </summary>
+    public static Browser Instance => lazyInstance.Value;
+
+    static Browser()
+    {
+        AppDomain.CurrentDomain.ProcessExit += static (_, _) =>
+        {
+            if (lazyInstance.IsValueCreated)
+            {
+                lazyInstance.Value.Dispose();
+            }
+        };
+    }
+
     DriverPack? driverPack;
     ChromiumDriver? driver { get { return driverPack?.driver; } }
     ChromeOptions options = new();

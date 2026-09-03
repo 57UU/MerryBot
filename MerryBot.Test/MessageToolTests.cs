@@ -25,8 +25,7 @@ public sealed class MessageToolTests
             DateTime.UtcNow,
             false);
         StubMessageService messageService = new() { MessageResult = expected };
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, groupId);
+        MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, messageId);
 
         string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
@@ -58,8 +57,7 @@ public sealed class MessageToolTests
         {
             ForwardResult = new ProcessedForwardMessage(reference, groupId, [message], DateTime.UtcNow),
         };
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, groupId);
+        MessageTool tool = CreateTool(messageService, groupId);
 
         string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
 
@@ -72,8 +70,7 @@ public sealed class MessageToolTests
     public async Task GetMessage_NonLocalReference_ThrowsForModelError()
     {
         StubMessageService messageService = new();
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, 123);
+        MessageTool tool = CreateTool(messageService, 123);
 
         ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
             () => InvokeAsync(tool, "get_message", "{\"messageUrl\":\"456\"}"));
@@ -112,8 +109,7 @@ public sealed class MessageToolTests
                 DateTime.UtcNow,
                 false),
         };
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, groupId);
+        MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, 456);
 
         string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
@@ -138,8 +134,7 @@ public sealed class MessageToolTests
             DateTime.UtcNow,
             true);
         StubMessageService messageService = new() { MessageResult = expected };
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, groupId);
+        MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, messageId);
 
         string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
@@ -168,8 +163,7 @@ public sealed class MessageToolTests
             GroupMessages = [recalled],
             GroupCount = 1,
         };
-        using Browser browser = new();
-        MessageTool tool = CreateTool(messageService, browser, groupId);
+        MessageTool tool = CreateTool(messageService, groupId);
 
         string result = await InvokeAsync(tool, "get_group_context", "{\"pageSize\":20}");
 
@@ -229,11 +223,11 @@ public sealed class MessageToolTests
         Assert.Contains(MessageUtils.FormatFullMessage(referenced, includeKey: true), result);
     }
 
-    private static MessageTool CreateTool(StubMessageService messageService, Browser browser, long groupId)
+    private static MessageTool CreateTool(StubMessageService messageService, long groupId)
         => new(
             messageService,
             new NoopMessageChannel(),
-            browser,
+            Browser.Instance,
             new SessionKey("qq", "group", groupId.ToString()),
             new VisionRouter(mainHasVision: false, visionClients: null),
             maxImageBytes: 1024 * 1024);

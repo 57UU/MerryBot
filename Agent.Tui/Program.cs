@@ -31,18 +31,13 @@ var catalog = new CatalogService();
 var chatApp = new ChatApp(cfg, llmClient, history, catalog);
 
 var terminalToolSets = new ConcurrentBag<TerminalToolSet>();
-Browser? browser = null;
+Browser browser = Browser.Instance;
 ClockService? clockService = null;
 AgentSessionManager? sessionManager = null;
 var shutdown = new CancellationTokenSource();
 
 try
 {
-    browser = new Browser(new BrowserOptions
-    {
-        Headless = true,
-        BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
-    });
     sessionManager = new AgentSessionManager(CreateAgentAsync);
     clockService = new ClockService(
         new InMemoryClockStore(),
@@ -82,7 +77,6 @@ finally
     {
         terminalToolSet.Dispose();
     }
-    browser?.Dispose();
     chatApp.Dispose();
     shutdown.Dispose();
 }
@@ -93,7 +87,7 @@ Task<(global::Agent.Agent, Action<string>)> CreateAgentAsync(string sessionId)
 {
     var manager = sessionManager ?? throw new InvalidOperationException("会话管理器尚未初始化。");
     var clock = clockService ?? throw new InvalidOperationException("定时服务尚未初始化。");
-    var webBrowser = browser ?? throw new InvalidOperationException("浏览器尚未初始化。");
+    var webBrowser = browser;
     var terminal = new TerminalToolSet(manager, sessionId, initialWorkingDirectory: originalWorkingDirectory);
     terminalToolSets.Add(terminal);
 

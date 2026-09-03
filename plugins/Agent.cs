@@ -45,10 +45,8 @@ public partial class AgentPlugin : Plugin
         // 依赖注入保证 servicePlugin 先于本插件构造完成
         skillService = servicePlugin.SkillService;
         memoryService = servicePlugin.MemoryService;
-        browser = new Browser(new BrowserOptions
-        {
-            BinaryPath = Environment.GetEnvironmentVariable("CHROME_BIN"),
-        });
+        // 浏览器实例由进程共享（Browser.Instance），生命周期归进程，不随插件释放
+        browser = Browser.Instance;
         // 会话空闲淘汰时长由配置控制（小时，支持小数）；非法配置（非正数）回退默认 12 小时，避免会话被立即淘汰
         var idleSessionTimeout = agentConfig.IdleSessionTimeoutHours > 0
             ? TimeSpan.FromHours(agentConfig.IdleSessionTimeoutHours)
@@ -340,6 +338,6 @@ public partial class AgentPlugin : Plugin
         disposeCts.Cancel();
         disposeCts.Dispose();
         sessionManager.Dispose();
-        browser.Dispose();
+        // browser 为进程共享单例，此处不释放
     }
 }
