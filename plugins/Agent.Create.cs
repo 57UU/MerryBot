@@ -25,6 +25,13 @@ public partial class AgentPlugin : Plugin
         var skillToolSet = await SkillToolSet.CreateAsync(skillService);
         // 记忆工具集由 memoryService 实例化：内部完成懒创建空 index 记录并注入记忆上下文
         var memoryToolSet = await memoryService.CreateMemoryToolSetAsync(sessionId);
+        // 按群提示词 override：命中则完全替换全局 AiPrompt；为空回退全局。
+        // 快照在会话创建时确定，改完需 /new（或重启/空闲重建）才对该群生效
+        string systemPrompt = ResolveSystemPrompt(agentConfig.AiPrompt, await promptOverrideService.GetOverrideAsync(sessionId));
+        if (!string.Equals(systemPrompt, agentConfig.AiPrompt, StringComparison.Ordinal))
+        {
+            Logger.Info($"会话 {sessionId} 命中提示词 override，使用该群专属提示词。");
+        }
 
         // ── 辅助视觉模型：主模型不具备视觉能力时用于看图，支持多个并逐层降级 ────────
         var visionClients = new List<Client>();
@@ -94,7 +101,7 @@ public partial class AgentPlugin : Plugin
 
         var agentOptions = new AgentOptions
         {
-            SystemPrompt = agentConfig.AiPrompt,
+            SystemPrompt = systemPrompt,
             MaxOutputTokens = resolved.Model.MaxOutputTokens,
             MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 150),
             MaxConcurrentToolCalls = Math.Clamp(agentConfig.MaxConcurrentToolCalls, 1, 64),
@@ -136,4 +143,11 @@ public partial class AgentPlugin : Plugin
             tools);
         return (agent, sendMessage);
     }
+
+    /// <summary>
+    /// 提示词回退语义（纯函数）：override 非空则完全替换全局提示词，否则回退全局。
+    /// 抽出以便单测覆盖，不依赖数据库。
+    /// </summary>
+    internal static string ResolveSystemPrompt(string globalPrompt, string? groupOverride) =>
+        string.IsNullOrWhiteSpace(groupOverride) ? globalPrompt : groupOverride;
 }

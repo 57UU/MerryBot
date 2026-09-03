@@ -11,6 +11,13 @@ public sealed record MemorySessionDto(
 public sealed record MemoryIndexUpdateRequest(string SessionKey, string Content);
 public sealed record MemoryEntryUpdateRequest(string SessionKey, string Key, string Content);
 
+public sealed record PromptOverrideSessionDto(
+    string SessionKey,
+    string DisplayName,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record PromptOverrideSaveRequest(string SessionKey, string Content);
+
 public sealed record ContextSessionDto(
     string SessionKey,
     string DisplayName,

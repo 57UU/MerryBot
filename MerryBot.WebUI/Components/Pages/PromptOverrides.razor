@@ -1,0 +1,160 @@
+@page "/promptoverrides"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>提示词 Override</PageTitle>
+
+<div class="container-custom memory-page">
+    <h1>提示词 Override</h1>
+    <p class="text-muted-custom">按群覆盖 Agent 的系统提示词：命中 override 的群完全使用这里的文本，不再使用全局 AiPrompt；删除后回退全局。保存后需该群 <code>/new</code>（或重启）新建会话才生效，已存在的会话不受影响。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Notice))
+    {
+        <div class="message-item-custom mb-3-custom">@Notice</div>
+    }
+
+    <div class="memory-layout">
+        <aside class="message-item-custom memory-sessions">
+            <div class="message-header-custom"><strong>已有 Override</strong></div>
+            @if (Sessions is null)
+            {
+                <div class="message-content-custom">加载中…</div>
+            }
+            else if (Sessions.Count == 0)
+            {
+                <div class="message-content-custom">暂无按群提示词。</div>
+            }
+            else
+            {
+                @foreach (var session in Sessions)
+                {
+                    <button class="memory-session @(SelectedSessionKey == session.SessionKey ? "active" : "")" @onclick="() => SelectSessionAsync(session.SessionKey)">
+                        <span>@session.DisplayName</span>
+                        <small>@session.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
+                    </button>
+                }
+            }
+        </aside>
+
+        <section class="memory-detail">
+            <div class="message-item-custom mb-3-custom">
+                <div class="message-header-custom"><strong>@(SelectedSessionKey is null ? "新增 Override" : "编辑 Override")</strong></div>
+                <div class="message-content-custom memory-new">
+                    <input class="form-control" @bind="GroupIdInput" placeholder="群号，例如：123456" />
+                    <textarea class="form-control" rows="10" @bind="Content" placeholder="该群专属的系统提示词；留空保存则删除（回退全局）"></textarea>
+                    <div class="memory-entry-actions">
+                        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@IsSaving">保存</button>
+                        @if (SelectedSessionKey is not null)
+                        {
+                            <button class="btn btn-secondary" @onclick="NewAsync" disabled="@IsSaving">新建</button>
+                            <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@IsSaving">删除</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<PromptOverrideSessionDto>? Sessions;
+    private string? SelectedSessionKey;
+    private string GroupIdInput = string.Empty;
+    private string Content = string.Empty;
+    private string? Error;
+    private string? Notice;
+    private bool IsSaving;
+
+    protected override Task OnInitializedAsync() => LoadSessionsAsync();
+
+    private async Task LoadSessionsAsync()
+    {
+        try
+        {
+            Error = null;
+            Sessions = await JSRuntime.InvokeAsync<List<PromptOverrideSessionDto>>("configApi.request", "GET", "/api/prompt-overrides/");
+        }
+        catch (Exception exception) { Error = $"无法读取提示词列表: {exception.Message}"; }
+    }
+
+    private async Task SelectSessionAsync(string sessionKey)
+    {
+        try
+        {
+            Error = null;
+            Notice = null;
+            SelectedSessionKey = sessionKey;
+            GroupIdInput = ToGroupId(sessionKey);
+            var encoded = Uri.EscapeDataString(sessionKey);
+            Content = await JSRuntime.InvokeAsync<string>("configApi.request", "GET", $"/api/prompt-overrides/content?sessionKey={encoded}");
+        }
+        catch (Exception exception) { Error = $"无法读取提示词: {exception.Message}"; }
+    }
+
+    private void NewAsync()
+    {
+        SelectedSessionKey = null;
+        GroupIdInput = string.Empty;
+        Content = string.Empty;
+        Error = null;
+        Notice = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!TryBuildSessionKey(out var sessionKey)) return;
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            Notice = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/prompt-overrides/save", new PromptOverrideSaveRequest(sessionKey, Content));
+            SelectedSessionKey = sessionKey;
+            await LoadSessionsAsync();
+            Notice = string.IsNullOrWhiteSpace(Content)
+                ? "已删除，该群回退全局提示词（下次新建会话生效）。"
+                : "已保存，该群下次新建会话（/new 或重启）后生效。";
+        }
+        catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (SelectedSessionKey is null || !await JSRuntime.InvokeAsync<bool>("confirm", "确定删除该群的提示词 override 吗？（将回退全局）")) return;
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            Notice = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/prompt-overrides/delete?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}");
+            NewAsync();
+            await LoadSessionsAsync();
+            Notice = "已删除，该群回退全局提示词（下次新建会话生效）。";
+        }
+        catch (Exception exception) { Error = $"删除失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+
+    private bool TryBuildSessionKey(out string sessionKey)
+    {
+        sessionKey = string.Empty;
+        if (!long.TryParse(GroupIdInput.Trim(), out var groupId) || groupId <= 0)
+        {
+            Error = "群号无效：请输入纯数字群号。";
+            return false;
+        }
+        sessionKey = $"qq/group/{groupId}";
+        return true;
+    }
+
+    private static string ToGroupId(string sessionKey)
+    {
+        var parts = sessionKey.Split('/', StringSplitOptions.None);
+        return parts is ["qq", "group", var id] ? id : sessionKey;
+    }
+}

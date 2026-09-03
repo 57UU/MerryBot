@@ -18,6 +18,7 @@ public partial class AgentPlugin : Plugin
     private readonly Task persistenceStartTask;
     private readonly FileSkillManagementService skillService;
     private readonly MemoryManagementService memoryService;
+    private readonly PromptOverrideService promptOverrideService;
     private readonly ConcurrentDictionary<string, PendingGroupMessages> pendingMessages = new();
     /// <summary>插件生命周期取消源：随 Dispose 取消，贯穿会话调用链（Agent → LLM → 工具）</summary>
     private readonly CancellationTokenSource disposeCts = new();
@@ -45,6 +46,7 @@ public partial class AgentPlugin : Plugin
         // 依赖注入保证 servicePlugin 先于本插件构造完成
         skillService = servicePlugin.SkillService;
         memoryService = servicePlugin.MemoryService;
+        promptOverrideService = servicePlugin.PromptOverrideService;
         // 浏览器实例由进程共享（Browser.Instance），生命周期归进程，不随插件释放
         browser = Browser.Instance;
         // 会话空闲淘汰时长由配置控制（小时，支持小数）；非法配置（非正数）回退默认 12 小时，避免会话被立即淘汰

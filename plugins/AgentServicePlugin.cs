@@ -8,17 +8,19 @@ namespace BotPlugin;
 /// 内部持有具体服务实现并转发调用，同时暴露给 AgentPlugin 复用同一份服务实例。
 /// </summary>
 [PluginTag("agent-service", "Agent服务", "向运行时与 WebUI 提供 Skill 与记忆管理服务")]
-public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemoryManagementService, IContextSnapshotService
+public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemoryManagementService, IContextSnapshotService, IPromptOverrideService
 {
     private readonly FileSkillManagementService skillService;
     private readonly MemoryManagementService memoryService;
     private readonly ContextSnapshotService contextSnapshotService;
+    private readonly PromptOverrideService promptOverrideService;
 
     public AgentServicePlugin(PluginInterop interop) : base(interop)
     {
         skillService = new FileSkillManagementService(Path.Combine(Interop.PathPrefix, "skills"));
         memoryService = new MemoryManagementService(Interop.PluginStorage.PluginDatabaseScope);
         contextSnapshotService = new ContextSnapshotService(Interop.PluginStorage.PluginDatabaseScope);
+        promptOverrideService = new PromptOverrideService(Interop.PluginStorage.PluginDatabaseScope);
     }
 
     /// <summary>供 AgentPlugin 复用：Skill 文件存储服务。</summary>
@@ -26,6 +28,9 @@ public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemor
 
     /// <summary>供 AgentPlugin 复用：数据库记忆服务（含 MemoryToolSet 创建）。</summary>
     internal MemoryManagementService MemoryService => memoryService;
+
+    /// <summary>供 AgentPlugin 复用：按群提示词 override 服务。</summary>
+    internal PromptOverrideService PromptOverrideService => promptOverrideService;
 
     // ── ISkillManagementService 转发 ─────────────────────────────────────────
 
@@ -83,4 +88,18 @@ public sealed class AgentServicePlugin : Plugin, ISkillManagementService, IMemor
 
     public Task<ContextSnapshotDetail?> GetSnapshotAsync(string sessionKey, CancellationToken cancellationToken = default)
         => contextSnapshotService.GetSnapshotAsync(sessionKey, cancellationToken);
+
+    // ── IPromptOverrideService 转发 ───────────────────────────────────────────
+
+    public Task<IReadOnlyList<ManagedPromptOverride>> ListOverridesAsync(CancellationToken cancellationToken = default)
+        => promptOverrideService.ListOverridesAsync(cancellationToken);
+
+    public Task<string> GetOverrideAsync(string sessionKey, CancellationToken cancellationToken = default)
+        => promptOverrideService.GetOverrideAsync(sessionKey, cancellationToken);
+
+    public Task SaveOverrideAsync(string sessionKey, string content, CancellationToken cancellationToken = default)
+        => promptOverrideService.SaveOverrideAsync(sessionKey, content, cancellationToken);
+
+    public Task<bool> DeleteOverrideAsync(string sessionKey, CancellationToken cancellationToken = default)
+        => promptOverrideService.DeleteOverrideAsync(sessionKey, cancellationToken);
 }
