@@ -1,5 +1,6 @@
 using BotPlugin;
 using Microsoft.Extensions.Time.Testing;
+using NapcatClient.MessageType;
 
 namespace MerryBot.Test;
 
@@ -66,7 +67,7 @@ public sealed class AutoChatTests
         Assert.True(config.AutoChatDryRun);
         Assert.Equal(10, config.AutoChatBatchSize);
         Assert.Equal(60, config.AutoChatFlushSeconds);
-        Assert.Equal(2, config.AutoChatMaxSendsPerTrigger);
+        Assert.Equal(3, config.AutoChatMaxSendsPerTrigger);
     }
 
     // ── 缓冲区触发 ──────────────────────────────────────────────────────────
@@ -153,5 +154,52 @@ public sealed class AutoChatTests
         Task completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.Same(task, completed);
         return await task;
+    }
+
+    // ── @ 解析：仅水群模式把 @ 自己渲染为 @你 ──────────────────────────────
+
+    [Fact]
+    public void Extract_Renders_AtSelf_As_MentionYou_In_AutoChat()
+    {
+        const long selfId = 123456;
+        IReadOnlyList<TypedMessage> chain =
+        [
+            AtData.FromAt("123456"),
+            TextData.FromText("在吗"),
+        ];
+
+        string text = AgentMessageExtract.BuildMessage(chain, selfId, renderSelfMention: true);
+
+        Assert.Equal("@你在吗", text);
+    }
+
+    [Fact]
+    public void Extract_Drops_AtSelf_By_Default()
+    {
+        const long selfId = 123456;
+        IReadOnlyList<TypedMessage> chain =
+        [
+            AtData.FromAt("123456"),
+            TextData.FromText("在吗"),
+        ];
+
+        string text = AgentMessageExtract.BuildMessage(chain, selfId);
+
+        Assert.Equal("在吗", text);
+    }
+
+    [Fact]
+    public void Extract_Drops_AtOthers_Even_In_AutoChat()
+    {
+        const long selfId = 123456;
+        IReadOnlyList<TypedMessage> chain =
+        [
+            AtData.FromAt("999"),
+            TextData.FromText("你好"),
+        ];
+
+        string text = AgentMessageExtract.BuildMessage(chain, selfId, renderSelfMention: true);
+
+        Assert.Equal("你好", text);
     }
 }

@@ -216,12 +216,12 @@ public partial class AgentPlugin : Plugin
         try
         {
             int depth = Math.Clamp(agentConfig.MaxReferenceDepth, 0, 10);
-            text = (await AgentMessageExtract.BuildMessageWithReference(messageChain, context.SelfId, depth, Interop.MessageService, groupId)).Trim();
+            text = (await AgentMessageExtract.BuildMessageWithReference(messageChain, context.SelfId, depth, Interop.MessageService, groupId, renderSelfMention: true)).Trim();
         }
         catch (Exception ex)
         {
             Logger.Warn($"自动水群展开引用消息失败，回退为原文: {ex.Message}");
-            text = AgentMessageExtract.BuildMessage(messageChain, context.SelfId).Trim();
+            text = AgentMessageExtract.BuildMessage(messageChain, context.SelfId, renderSelfMention: true).Trim();
         }
         if (string.IsNullOrWhiteSpace(text))
         {

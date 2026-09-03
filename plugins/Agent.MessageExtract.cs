@@ -7,16 +7,17 @@ internal static class AgentMessageExtract
 {
     private const int MaxReferenceChars = 6000;
 
-    public static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId)
-        => BuildMessageWithReference(messageChain, selfId, maxReferenceDepth: 0, messageService: null).GetAwaiter().GetResult();
+    public static string BuildMessage(IReadOnlyList<TypedMessage> messageChain, long selfId, bool renderSelfMention = false)
+        => BuildMessageWithReference(messageChain, selfId, maxReferenceDepth: 0, messageService: null, renderSelfMention: renderSelfMention).GetAwaiter().GetResult();
 
     public static Task<string> BuildMessageWithReference(
         IReadOnlyList<TypedMessage> messageChain,
         long selfId,
         int maxReferenceDepth,
         IMessageService? messageService,
-        long groupId = 0)
-        => BuildMessageWithDepthAsync(messageChain, selfId, groupId, maxReferenceDepth, messageService, new HashSet<string>());
+        long groupId = 0,
+        bool renderSelfMention = false)
+        => BuildMessageWithDepthAsync(messageChain, selfId, groupId, maxReferenceDepth, messageService, new HashSet<string>(), renderSelfMention);
 
     private static async Task<string> BuildMessageWithDepthAsync(
         IReadOnlyList<TypedMessage> messageChain,
@@ -24,14 +25,18 @@ internal static class AgentMessageExtract
         long groupId,
         int remainingDepth,
         IMessageService? messageService,
-        HashSet<string> visitedMessages)
+        HashSet<string> visitedMessages,
+        bool renderSelfMention)
     {
         StringBuilder sb = new();
         foreach (TypedMessage message in messageChain)
         {
             string text = message switch
             {
-                ReplyData replyData => await ExpandReplyAsync(replyData, selfId, groupId, remainingDepth, messageService, visitedMessages),
+                ReplyData replyData => await ExpandReplyAsync(replyData, selfId, groupId, remainingDepth, messageService, visitedMessages, renderSelfMention),
+                // 自动水群模式下把 @ 自己显式保留为 @你，让模型知道这句话在点它；
+                // @ 他人/@全体沿用原有丢弃行为，避免改动 @ 主链路与历史工具的文本口径
+                AtData atData => renderSelfMention && atData.Qq == selfId.ToString() ? "@你" : string.Empty,
                 _ => MessageUtils.FormatMessagePart(message),
             };
             sb.Append(text);
@@ -45,7 +50,8 @@ internal static class AgentMessageExtract
         long groupId,
         int remainingDepth,
         IMessageService? messageService,
-        HashSet<string> visitedMessages)
+        HashSet<string> visitedMessages,
+        bool renderSelfMention)
     {
         var placeholder = MessageUtils.FormatMessagePart(replyData);
         if (remainingDepth <= 0 || messageService == null || groupId == 0)
@@ -73,7 +79,7 @@ internal static class AgentMessageExtract
                 return $"<reference>{placeholder}</reference>";
             }
             var inner = await BuildMessageWithDepthAsync(
-                referenced.MessageChain, selfId, groupId, remainingDepth - 1, messageService, visitedMessages);
+                referenced.MessageChain, selfId, groupId, remainingDepth - 1, messageService, visitedMessages, renderSelfMention);
             inner = CapReference(inner);
             var formatted = MessageUtils.FormatFullMessage(
                 referenced with { MessageChain = [TextData.FromText(inner)] }, includeKey: true);
