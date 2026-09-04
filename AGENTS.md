@@ -62,7 +62,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 
 ### 测试项目
 
-- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）、`TerminalBackgroundTimeoutTests`（shell 前台超时转后台）、`PromptOverrideServiceTests`（提示词复写存储与回退语义）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
+- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）、`TerminalBackgroundTimeoutTests`（shell 前台超时转后台）、`PromptOverrideServiceTests`（提示词复写存储与回退语义）、`LlmUserAgentTests`（LLM 请求 UA 标识头）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
 - **`ModelsDev.Sdk.Test/`** — xunit 测试（SDK 序列化/查询）
 - **`Browser.Test/`** — 浏览器手工测试台（Exe，非自动化测试）
 - **`Test/`** — 手工测试台（Exe，非自动化测试，通常不需要维护）

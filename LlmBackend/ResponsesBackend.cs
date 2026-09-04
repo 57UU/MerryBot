@@ -60,6 +60,7 @@ public class ResponsesBackend : Backend
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
             request.Headers.Authorization = new("Bearer", _apiKey);
             OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
+            LlmUserAgent.ApplyUserAgent(request);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
@@ -195,6 +196,7 @@ public class ResponsesBackend : Backend
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses");
             request.Headers.Authorization = new("Bearer", _apiKey);
             OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
+            LlmUserAgent.ApplyUserAgent(request);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)

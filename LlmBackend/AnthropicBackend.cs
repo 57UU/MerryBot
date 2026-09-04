@@ -81,6 +81,7 @@ public class AnthropicBackend : Backend
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
             OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
+            LlmUserAgent.ApplyUserAgent(request);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, totalCts.Token);
             responseBody = await response.Content.ReadAsStringAsync(totalCts.Token);
@@ -277,6 +278,7 @@ public class AnthropicBackend : Backend
             request.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
             request.Headers.TryAddWithoutValidation("anthropic-version", ApiVersion);
             OpenCodeAffinity.ApplySessionHeader(request, _sessionKey);
+            LlmUserAgent.ApplyUserAgent(request);
             request.Content = new StringContent(jsonData, Encoding.UTF8, "application/json");
             using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ttfbCts.Token);
             if (response.StatusCode != HttpStatusCode.OK)

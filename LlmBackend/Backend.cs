@@ -28,6 +28,12 @@ public static class LlmDefaults
     public static readonly TimeSpan TotalGeneration = TimeSpan.FromMinutes(5);
     /// <summary>流式生成的默认总超时：长输出常见，比一次性生成的默认值放宽</summary>
     public static readonly TimeSpan StreamingTotalGeneration = TimeSpan.FromMinutes(30);
+    /// <summary>
+    /// 所有 LLM 请求统一发送的客户端标识（User-Agent 头值）。
+    /// 仿 GPTBot/ClaudeBot 惯例直接表明机器人身份，便于 Provider/中继做客户端统计与排查；
+    /// 库内常量，版本变更时手工 bump（底层库拿不到宿主的 git 版本号）。
+    /// </summary>
+    public const string UserAgent = "MerryBot/1.0";
 }
 
 public interface Backend
