@@ -1,6 +1,6 @@
 using Agent.Session;
 using BotPlugin;
-using CommonLib;
+using MerryBot.Contracts;
 using MerryBot.WebUI.Api;
 using System.Reflection;
 

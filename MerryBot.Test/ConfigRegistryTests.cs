@@ -1,4 +1,5 @@
 using CommonLib;
+using MerryBot.Contracts;
 using MerryBot.WebUI;
 using MerryBot.WebUI.Api;
 using Microsoft.Extensions.Logging.Abstractions;

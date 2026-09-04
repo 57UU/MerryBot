@@ -1,5 +1,5 @@
 using Agent.Tools;
-using CommonLib;
+using MerryBot.Contracts;
 
 namespace BotPlugin;
 

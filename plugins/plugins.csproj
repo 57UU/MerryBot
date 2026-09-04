@@ -24,6 +24,7 @@
     <ProjectReference Include="..\DataProvider\DataProvider.csproj" />
     <ProjectReference Include="..\DataService\DataService.csproj" />
     <ProjectReference Include="..\LlmClient\LlmClient.csproj" />
+    <ProjectReference Include="..\MerryBot.Contracts\MerryBot.Contracts.csproj" />
     <ProjectReference Include="..\NapcatClient\NapcatClient.csproj" />
   </ItemGroup>
 

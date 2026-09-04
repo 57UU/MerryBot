@@ -1,4 +1,4 @@
-using CommonLib;
+using MerryBot.Contracts;
 using DataProvider;
 
 namespace MerryBot;

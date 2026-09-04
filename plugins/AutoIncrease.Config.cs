@@ -1,6 +1,4 @@
-
-
-using CommonLib;
+using MerryBot.Contracts;
 
 namespace BotPlugin;
 

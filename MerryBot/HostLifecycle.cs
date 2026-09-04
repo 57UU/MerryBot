@@ -1,4 +1,4 @@
-using CommonLib;
+using MerryBot.Contracts;
 using DataProvider;
 using System.Diagnostics;
 using System.Text;
@@ -162,7 +162,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
             {
                 await SetNotifyFlagAsync(updateSession: notifySession);
             }
-            shutdown(CommonLib.ExitCode.PREBUILT);
+            shutdown(ExitCode.PREBUILT);
         }
         catch (Exception ex)
         {
@@ -177,7 +177,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
 
     public Task RequestRestartAsync()
     {
-        shutdown(CommonLib.ExitCode.RESTART);
+        shutdown(ExitCode.RESTART);
         return Task.CompletedTask;
     }
 
@@ -187,7 +187,7 @@ internal sealed partial class HostLifecycle : IHostLifecycle
         {
             await SetNotifyFlagAsync(reloadSession: notifySession);
         }
-        shutdown(CommonLib.ExitCode.RELOAD);
+        shutdown(ExitCode.RELOAD);
     }
 
     public Task RequestExitAsync()

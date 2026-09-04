@@ -1,4 +1,4 @@
-using CommonLib;
+using MerryBot.Contracts;
 using DataProvider;
 using LiteDB;
 using LiteDB.Async;

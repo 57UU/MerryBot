@@ -11,6 +11,7 @@
     <PackageReference Include="Tomlyn.Signed" Version="2.10.1" />
     <ProjectReference Include="..\CommonLib\CommonLib.csproj" />
     <ProjectReference Include="..\DataService\DataService.csproj" />
+    <ProjectReference Include="..\MerryBot.Contracts\MerryBot.Contracts.csproj" />
     <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
     <ProjectReference Include="..\plugins\plugins.csproj" />
     <None Update="wwwroot\**">

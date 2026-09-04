@@ -1,5 +1,5 @@
 using BotPlugin;
-using CommonLib;
+using MerryBot.Contracts;
 using DataProvider;
 
 namespace MerryBot.Test;

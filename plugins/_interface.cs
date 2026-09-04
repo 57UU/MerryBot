@@ -1,5 +1,6 @@
 using Agent.Session;
 using CommonLib;
+using MerryBot.Contracts;
 using DataProvider;
 using NapcatClient;
 using NapcatClient.Action;

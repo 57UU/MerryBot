@@ -1,4 +1,4 @@
-namespace CommonLib;
+namespace MerryBot.Contracts;
 
 /// <summary>更新检测结果：当前版本信息 + 是否存在可用更新及新提交列表。</summary>
 public sealed record UpdateCheckResult(

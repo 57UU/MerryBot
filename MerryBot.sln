@@ -56,6 +56,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Tui", "MerryBot.Tu
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Test", "Test", "{54856472-3EF4-4340-BB68-3C58C2E455E0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Contracts", "MerryBot.Contracts\MerryBot.Contracts.csproj", "{49EC6267-3398-4B46-9ABE-B2C01057CBD4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -318,6 +320,18 @@ Global
 		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x64.Build.0 = Release|Any CPU
 		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x86.ActiveCfg = Release|Any CPU
 		{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}.Release|x86.Build.0 = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|x64.Build.0 = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Debug|x86.Build.0 = Debug|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|x64.ActiveCfg = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|x64.Build.0 = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|x86.ActiveCfg = Release|Any CPU
+		{49EC6267-3398-4B46-9ABE-B2C01057CBD4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

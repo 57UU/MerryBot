@@ -57,11 +57,12 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - **`LlmClient/`** — LLM 客户端：`Client`（重试：限速避让/指数退避；流式基于 reset 语义——任何可重试失败含中途断流，预算内回调 `IResettableStreamSink.OnReset` 后重建流，消费者丢弃该段增量；正文检出工具调用标记走同一 reset 重试；后端可运行时替换 `UpdateBackend`）、`ClientConfig`、`IResettableStreamSink`/`StreamResetReason`、`StrayToolCallDetector`（正文开头/结尾窗口的结构化检测：DSML 特殊 token / XML 工具标签 / JSON 工具调用结构，仅携带工具的请求启用）
 - **`LlmBackend/`** — LLM 后端抽象：`Backend` 接口（流式为推送式 `IStreamSink` 回调：OnTextDelta/OnReasoningDelta/OnCompleted，中途异常归一化为 LlmException）、`ChatCompletionBackend`（OpenAI 兼容 `/chat/completions`）、`AnthropicBackend`、`ResponsesBackend`（三者构造器均有可选 `sessionKey`：OpenCode 会话亲和头 `x-opencode-session`，仅 baseUrl 落在 opencode.ai 时发送；传入则原样使用，未传则实例级稳定随机数；`OpenCodeAffinity` 集中决议/加头）、`LlmOptions`（含 `WithoutTools()`）、`Message`/`ToolCall`/`TokenUsage`（归一化约定：所有后端 `promptUsage` = 含缓存命中的完整输入，`cachedUsage ⊆ promptUsage`；Anthropic 的 cache_read/cache_creation 在构造时并入 prompt）、`Tools.cs`（`ToolDef`/`FunctionDef`）、`MimeTypes`、`LlmDefaults`（超时默认值）、`Errors`/`BackendErrors`
 - **`ModelsDev.Sdk/`** — 独立的 models.dev 模型目录 SDK（`net8.0`），含 `ModelsDevClient`、`ModelQueryBuilder` 与模型/Provider 元数据类型
-- **`CommonLib/`** — 公共契约库：`ISimpleLogger`/`ConsoleLogger`/`LogLevel`、`ExitCode`（101/102/103）、`HostLifecycleContracts`（`IHostLifecycle`/`UpdateCheckResult`）、`ContextSnapshotContracts`/`MemoryManagementContracts`/`SkillManagementContracts`、`ConfigDescriptionAttribute`、`RequestCaching`、`Format`
+- **`CommonLib/`** — 公共基础库：日志（`ISimpleLogger`/`ConsoleLogger`/`LogLevel`/`SimpleLog`）、`RequestCaching`、`Format`
+- **`MerryBot.Contracts/`** — 跨层契约库（命名空间 `MerryBot.Contracts`，零第三方依赖）：`ExitCode`（101/102/103）、`HostLifecycleContracts`（`IHostLifecycle`/`UpdateCheckResult`）、`ContextSnapshotContracts`/`MemoryManagementContracts`/`SkillManagementContracts`/`PromptOverrideContracts`、`ConfigDescriptionAttribute`
 
 ### 测试项目
 
-- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）、`TerminalBackgroundTimeoutTests`（shell 前台超时转后台）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
+- **`MerryBot.Test/`** — xunit 单元测试：`ClockServiceTests`（调度器，用 `FakeTimeProvider`）、`ClockServiceStoreIntegrationTests`、`CoreClockStoreTests`、`AgentCompactionTests`、`AgentConcurrencyLimitTests`（并发工具调用/子任务/后台任务上限）、`ConfigRegistryTests`、`TokenUsageAggregatorTests`（token 用量分桶/会话聚合）、`LlmBackendStreamTests`（流式块解析，`InternalsVisibleTo` 访问 internal 成员）、`StrayToolCallRetryTests`（流式 reset 重试与正文工具调用标记检测）、`RequestCachingTests`、`VisionRouterTests`、`ChromeDetectionTests`（浏览器可用性探测）、`ToolSetFailureTests`（工具失败语义）、`TerminalBackgroundTimeoutTests`（shell 前台超时转后台）、`PromptOverrideServiceTests`（提示词复写存储与回退语义）；辅助类 `FakeClockStore`/`RecordingExecutor`/`TestClock`
 - **`ModelsDev.Sdk.Test/`** — xunit 测试（SDK 序列化/查询）
 - **`Browser.Test/`** — 浏览器手工测试台（Exe，非自动化测试）
 - **`Test/`** — 手工测试台（Exe，非自动化测试，通常不需要维护）
@@ -119,7 +120,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 
 ### 进程生命周期与更新（`IHostLifecycle` / `launch.sh`）
 
-- 退出码契约（`CommonLib/ExitCode.cs`）：`101` RESTART（重新编译当前槽并重启）、`102` RELOAD（不编译直接重启）、`103` PREBUILT（已切槽，直接换槽重启）
+- 退出码契约（`MerryBot.Contracts/ExitCode.cs`）：`101` RESTART（重新编译当前槽并重启）、`102` RELOAD（不编译直接重启）、`103` PREBUILT（已切槽，直接换槽重启）
 - `launch.sh`：双槽蓝绿部署循环。`build/active_slot` 记录当前槽（A/B），`build.sh <target_dir>` 将程序发布到槽目录；按退出码决定重建/重载/切槽
 - `build.sh`：服务器发布脚本。先 `dotnet build-server shutdown`（避免 Roslyn 文件锁），按架构选择 `linux-x64`/`linux-arm64`，先发布 `MerryBot.WebUI` 拷贝 `wwwroot`，再发布 `MerryBot`
 - `HostLifecycle`：`/update` 流程 = `git fetch + merge` → 编译备用槽 → 更新 `active_slot` → 以 `103` 退出；重启后 `ViewVersion` 插件在 `OnLoaded` 消费 core 写入的待通知目标并补发结果到群

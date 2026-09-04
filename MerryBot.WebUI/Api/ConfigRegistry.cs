@@ -1,4 +1,4 @@
-using CommonLib;
+using MerryBot.Contracts;
 using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Globalization;

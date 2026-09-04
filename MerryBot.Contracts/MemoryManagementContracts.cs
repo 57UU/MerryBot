@@ -1,4 +1,4 @@
-namespace CommonLib;
+namespace MerryBot.Contracts;
 
 /// <summary>供运行时工具和 WebUI 共用的、按 SessionKey 隔离的记忆管理能力。</summary>
 public interface IMemoryManagementService

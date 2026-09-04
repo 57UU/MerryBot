@@ -1,4 +1,4 @@
-using CommonLib;
+using MerryBot.Contracts;
 using DataService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;

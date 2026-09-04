@@ -1,4 +1,4 @@
-namespace CommonLib;
+namespace MerryBot.Contracts;
 
 /// <summary>
 /// 提供 WebUI 配置面板所需的显示名称与说明。

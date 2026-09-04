@@ -1,4 +1,4 @@
-namespace CommonLib;
+namespace MerryBot.Contracts;
 
 /// <summary>
 /// 供 WebUI 读取 Agent 当前内存上下文快照。与 ai_messages 审计日志不同，

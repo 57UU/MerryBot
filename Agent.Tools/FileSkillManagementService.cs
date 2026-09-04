@@ -1,4 +1,5 @@
 using CommonLib;
+using MerryBot.Contracts;
 using System.Diagnostics;
 using System.IO.Compression;
 

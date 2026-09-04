@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Text;
-using CommonLib;
+using MerryBot.Contracts;
 using LlmBackend;
 
 namespace Agent.Tools;

@@ -1,4 +1,4 @@
-namespace CommonLib;
+namespace MerryBot.Contracts;
 
 /// <summary>供运行时 Agent 与 WebUI 共用的、按 SessionKey 隔离的系统提示词复写能力。
 /// 未复写的会话回退全局 <c>AgentConfig.AiPrompt</c>。</summary>
