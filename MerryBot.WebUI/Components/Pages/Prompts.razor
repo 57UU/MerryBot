@@ -1,0 +1,297 @@
+@page "/prompts"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+
+<PageTitle>提示词管理</PageTitle>
+
+<div class="container-custom prompt-page">
+    <h1>提示词管理</h1>
+    <p class="text-muted-custom">按群复写 Agent 的系统提示词。未复写的群跟随配置中心 <code>plugin:agent / AiPrompt</code>（全局默认）。修改保存后，对该群<strong>下次 <code>/new</code>（或会话空闲淘汰、重启）后生效</strong>，不会中断正在生成的回复。</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="message-item-custom mb-3-custom">@Error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Notice))
+    {
+        <div class="message-item-custom mb-3-custom">@Notice</div>
+    }
+
+    <div class="prompt-layout">
+        <aside class="message-item-custom prompt-sessions">
+            <div class="message-header-custom"><strong>群聊</strong></div>
+            @if (Groups is null)
+            {
+                <div class="message-content-custom">加载中…</div>
+            }
+            else if (Groups.Count == 0)
+            {
+                <div class="message-content-custom">还没有任何群聊记录。</div>
+            }
+            else
+            {
+                @foreach (var group in Groups)
+                {
+                    <button class="prompt-session @(SelectedSessionKey == group.SessionKey ? "active" : "")" @onclick="() => SelectSessionAsync(group.SessionKey)">
+                        <span>@group.DisplayName</span>
+                        <span>
+                            @if (group.HasOverride)
+                            {
+                                <span class="badge badge-success">已复写</span>
+                            }
+                            else
+                            {
+                                <span class="badge">跟随全局</span>
+                            }
+                        </span>
+                    </button>
+                }
+            }
+        </aside>
+
+        <section class="prompt-detail">
+            @if (SelectedSessionKey is null)
+            {
+                <div class="message-item-custom">从左侧选择一个群以管理其提示词复写。</div>
+            }
+            else
+            {
+                <div class="message-item-custom mb-3-custom">
+                    <div class="message-header-custom">
+                        <strong>群提示词复写</strong>
+                        @if (HasOverride)
+                        {
+                            <span class="badge badge-success">已复写</span>
+                        }
+                        else
+                        {
+                            <span class="badge">跟随全局</span>
+                        }
+                    </div>
+                    <div class="message-content-custom prompt-new">
+                        <textarea class="form-control" rows="10" @bind="EditText" placeholder="输入该群专用的系统提示词，留空保存则回退全局"></textarea>
+                        <div class="prompt-meta">
+                            <small>@(EditText.Length) / @IPromptOverrideService.MaxPromptLength 字符</small>
+                        </div>
+                        <div class="prompt-entry-actions">
+                            <button class="btn btn-primary btn-sm" @onclick="SaveAsync" disabled="@IsSaving">保存复写</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="CopyFromGlobal" disabled="@IsSaving">从全局复制</button>
+                            @if (HasOverride)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="DeleteAsync" disabled="@IsSaving">回退全局</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="message-item-custom">
+                    <div class="message-header-custom"><strong>全局默认（配置中心 plugin:agent / AiPrompt）</strong></div>
+                    <div class="message-content-custom">
+                        @if (GlobalPrompt is null)
+                        {
+                            <span>无法读取全局提示词：@(GlobalPromptError ?? "未知错误")</span>
+                        }
+                        else
+                        {
+                            <pre class="prompt-global">@GlobalPrompt</pre>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private sealed class GroupItem
+    {
+        public required string SessionKey { get; init; }
+        public required string DisplayName { get; init; }
+        public bool HasOverride { get; set; }
+    }
+
+    private sealed class GroupListPayload
+    {
+        public List<GroupEntryPayload> Groups { get; set; } = new();
+    }
+
+    private sealed class GroupEntryPayload
+    {
+        public long GroupId { get; set; }
+        public string? Name { get; set; }
+    }
+
+    private sealed class OverrideSessionPayload
+    {
+        public string SessionKey { get; set; } = string.Empty;
+    }
+
+    private sealed class OverrideDetailPayload
+    {
+        public string SessionKey { get; set; } = string.Empty;
+        public bool HasOverride { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+    }
+
+    private sealed class ConfigPanelPayload
+    {
+        public List<ConfigSectionPayload> Sections { get; set; } = new();
+    }
+
+    private sealed class ConfigSectionPayload
+    {
+        public string Id { get; set; } = string.Empty;
+        public List<ConfigFieldPayload> Fields { get; set; } = new();
+    }
+
+    private sealed class ConfigFieldPayload
+    {
+        public string Key { get; set; } = string.Empty;
+        public System.Text.Json.JsonElement Value { get; set; }
+    }
+
+    private List<GroupItem>? Groups;
+    private string? SelectedSessionKey;
+    private bool HasOverride;
+    private string EditText = string.Empty;
+    private string? GlobalPrompt;
+    private string? GlobalPromptError;
+    private string? Error;
+    private string? Notice;
+    private bool IsSaving;
+    private bool _initialized;
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private static string ToSessionKey(long groupId) => $"qq/group/{groupId}";
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            Error = null;
+            var groupsTask = JSRuntime.InvokeAsync<GroupListPayload>("configApi.request", "GET", "/api/groups/").AsTask();
+            var overridesTask = JSRuntime.InvokeAsync<List<OverrideSessionPayload>>("configApi.request", "GET", "/api/prompts/overrides").AsTask();
+            var configTask = JSRuntime.InvokeAsync<ConfigPanelPayload>("configApi.request", "GET", "/api/config").AsTask();
+            await Task.WhenAll(groupsTask, overridesTask, configTask);
+
+            var overrideKeys = overridesTask.Result.Select(item => item.SessionKey).ToHashSet(StringComparer.Ordinal);
+            var items = groupsTask.Result.Groups
+                .OrderBy(group => group.GroupId)
+                .Select(group => new GroupItem
+                {
+                    SessionKey = ToSessionKey(group.GroupId),
+                    DisplayName = string.IsNullOrWhiteSpace(group.Name)
+                        ? $"群 {group.GroupId}"
+                        : $"{group.Name} ({group.GroupId})",
+                    HasOverride = overrideKeys.Contains(ToSessionKey(group.GroupId)),
+                })
+                .ToList();
+            // 已复写但不在群列表中的会话（如已禁用历史群）追加展示，避免复写“消失”
+            foreach (var key in overrideKeys)
+            {
+                if (items.All(item => item.SessionKey != key))
+                {
+                    items.Add(new GroupItem { SessionKey = key, DisplayName = key, HasOverride = true });
+                }
+            }
+            Groups = items;
+
+            var agentSection = configTask.Result.Sections.FirstOrDefault(section => section.Id == "plugin:agent");
+            var promptField = agentSection?.Fields.FirstOrDefault(field => field.Key == "AiPrompt");
+            if (promptField is null || promptField.Value.ValueKind != System.Text.Json.JsonValueKind.String)
+            {
+                GlobalPrompt = null;
+                GlobalPromptError = "配置中心缺少 plugin:agent / AiPrompt。";
+            }
+            else
+            {
+                GlobalPrompt = promptField.Value.GetString();
+                GlobalPromptError = null;
+            }
+
+            // 刷新左侧徽标；若正选中某群，同步其复写状态
+            if (SelectedSessionKey is not null)
+            {
+                HasOverride = overrideKeys.Contains(SelectedSessionKey);
+            }
+        }
+        catch (Exception exception) { Error = $"无法读取提示词配置: {exception.Message}"; }
+    }
+
+    private async Task SelectSessionAsync(string sessionKey)
+    {
+        try
+        {
+            Error = null;
+            Notice = null;
+            SelectedSessionKey = sessionKey;
+            var encoded = Uri.EscapeDataString(sessionKey);
+            var detail = await JSRuntime.InvokeAsync<OverrideDetailPayload>("configApi.request", "GET", $"/api/prompts/override?sessionKey={encoded}");
+            HasOverride = detail.HasOverride;
+            // 未复写时以全局值预填编辑框，方便微调后直接保存
+            EditText = detail.HasOverride ? detail.Prompt : (GlobalPrompt ?? string.Empty);
+        }
+        catch (Exception exception) { Error = $"无法读取提示词复写: {exception.Message}"; }
+    }
+
+    private void CopyFromGlobal()
+    {
+        if (GlobalPrompt is null)
+        {
+            Error = "无法读取全局提示词，复制失败。";
+            return;
+        }
+        EditText = GlobalPrompt;
+        Notice = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (SelectedSessionKey is null) return;
+        if (EditText.Length > IPromptOverrideService.MaxPromptLength)
+        {
+            Error = $"提示词过长（最多 {IPromptOverrideService.MaxPromptLength} 字符）。";
+            return;
+        }
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/prompts/override",
+                new PromptOverrideSaveRequest(SelectedSessionKey, EditText));
+            var isDelete = string.IsNullOrWhiteSpace(EditText);
+            Notice = isDelete ? "已回退全局。" : "已保存复写，对该群下次 /new 后生效。";
+            if (isDelete) EditText = GlobalPrompt ?? string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (SelectedSessionKey is null) return;
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "确定回退为全局提示词吗？该群的复写将被删除。")) return;
+        IsSaving = true;
+        try
+        {
+            Error = null;
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/prompts/override/delete?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}");
+            Notice = "已回退全局。";
+            EditText = GlobalPrompt ?? string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception exception) { Error = $"回退失败: {exception.Message}"; }
+        finally { IsSaving = false; }
+    }
+}

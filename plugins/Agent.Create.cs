@@ -81,7 +81,7 @@ public partial class AgentPlugin : Plugin
 
         var agentOptions = new AgentOptions
         {
-            SystemPrompt = agentConfig.AiPrompt,
+            SystemPrompt = ResolveSystemPrompt(await GetPromptOverrideAsync(sessionId), agentConfig.AiPrompt),
             MaxOutputTokens = resolved.Model.MaxOutputTokens,
             MaxIterations = Math.Clamp(agentConfig.MaxIterations, 1, 150),
             MaxConcurrentToolCalls = Math.Clamp(agentConfig.MaxConcurrentToolCalls, 1, 64),
@@ -122,5 +122,26 @@ public partial class AgentPlugin : Plugin
             agentOptions,
             tools);
         return (agent, sendMessage);
+    }
+
+    /// <summary>
+    /// 解析会话实际使用的系统提示词：有群复写用复写，否则回退全局配置。
+    /// 复写仅在会话新建时读取（CreateAgent），已有会话需 /new、空闲淘汰或重启后生效。
+    /// </summary>
+    internal static string ResolveSystemPrompt(string? overridePrompt, string globalPrompt)
+        => string.IsNullOrWhiteSpace(overridePrompt) ? globalPrompt : overridePrompt.Trim();
+
+    /// <summary>读取群提示词复写：失败时回退全局（仅记日志，不阻断会话创建）。</summary>
+    private async Task<string?> GetPromptOverrideAsync(string sessionId)
+    {
+        try
+        {
+            return (await promptOverrideService.GetOverrideAsync(sessionId))?.Prompt;
+        }
+        catch (Exception exception)
+        {
+            Logger.Warn($"读取提示词复写失败，回退全局提示词: {exception.Message}");
+            return null;
+        }
     }
 }

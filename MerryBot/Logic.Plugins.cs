@@ -173,6 +173,19 @@ internal partial class Logic
         {
             ContextSnapshotApiMapper.Map(webUiApplication, contextSnapshotManager, historyRecorder);
         }
+
+        var promptOverrideManager = plugins
+            .Select(static plugin => plugin.Instance)
+            .OfType<IPromptOverrideService>()
+            .SingleOrDefault();
+        if (promptOverrideManager == null)
+        {
+            logger.Warn("Agent 提示词复写服务未加载，未注册提示词复写 Web API。");
+        }
+        else
+        {
+            PromptOverrideApiMapper.Map(webUiApplication, promptOverrideManager, historyRecorder);
+        }
     }
 
     private static int _shutdownTriggered;

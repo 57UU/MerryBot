@@ -36,6 +36,7 @@
     <ProjectReference Include="..\LlmClient\LlmClient.csproj" />
     <ProjectReference Include="..\MerryBot\MerryBot.csproj" />
     <ProjectReference Include="..\MerryBot.WebUI\MerryBot.WebUI.csproj" />
+    <ProjectReference Include="..\plugins\plugins.csproj" />
   </ItemGroup>
 
 </Project>
