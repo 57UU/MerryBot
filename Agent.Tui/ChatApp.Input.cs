@@ -1,4 +1,4 @@
-using Agent.Tui.Core;
+using Agent.Tui.Lib;
 
 namespace Agent.Tui;
 

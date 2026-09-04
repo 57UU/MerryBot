@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 单行输入框（借鉴 pi 的 Input 组件，裁剪为 C# 版）：

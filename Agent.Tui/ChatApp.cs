@@ -3,7 +3,7 @@ using System.Text;
 using System.Threading.Channels;
 using Agent.Session;
 using Agent.Tools;
-using Agent.Tui.Core;
+using Agent.Tui.Lib;
 using BrowserService;
 using LlmBackend;
 using LlmClient;

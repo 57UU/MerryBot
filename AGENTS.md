@@ -23,7 +23,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 | Markdown | Markdig 1.3.2（`Markdown2Html` 项目） |
 | 定时任务 | Cronos 0.13.0（Linux 五字段 cron，含 `@daily` 等别名） |
 | LLM | 自研抽象 `LlmBackend`/`LlmClient`，支持 OpenAI Chat Completions / Responses / Anthropic Messages 三种格式 |
-| 其他 | IdGen 3.0.7（雪花 ID）、Microsoft.AspNetCore.DataProtection（API Key 加密）、YamlDotNet（Agent.Tui 配置）、ConsoleTables；终端 UI 使用自研框架 `MerryBot.Tui`（原 Terminal.Gui 已移除） |
+| 其他 | IdGen 3.0.7（雪花 ID）、Microsoft.AspNetCore.DataProtection（API Key 加密）、YamlDotNet（Agent.Tui 配置）、ConsoleTables；终端 UI 使用自研框架 `Agent.Tui.Lib`（原 Terminal.Gui 已移除） |
 | 测试 | xunit.v3 4.0.0（`xunit.v3` 包，禁用 MTP、走 VSTest 适配器）+ Microsoft.NET.Test.Sdk + coverlet + Microsoft.Extensions.TimeProvider.Testing（`FakeTimeProvider`） |
 
 ## 项目结构（解决方案 `MerryBot.sln`）
@@ -50,8 +50,8 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - **`Agent/`** — 通用 LLM Agent 核心（不依赖 NapCat/QQ）：`Agent.cs`（对话循环、上下文压缩）、`Agent.RunIteration.cs`（单轮迭代与工具执行）、`Agent.Options.cs`、`Agent.ToolSet.cs`、`Context.cs`/`ContextManager.cs`/`ContextHistory.cs`、`VisionRouter.cs`（主模型无视觉能力时用辅助模型描述图片）、`AgentLogEvent.cs`
 - **`Agent.Session/`** — 会话层：`AgentSession`（串行消息队列）、`AgentSessionManager`（空闲淘汰）、`AgentSessionClockExecutor`（把定时任务投给会话）、`ClockService`（core 拥有的 cron 调度器，持久化、misfire 跳过、超时、按 `(pluginId, sessionId)` 双重隔离共享给所有插件）、`ClockScope`（绑定插件 Id 的门面，供 `PluginInterop.Clock` 注入）、`ClockModels`/`ClockAbstractions`（`DelegatingClockExecutor` 按 pluginId 注册/路由）/`InMemoryClockStore`、`Cron.cs`（定时任务 LLM 工具集）、`Terminal.cs`（常驻 bash 进程封装）/`TerminalToolSet.cs`（shell 工具）
 - **`Agent.Tools/`** — LLM 工具集：`WebTools`（web_search/web_fetch，Bing）、`SkillToolSet`/`FileSkillManagementService`、`SubAgentToolSet`、`TimeToolSet`、`TodoListToolSet`
-- **`Agent.Tui/`** — 独立的终端聊天客户端，复用 Agent/Agent.Session/Agent.Tools，直接连 OpenAI 兼容 API；终端 UI 基于自研 `MerryBot.Tui/` 框架
-- **`MerryBot.Tui/`** — 自研终端 UI 框架（`Ansi`/`Component`/`TerminalDriver`/`RawMode`/`KeyParser`/`SelectList`/`TextWidth`/`TuiApp`/`TuiScreen`/`ConsoleUtf8` 等），替代原 Terminal.Gui，被 `Agent.Tui` 引用。`ConsoleUtf8` 在 `TuiApp.Run` 启动时显式把 Windows 控制台代码页切到 65001(UTF-8) 并对 stdout 启用 VT 处理（退出恢复），解决传统 conhost（GBK 代码页）下中文/ANSI 乱码
+- **`Agent.Tui/`** — 独立的终端聊天客户端，复用 Agent/Agent.Session/Agent.Tools，直接连 OpenAI 兼容 API；终端 UI 基于自研 `Agent.Tui.Lib/` 框架
+- **`Agent.Tui.Lib/`** — 自研终端 UI 框架（`Ansi`/`Component`/`TerminalDriver`/`RawMode`/`KeyParser`/`SelectList`/`TextWidth`/`TuiApp`/`TuiScreen`/`ConsoleUtf8` 等），替代原 Terminal.Gui，被 `Agent.Tui` 引用。`ConsoleUtf8` 在 `TuiApp.Run` 启动时显式把 Windows 控制台代码页切到 65001(UTF-8) 并对 stdout 启用 VT 处理（退出恢复），解决传统 conhost（GBK 代码页）下中文/ANSI 乱码
 - **`Browser/`** — Selenium 无头浏览器封装（`BrowserService` 命名空间）：Chrome/Edge 自动探测与反检测（`StealthService`）、`Browser.Actions.cs`/`Browser.Helpers.cs`/`BrowserUtility.cs`；供 `MessageTool`/`WebTools` 做网页搜索/抓取与 Markdown 渲染
 - **`Markdown2Html/`** — Markdig 封装的 `MarkdownConverter`（Markdown → HTML）
 - **`LlmClient/`** — LLM 客户端：`Client`（重试：限速避让/指数退避；流式基于 reset 语义——任何可重试失败含中途断流，预算内回调 `IResettableStreamSink.OnReset` 后重建流，消费者丢弃该段增量；正文检出工具调用标记走同一 reset 重试；后端可运行时替换 `UpdateBackend`）、`ClientConfig`、`IResettableStreamSink`/`StreamResetReason`、`StrayToolCallDetector`（正文开头/结尾窗口的结构化检测：DSML 特殊 token / XML 工具标签 / JSON 工具调用结构，仅携带工具的请求启用）

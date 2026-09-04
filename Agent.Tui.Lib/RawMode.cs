@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 终端原始模式控制。目标：关闭行缓冲/回显/信号键，让程序逐键读取输入；

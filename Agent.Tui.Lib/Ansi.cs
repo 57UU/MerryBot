@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// ANSI 转义序列常量与样式包装。最小集合：SGR 颜色 / 差分渲染用的定位与清屏。

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 聊天区滚动容器：

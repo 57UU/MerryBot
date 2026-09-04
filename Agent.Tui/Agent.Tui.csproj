@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agent.Session\Agent.Session.csproj" />
-    <ProjectReference Include="..\MerryBot.Tui\MerryBot.Tui.csproj" />
+    <ProjectReference Include="..\Agent.Tui.Lib\Agent.Tui.Lib.csproj" />
     <ProjectReference Include="..\ModelsDev.Sdk\ModelsDev.Sdk.csproj" />
   </ItemGroup>
 

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 差分渲染引擎（借鉴 pi：每帧渲染组件树 → 逐行比较 → 只重绘变化的行）。

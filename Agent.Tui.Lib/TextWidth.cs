@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 终端宽度计算与按列切片。核心规则：

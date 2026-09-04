@@ -1,5 +1,5 @@
 using System.Text;
-using Agent.Tui.Core;
+using Agent.Tui.Lib;
 using LlmBackend;
 
 namespace Agent.Tui;

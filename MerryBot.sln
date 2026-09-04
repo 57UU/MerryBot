@@ -52,7 +52,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Test", "MerryBot.T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Browser.Test", "Browser.Test\Browser.Test.csproj", "{A1DAC979-04A5-4281-9B86-7EC2247D35F2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerryBot.Tui", "MerryBot.Tui\MerryBot.Tui.csproj", "{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agent.Tui.Lib", "Agent.Tui.Lib\Agent.Tui.Lib.csproj", "{C4BA0B03-10F4-4744-9A18-C0B29C80D82F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Test", "Test", "{54856472-3EF4-4340-BB68-3C58C2E455E0}"
 EndProject

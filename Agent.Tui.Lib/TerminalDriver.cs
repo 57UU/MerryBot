@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 终端驱动：raw mode 下的键盘读取、尺寸、光标可见性与输出。

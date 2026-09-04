@@ -1,7 +1,7 @@
 using System.Text;
 using System.Threading.Channels;
 
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// TUI 应用主循环（借鉴 pi 的 TUI 类）：

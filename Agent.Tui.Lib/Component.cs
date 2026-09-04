@@ -1,4 +1,4 @@
-namespace Agent.Tui.Core;
+namespace Agent.Tui.Lib;
 
 /// <summary>
 /// 组件契约（借鉴 pi 的 Component 接口，裁剪为 C# 版）。
