@@ -56,7 +56,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     public async Task<LlmModelDescriptor> GetModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var model = await models.FindByIdAsync(RequireId(modelId, nameof(modelId)));
+        var model = await FindModelAsync(RequireId(modelId, nameof(modelId)));
         return model == null
             ? throw new KeyNotFoundException($"未找到模型: {modelId}")
             : ToDescriptor(model);
@@ -71,7 +71,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
             throw new PluginNotUsableException("尚未配置默认 LLM 模型，请在 LLM Provider 页面导入模型。");
         }
 
-        var model = await models.FindByIdAsync(modelId)
+        var model = await FindModelAsync(modelId)
             ?? throw new KeyNotFoundException($"未找到模型: {modelId}");
         if (!model.Enabled)
         {
@@ -228,7 +228,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     public async Task SaveModelAsync(string id, LlmModelSaveCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var modelId = RequireId(id, nameof(id));
+        var modelId = NormalizeModelId(id, nameof(id));
         var providerId = RequireId(command.ProviderId, nameof(command.ProviderId));
         if (await providers.FindByIdAsync(providerId) == null)
         {
@@ -310,7 +310,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     public async Task DeleteModelAsync(string id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var modelId = RequireId(id, nameof(id));
+        var modelId = NormalizeModelId(id, nameof(id));
         await models.DeleteAsync(modelId);
         await ClearDefaultModelIfAsync(modelId);
     }
@@ -324,7 +324,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     public async Task SetDefaultModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var model = await models.FindByIdAsync(RequireId(modelId, nameof(modelId)))
+        var model = await FindModelAsync(RequireId(modelId, nameof(modelId)))
             ?? throw new KeyNotFoundException($"未找到模型: {modelId}");
         await meta.UpsertAsync(new MetaRecord { Id = DefaultModelMetaId, Value = model.Id });
     }
@@ -388,10 +388,51 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
         return result;
     }
 
+    /// <summary>模型 ID 归一化：历史上目录导入曾把 %2F 字面落库，导致与解码后的引用对不上。
+    /// 入库与迁移统一先解码一次，保证两边一致；解码失败或结果非法时回退原文。</summary>
+    private static string NormalizeModelId(string value, string parameterName)
+    {
+        var id = RequireId(value, parameterName);
+        if (!id.Contains('%')) return id;
+        string decoded;
+        try
+        {
+            decoded = Uri.UnescapeDataString(id).Trim();
+        }
+        catch
+        {
+            return id;
+        }
+        return decoded.Length == 0 || decoded.Length > 200 || decoded.Any(char.IsControl) ? id : decoded;
+    }
+
+    /// <summary>按多种形态查找模型：精确 → 解码形（兼容 %2F 字面落库）→ 编码形（兼容旧引用）。</summary>
+    private async Task<ModelRecord?> FindModelAsync(string modelId)
+    {
+        var exact = await models.FindByIdAsync(modelId);
+        if (exact != null) return exact;
+        var decoded = NormalizeModelId(modelId, nameof(modelId));
+        if (!string.Equals(decoded, modelId, StringComparison.Ordinal))
+        {
+            var byDecoded = await models.FindByIdAsync(decoded);
+            if (byDecoded != null) return byDecoded;
+        }
+        var encoded = modelId.Replace("/", "%2F", StringComparison.Ordinal);
+        if (!string.Equals(encoded, modelId, StringComparison.Ordinal))
+        {
+            return await models.FindByIdAsync(encoded);
+        }
+        return null;
+    }
+
     private static string MakeLocalModelId(string providerId, string modelId)
-        => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
+    {
+        providerId = RequireId(providerId, nameof(providerId));
+        modelId = NormalizeModelId(modelId, nameof(modelId));
+        return modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
             ? modelId
             : $"{providerId}/{modelId}";
+    }
 
     private static LlmApiFormat ParseApiFormat(string? value)
     {

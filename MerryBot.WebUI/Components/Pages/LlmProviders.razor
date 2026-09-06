@@ -320,7 +320,27 @@
     private string KeyName { get; set; } = "API Key";
     private string KeySecret { get; set; } = string.Empty;
     private int KeyPriority { get; set; }
-    private string? Error { get; set; }
+    private string? error;
+
+    /// <summary>页面级错误文案：服务端 500 会把整页 HTML 吐进异常消息，入库前先压成一句话，避免白墙。</summary>
+    private string? Error
+    {
+        get => error;
+        set => error = ShortenError(value);
+    }
+
+    private static string? ShortenError(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return message;
+        var text = message.Trim();
+        if (text.StartsWith("<!", StringComparison.OrdinalIgnoreCase)
+            || text.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+        {
+            return "服务器内部错误（返回了 HTML 错误页），请查看服务端日志。";
+        }
+        const int maxLength = 300;
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
     private bool IsLoadingCatalog { get; set; }
     private bool HasSearchedProviders { get; set; }
     private bool HasSearchedModels { get; set; }

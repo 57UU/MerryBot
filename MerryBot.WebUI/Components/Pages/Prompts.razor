@@ -19,8 +19,9 @@
         <FluentMessageBar Intent="MessageIntent.Success">@Notice</FluentMessageBar>
     }
 
-    <FluentGrid Style="width:100%;">
-        <FluentGridItem xs="12" md="4" Style="align-self:start;">
+    @* 左右分栏：左列按内容自适应（最长行决定宽度），右列占满剩余；窄屏自动换行堆叠 *@
+    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="width:100%;align-items:flex-start;">
+        <div style="flex:0 1 auto;min-width:min(100%,280px);">
             <SelectableList TItem="GroupItem"
                             Title="群聊"
                             Items="Groups"
@@ -44,9 +45,9 @@
                     </span>
                 </RowContent>
             </SelectableList>
-        </FluentGridItem>
+        </div>
 
-        <FluentGridItem xs="12" md="8">
+        <div style="flex:1 1 400px;min-width:0;">
             @if (SelectedSessionKey is null)
             {
                 <FluentMessageBar Intent="MessageIntent.Info">从左侧选择一个群以管理其提示词复写。</FluentMessageBar>
@@ -95,8 +96,8 @@
                     </FluentCard>
                 </FluentStack>
             }
-        </FluentGridItem>
-    </FluentGrid>
+        </div>
+    </FluentStack>
 </FluentStack>
 
 @code {

@@ -43,7 +43,7 @@
                     @foreach (var section in Snapshot.Sections)
                     {
                         <section id="@SectionElementId(section.Id)" @key="section.Id">
-                            <FluentCard>
+                            <FluentCard Style="width:100%;">
                                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                                     <strong>@(section.Name)</strong>
                                     @if (!string.IsNullOrWhiteSpace(section.Description))

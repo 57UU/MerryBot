@@ -13,8 +13,9 @@
 <p>历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
 
 <h2>消息统计</h2>
-<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
-    <FluentCard Style="min-width: 180px;">
+<FluentGrid Spacing="3" Style="margin-bottom:12px;width:100%;">
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.People())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -22,8 +23,10 @@
                 <span>活跃群聊</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Chat())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -31,8 +34,10 @@
                 <span>群聊消息数</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Bot())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -40,8 +45,10 @@
                 <span>AI 消息数</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Image())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -49,8 +56,10 @@
                 <span>图片数量</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Box())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -58,12 +67,14 @@
                 <span>文件/视频/语音</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-</FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+</FluentGrid>
 
 <h2>存储占用</h2>
-<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
-    <FluentCard Style="min-width: 180px;">
+<FluentGrid Spacing="3" Style="margin-bottom:12px;width:100%;">
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Database())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -71,8 +82,10 @@
                 <span>群聊历史库</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Database())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -80,8 +93,10 @@
                 <span>插件数据库</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Image())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -89,8 +104,10 @@
                 <span>图片存储</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-    <FluentCard Style="min-width: 180px;">
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+        <FluentCard Style="height:100%;">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Size20.Box())" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -98,8 +115,9 @@
                 <span>文件存储</span>
             </FluentStack>
         </FluentStack>
-    </FluentCard>
-</FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+</FluentGrid>
 
 <h2>数据库维护</h2>
 <FluentCard>

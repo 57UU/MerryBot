@@ -116,7 +116,10 @@ body {
 }
 .select-row.selected {
     background: rgba(127, 127, 127, 0.22);
+    /* 主题 accent 浅底（不支持 color-mix 的旧浏览器回退上一行灰底） */
+    background: color-mix(in srgb, var(--accent-fill-rest) 16%, transparent);
     border-left-color: var(--accent-fill-rest);
+    font-weight: 600;
 }
 .select-row:focus-visible {
     outline: 2px solid var(--accent-fill-rest);
