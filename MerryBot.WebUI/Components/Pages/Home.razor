@@ -4,93 +4,155 @@
 
 <PageTitle>概览</PageTitle>
 
-<div class="page-header">
-    <div>
+<FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
         <h1>概览</h1>
-        <p class="page-header-sub">MerryBot 运行状态、系统信息与资源一览。</p>
-    </div>
-    <div class="page-header-actions">
-        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
-            @(IsLoading ? "刷新中…" : "刷新")
-        </button>
-    </div>
-</div>
+        <p>MerryBot 运行状态、系统信息与资源一览。</p>
+    </FluentStack>
+    <FluentSpacer />
+    <FluentButton Appearance="Appearance.Neutral" Loading="@IsLoading" OnClick="LoadAsync">
+        @(IsLoading ? "刷新中…" : "刷新")
+    </FluentButton>
+</FluentStack>
 
 @if (Error != null)
 {
-    <div class="message-item-custom mb-3-custom">加载失败：@Error</div>
+    <FluentMessageBar Intent="MessageIntent.Error">加载失败：@Error</FluentMessageBar>
 }
 
-<div class="stat-row">
-    <StatCard Title="连接状态" Value="@ConnStatusText" IconName="radio"
-              Tone="@(Connected == null ? "gray" : (Connected == true ? "green" : "red"))" />
-    <StatCard Title="Skill 数量" Value="@(SkillCount.HasValue ? SkillCount.Value.ToString() : "—")" IconName="puzzle" Tone="indigo" />
-    <StatCard Title="群聊数量" Value="@(Status == null ? "—" : Status.GroupCount.ToString())" IconName="users" Tone="cyan" />
-    <StatCard Title="运行时长" Value="@(Status == null ? "—" : FormatUptime(Status.UptimeSeconds))" IconName="clock" Tone="amber" />
-</div>
+<FluentGrid Spacing="3" Style="margin-bottom:12px;">
+    <FluentGridItem xs="12" sm="6" md="3">
+        <FluentCard Style="height:100%;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Size20.Wifi1())" Color="Color.Accent" />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                    @if (Connected == true)
+                    {
+                        <FluentBadge Appearance="Appearance.Accent">已连接</FluentBadge>
+                    }
+                    else
+                    {
+                        <FluentBadge Appearance="Appearance.Neutral">@(Status == null ? "—" : "未连接")</FluentBadge>
+                    }
+                    <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">连接状态</span>
+                </FluentStack>
+            </FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="3">
+        <FluentCard Style="height:100%;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Size20.PuzzleCube())" Color="Color.Accent" />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                    <strong style="font-size:1.35rem;line-height:1.2;">@(SkillCount.HasValue ? SkillCount.Value.ToString() : "—")</strong>
+                    <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">Skill 数量</span>
+                </FluentStack>
+            </FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="3">
+        <FluentCard Style="height:100%;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Size20.People())" Color="Color.Accent" />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                    <strong style="font-size:1.35rem;line-height:1.2;">@(Status == null ? "—" : Status.GroupCount.ToString())</strong>
+                    <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">群聊数量</span>
+                </FluentStack>
+            </FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="3">
+        <FluentCard Style="height:100%;">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Size20.Clock())" Color="Color.Accent" />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                    <strong style="font-size:1.35rem;line-height:1.2;">@(Status == null ? "—" : FormatUptime(Status.UptimeSeconds))</strong>
+                    <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">运行时长</span>
+                </FluentStack>
+            </FluentStack>
+        </FluentCard>
+    </FluentGridItem>
+</FluentGrid>
 
-<div class="row-layout">
-    <div class="col-half">
-        <div class="card-full-height">
-            <div class="card-header-custom">Bot 信息</div>
-            <div class="card-body-custom">
-                @if (Status == null)
-                {
-                    <span class="text-muted-custom">加载中…</span>
-                }
-                else
-                {
-                    <dl class="kv-list">
-                        <div class="kv-item"><dt>QQ 号</dt><dd>@Status.Bot.SelfId</dd></div>
-                        <div class="kv-item"><dt>昵称</dt><dd>@Status.Bot.Nickname</dd></div>
-                        <div class="kv-item"><dt>Napcat 地址</dt><dd><code>@Status.Bot.NapcatAddress</code></dd></div>
-                    </dl>
-                }
-            </div>
-        </div>
-    </div>
-    <div class="col-half">
-        <div class="card-full-height">
-            <div class="card-header-custom">系统信息</div>
-            <div class="card-body-custom">
-                @if (Status == null)
-                {
-                    <span class="text-muted-custom">加载中…</span>
-                }
-                else
-                {
-                    <dl class="kv-list">
-                        <div class="kv-item"><dt>操作系统</dt><dd>@Status.OsVersion</dd></div>
-                        <div class="kv-item"><dt>运行时</dt><dd>@Status.Framework</dd></div>
-                        <div class="kv-item"><dt>机器名</dt><dd>@Status.MachineName</dd></div>
-                        <div class="kv-item"><dt>进程 ID</dt><dd>@Status.ProcessId</dd></div>
-                        <div class="kv-item"><dt>内存占用</dt><dd>@FormatBytes(Status.WorkingSetBytes)（托管 @FormatBytes(Status.GcMemoryBytes)）</dd></div>
-                        <div class="kv-item"><dt>WebUI 版本</dt><dd>@Status.Version</dd></div>
-                    </dl>
-                }
-            </div>
-        </div>
-    </div>
-</div>
+<FluentGrid Spacing="3" Style="margin-bottom:12px;">
+    <FluentGridItem xs="12" lg="6">
+        <FluentCard Style="height:100%;">
+            <h3>Bot 信息</h3>
+            @if (Status == null)
+            {
+                <FluentProgressRing />
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">QQ 号</span>
+                        <span>@Status.Bot.SelfId</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">昵称</span>
+                        <span>@Status.Bot.Nickname</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">Napcat 地址</span>
+                        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@Status.Bot.NapcatAddress"><code>@Status.Bot.NapcatAddress</code></span>
+                    </FluentStack>
+                </FluentStack>
+            }
+        </FluentCard>
+    </FluentGridItem>
+    <FluentGridItem xs="12" lg="6">
+        <FluentCard Style="height:100%;">
+            <h3>系统信息</h3>
+            @if (Status == null)
+            {
+                <FluentProgressRing />
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">操作系统</span>
+                        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@Status.OsVersion">@Status.OsVersion</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">运行时</span>
+                        <span>@Status.Framework</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">机器名</span>
+                        <span>@Status.MachineName</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">进程 ID</span>
+                        <span>@Status.ProcessId</span>
+                    </FluentStack>
+                    <FluentStack Orientation="Orientation.Horizontal">
+                        <span style="width:5.5rem;flex-shrink:0;color:var(--neutral-foreground-hint);">内存占用</span>
+                        <span>@FormatBytes(Status.WorkingSetBytes)（托管 @FormatBytes(Status.GcMemoryBytes)）</span>
+                    </FluentStack>
+                </FluentStack>
+            }
+        </FluentCard>
+    </FluentGridItem>
+</FluentGrid>
 
 @if (Status != null && !string.IsNullOrWhiteSpace(Status.GitInfo))
 {
-    <div class="message-item-custom mb-3-custom">
-        <div class="message-header-custom"><strong>Git 版本信息</strong></div>
-        <div class="message-content-custom">
-            <pre style="margin:0; white-space: pre-wrap; font-family: inherit; font-size: 0.9em;">@Status.GitInfo</pre>
-        </div>
-    </div>
+    <FluentCard>
+        <strong>Git 版本信息</strong>
+        <pre style="margin:0; white-space: pre-wrap; font-family: inherit; font-size: 0.9em;">@Status.GitInfo</pre>
+    </FluentCard>
 }
 
-<h2 class="page-title">快捷入口</h2>
-<div class="quick-links">
-    <a class="quick-link" href="statistics"><Icon Name="bar-chart" /><span>数据统计</span></a>
-    <a class="quick-link" href="groups"><Icon Name="users" /><span>群组管理</span></a>
-    <a class="quick-link" href="groupmessages"><Icon Name="message-square" /><span>群聊记录</span></a>
-    <a class="quick-link" href="aimessages"><Icon Name="bot" /><span>AI 记录</span></a>
-    <a class="quick-link" href="skills"><Icon Name="puzzle" /><span>技能管理</span></a>
-</div>
+<h2>快捷入口</h2>
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+    <FluentAnchor Appearance="Appearance.Lightweight" Href="statistics" IconStart="@(new Size20.DataBarVertical())">数据统计</FluentAnchor>
+    <FluentAnchor Appearance="Appearance.Lightweight" Href="groups" IconStart="@(new Size20.People())">群组管理</FluentAnchor>
+    <FluentAnchor Appearance="Appearance.Lightweight" Href="groupmessages" IconStart="@(new Size20.Chat())">群聊记录</FluentAnchor>
+    <FluentAnchor Appearance="Appearance.Lightweight" Href="aimessages" IconStart="@(new Size20.Bot())">AI 记录</FluentAnchor>
+    <FluentAnchor Appearance="Appearance.Lightweight" Href="skills" IconStart="@(new Size20.PuzzleCube())">技能管理</FluentAnchor>
+</FluentStack>
 
 @code {
     private StatusPayload? Status;
@@ -99,7 +161,6 @@
     private bool IsLoading;
 
     private bool? Connected => Status?.Bot.Connected;
-    private string ConnStatusText => Status == null ? "—" : (Status.Bot.Connected ? "已连接" : "未连接");
 
     private bool _initialized;
 
@@ -170,7 +231,6 @@
         public double UptimeSeconds { get; set; }
         public long WorkingSetBytes { get; set; }
         public long GcMemoryBytes { get; set; }
-        public string Version { get; set; } = "";
         public string GitInfo { get; set; } = "";
     }
 

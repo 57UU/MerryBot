@@ -1,6 +1,7 @@
 @using NapcatClient.MessageType
 @inject IJSRuntime JSRuntime
 
+@* 单条消息段渲染：参数与公开 API 不变，只改内部展示 *@
 @try
 {
 	@if (Msg is TextData textData)
@@ -9,48 +10,47 @@
 	}
 	else if (Msg is AtData atData)
 	{
-		<span class="text-primary-custom">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</span>
+		<FluentBadge Appearance="Appearance.Accent">@(atData.Qq == "all" ? "@全体成员" : $"@{atData.Qq}")</FluentBadge>
 	}
 	else if (Msg is FaceData faceData)
 	{
-		<span class="text-muted-custom">[表情: @faceData.ToChinese()]</span>
+		<span style="color: var(--neutral-foreground-hint);">[表情: @faceData.ToChinese()]</span>
 	}
 	else if (Msg is ImageData imageData)
 	{
-		<div class="mt-1-custom">
-			<div class="text-muted-custom small-custom mb-1-custom">@(imageData.Summary ?? "图片")</div>
-			<img src="@GetImageUrl(imageData.Url)" alt="@(imageData.Summary ?? "图片")" class="img-fluid-custom rounded-custom"
+		<FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 4px;">
+			<span style="font-size: 12px; color: var(--neutral-foreground-hint);">@(imageData.Summary ?? "图片")</span>
+			<img src="@GetImageUrl(imageData.Url)" alt="@(imageData.Summary ?? "图片")"
 				loading="lazy" decoding="async"
-				style="max-height: 300px;" />
-		</div>
+				style="max-height: 300px; max-width: 100%; border-radius: 4px;" />
+		</FluentStack>
 	}
 	else if (Msg is FileData fileData)
 	{
-		<div class="mt-1-custom">
-			<a href="@GetFileUrl(fileData.Url, fileData.File)" download="@fileData.File" class="text-primary-custom"
-				title="点击下载文件">
+		<div style="margin-top: 4px;">
+			<FluentAnchor Href="@GetFileUrl(fileData.Url, fileData.File)" Download="@fileData.File"
+				Appearance="Appearance.Hypertext" title="点击下载文件">
 				[文件] @fileData.File (@CommonLib.Format.FormatFileSize(fileData.FileSize ?? 0))
-			</a>
+			</FluentAnchor>
 		</div>
 	}
 	else if (Msg is RecordData recordData)
 	{
 		@if (Mode == MessageRenderMode.Inline)
 		{
-			<div class="mt-1-custom play-btn-row-custom">
-				<button type="button" class="play-btn-bare"
-					@onclick='() => PlayAmr(GetFileUrl(recordData.Url, recordData.File))' title="点击播放语音" aria-label="播放语音">
-					▶
-				</button>
-				<span class="text-primary-custom">@(recordData.Path ?? "语音消息")</span>
-			</div>
+			<FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Style="margin-top: 4px;">
+				<FluentButton Appearance="Appearance.Lightweight"
+					IconStart="@(new Size20.Play())"
+					@onclick='() => PlayAmr(GetFileUrl(recordData.Url, recordData.File))' title="点击播放语音" aria-label="播放语音" />
+				<span>@(recordData.Path ?? "语音消息")</span>
+			</FluentStack>
 		}
 		else
 		{
-			<div class="mt-1-custom">
-				<a href="@GetFileUrl(recordData.Url, recordData.File)" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放语音">
+			<div style="margin-top: 4px;">
+				<FluentAnchor Href="@GetFileUrl(recordData.Url, recordData.File)" Target="_blank" Appearance="Appearance.Hypertext" title="点击播放语音">
 					[语音] @(recordData.Path ?? "语音消息")
-				</a>
+				</FluentAnchor>
 			</div>
 		}
 	}
@@ -58,17 +58,17 @@
 	{
 		@if (Mode == MessageRenderMode.Inline)
 		{
-			<div class="mt-1-custom">
+			<div style="margin-top: 4px;">
 				<video src="@GetFileUrl(videoData.Url, videoData.File)" controls preload="metadata"
-					class="inline-video"></video>
+					style="max-width: 100%; max-height: 300px;"></video>
 			</div>
 		}
 		else
 		{
-			<div class="mt-1-custom">
-				<a href="@GetFileUrl(videoData.Url, videoData.File)" target="_blank" rel="noopener noreferrer" class="text-primary-custom" title="点击播放视频">
+			<div style="margin-top: 4px;">
+				<FluentAnchor Href="@GetFileUrl(videoData.Url, videoData.File)" Target="_blank" Appearance="Appearance.Hypertext" title="点击播放视频">
 					[视频] @(videoData.File ?? "视频消息")
-				</a>
+				</FluentAnchor>
 			</div>
 		}
 	}
@@ -76,72 +76,72 @@
 	{
 		@if (Mode == MessageRenderMode.Inline)
 		{
-			<div class="mt-1-custom">
-				<a href="javascript:void(0)" class="text-primary-custom"
+			<div style="margin-top: 4px;">
+				<FluentButton Appearance="Appearance.Lightweight"
 					@onclick="() => OnForwardClick.InvokeAsync(forwardData.Id)">
 					[转发消息] 点击查看详情
-				</a>
+				</FluentButton>
 			</div>
 		}
 		else
 		{
-			<div class="mt-1-custom">
-				<a href="/forwardedmessage?id=@Uri.EscapeDataString(forwardData.Id ?? "")&embed=1" class="text-primary-custom">
+			<div style="margin-top: 4px;">
+				<FluentAnchor Href='@($"/forwardedmessage?id={Uri.EscapeDataString(forwardData.Id ?? "")}&embed=1")' Appearance="Appearance.Hypertext">
 					[转发消息] 点击查看详情
-				</a>
+				</FluentAnchor>
 			</div>
 		}
 	}
 	else if (Msg is ReplyData replyData)
 	{
-		<div class="mt-1-custom text-muted-custom">
+		<div style="margin-top: 4px; color: var(--neutral-foreground-hint);">
 			[回复] 消息 ID: @replyData.Id
 		</div>
 	}
 	else if (Msg is JsonData)
 	{
-		<div class="mt-1-custom text-muted-custom">
+		<div style="margin-top: 4px; color: var(--neutral-foreground-hint);">
 			[卡片消息]
 		</div>
 	}
 	else if (Msg is MusicData musicData)
 	{
-		<div class="mt-1-custom">
-			<span class="text-primary-custom">[音乐] @musicData.Title - @musicData.Singer</span>
+		<div style="margin-top: 4px;">
+			<FluentBadge Appearance="Appearance.Accent">[音乐] @musicData.Title - @musicData.Singer</FluentBadge>
 		</div>
 	}
 	else if (Msg is DiceData diceData)
 	{
-		<div class="mt-1-custom">
-			<span class="text-primary-custom">[骰子] 点数: @diceData.Result</span>
+		<div style="margin-top: 4px;">
+			<FluentBadge Appearance="Appearance.Accent">[骰子] 点数: @diceData.Result</FluentBadge>
 		</div>
 	}
 	else if (Msg is RpsData rpsData)
 	{
-		<div class="mt-1-custom">
-			<span class="text-primary-custom">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</span>
+		<div style="margin-top: 4px;">
+			<FluentBadge Appearance="Appearance.Accent">[石头剪刀布] @(rpsData.Result == "1" ? "石头" : rpsData.Result == "2" ? "剪刀" : "布")</FluentBadge>
 		</div>
 	}
 	else if (Msg is PokeData pokeData)
 	{
-		<div class="mt-1-custom text-muted-custom">
+		<div style="margin-top: 4px; color: var(--neutral-foreground-hint);">
 			[戳一戳] @pokeData.Type
 		</div>
 	}
 	else if (Msg is MfaceData mfaceData)
 	{
-		<div class="mt-1-custom text-muted-custom">
+		<div style="margin-top: 4px; color: var(--neutral-foreground-hint);">
 			[商城表情] @mfaceData.Summary
 		</div>
 	}
 	else
 	{
-		<span class="text-muted-custom">[未知消息类型: @Msg.GetType().Name]</span>
+		<span style="color: var(--neutral-foreground-hint);">[未知消息类型: @Msg.GetType().Name]</span>
 	}
 }
 catch (Exception ex)
 {
-	<span class="text-danger-custom">[消息渲染错误: @ex.Message]</span>
+	<FluentMessageBar Intent="MessageIntent.Error">[消息渲染错误: @ex.Message]</FluentMessageBar>
 }
 
 @code {

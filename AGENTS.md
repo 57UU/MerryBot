@@ -18,7 +18,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 | 消息通信 | `Websocket.Client` 5.5.0（NapCat WebSocket 协议） |
 | 存储 | LiteDB 5.0.21 + LiteDB.Async 0.1.8（本地 NoSQL，`plugin_data.db` 与 `group_history.db`） |
 | 日志 | NLog 6.2.0（宿主）；插件与库层使用 `CommonLib` 的 `ISimpleLogger` |
-| WebUI | ASP.NET Core Blazor（InteractiveServer 渲染模式）+ Minimal API |
+| WebUI | ASP.NET Core Blazor（InteractiveServer 渲染模式）+ Minimal API + Microsoft Fluent UI for Blazor（控件零自定义 CSS；仅 `wwwroot/css/site.css` 保留页面骨架结构样式、`ReconnectModal.razor.css` 保留重连显隐规则；主题跟随系统） |
 | 浏览器 | Selenium.WebDriver 4.47.0（无头 Chrome/Edge，`Browser` 项目：网页搜索/抓取、Markdown 渲染为图片） |
 | Markdown | Markdig 1.3.2（`Markdown2Html` 项目） |
 | 定时任务 | Cronos 0.13.0（Linux 五字段 cron，含 `@daily` 等别名） |

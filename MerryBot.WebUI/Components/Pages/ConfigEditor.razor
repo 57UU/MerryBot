@@ -6,135 +6,144 @@
 
 <PageTitle>配置中心</PageTitle>
 
-<div class="container-custom config-page">
-    <h1>配置中心</h1>
-    <p class="text-muted-custom">在这里维护核心与已加载插件注册的配置。每个配置文件单独保存，修改需要重启才能生效的字段请随后重启 bot。</p>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <div>
+        <h1>配置中心</h1>
+        <p>在这里维护核心与已加载插件注册的配置。每个配置文件单独保存，修改需要重启才能生效的字段请随后重启 bot。</p>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Error))
     {
-        <div class="message-item-custom mb-3-custom config-error">@Error</div>
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
     }
 
     @if (Snapshot is null)
     {
-        <span>加载中…</span>
+        <FluentProgressRing />
     }
     else if (Snapshot.Sections.Count == 0)
     {
-        <div class="message-item-custom">没有已注册的配置。</div>
+        <FluentMessageBar Intent="MessageIntent.Info">没有已注册的配置。</FluentMessageBar>
     }
     else
     {
-        <div class="config-layout">
-            <aside class="config-index" aria-label="配置文件目录">
-                <div class="config-index-title">配置文件</div>
-                @foreach (var section in Snapshot.Sections)
-                {
-                    <button class="config-index-item" type="button" @onclick="() => ScrollToAsync(section.Id)">
-                        @(section.Name)
-                    </button>
-                }
-            </aside>
+        <FluentGrid Style="width:100%;">
+            <FluentGridItem xs="12" md="3" Style="align-self:start;">
+                <SelectableList TItem="ConfigSectionDto"
+                                Title="配置文件"
+                                Items="Snapshot.Sections"
+                                GetKey="@(section => section.Id)"
+                                OnSelected="ScrollToAsync"
+                                RowTitle="@(section => section.Name)"
+                                ShowCount="false" />
+            </FluentGridItem>
 
-            <div class="config-sections">
-                @foreach (var section in Snapshot.Sections)
-                {
-                    <section id="@SectionElementId(section.Id)" class="message-item-custom config-section" @key="section.Id">
-                        <div class="message-header-custom"><strong>@(section.Name)</strong></div>
-                        @if (!string.IsNullOrWhiteSpace(section.Description))
-                        {
-                            <p class="text-muted-custom config-section-description">@(section.Description)</p>
-                        }
-
-                        <div class="message-content-custom">
-                            @foreach (var field in section.Fields)
-                            {
-                                <div class="config-field" @key="field.Key">
-                                    <label class="form-label" for="@InputElementId(section.Id, field.Key)">@field.Name</label>
-                                    @if (!string.IsNullOrWhiteSpace(field.Description))
+            <FluentGridItem xs="12" md="9">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    @foreach (var section in Snapshot.Sections)
+                    {
+                        <section id="@SectionElementId(section.Id)" @key="section.Id">
+                            <FluentCard>
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                    <strong>@(section.Name)</strong>
+                                    @if (!string.IsNullOrWhiteSpace(section.Description))
                                     {
-                                        <div class="config-field-description">@field.Description</div>
+                                        <span>@(section.Description)</span>
                                     }
+
+                                    @foreach (var field in section.Fields)
+                                    {
+                                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" @key="field.Key">
 
                                     @switch (field.Type)
                                     {
                                         case "string" when IsLlmModelField(field):
-                                            <input id="@InputElementId(section.Id, field.Key)" class="form-control" list="saved-llm-models"
-                                                   value="@GetText(section.Id, field.Key)"
-                                                   @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)" />
-                                            <div class="config-field-description">可从已保存的模型中选择，也可以直接输入模型 ID。</div>
+                                            <FluentTextField Label="@field.Name" DataList="saved-llm-models" Style="width:100%;"
+                                                   Value="@GetText(section.Id, field.Key)"
+                                                   ValueChanged="@(v => SetText(section.Id, field.Key, v ?? string.Empty))" />
+                                            <small>可从已保存的模型中选择，也可以直接输入模型 ID。</small>
                                             break;
                                         case "string" when IsPromptField(field):
-                                            <textarea id="@InputElementId(section.Id, field.Key)" class="form-control" rows="8"
-                                                      @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)">@GetText(section.Id, field.Key)</textarea>
+                                            <FluentTextArea Label="@field.Name" Rows="8" Style="width:100%;"
+                                                    Value="@GetText(section.Id, field.Key)"
+                                                    ValueChanged="@(v => SetText(section.Id, field.Key, v ?? string.Empty))" />
                                             break;
                                         case "string":
-                                            <input id="@InputElementId(section.Id, field.Key)" class="form-control" value="@GetText(section.Id, field.Key)"
-                                                   @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)" />
+                                            <FluentTextField Label="@field.Name" Style="width:100%;"
+                                                   Value="@GetText(section.Id, field.Key)"
+                                                   ValueChanged="@(v => SetText(section.Id, field.Key, v ?? string.Empty))" />
                                             break;
                                         case "number":
-                                            <input id="@InputElementId(section.Id, field.Key)" class="form-control" type="number" step="any" value="@GetText(section.Id, field.Key)"
-                                                   @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)" />
+                                            <FluentTextField Label="@field.Name" TextFieldType="TextFieldType.Number" Style="width:100%;"
+                                                   Value="@GetText(section.Id, field.Key)"
+                                                   ValueChanged="@(v => SetText(section.Id, field.Key, v ?? string.Empty))" />
                                             break;
                                         case "boolean":
-                                            <div class="form-check">
-                                                <input id="@InputElementId(section.Id, field.Key)" class="form-check-input" type="checkbox" checked="@GetBoolean(section.Id, field.Key)"
-                                                       @onchange="e => SetBoolean(section.Id, field.Key, e.Value is bool value && value)" />
-                                            </div>
+                                            <FluentCheckbox Label="@field.Name" Value="@GetBoolean(section.Id, field.Key)"
+                                                  ValueChanged="@(v => SetBoolean(section.Id, field.Key, v))" />
                                             break;
                                         case "enum":
-                                            <select id="@InputElementId(section.Id, field.Key)" class="form-control" value="@GetText(section.Id, field.Key)"
-                                                    @onchange="e => SetText(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)">
-                                                @foreach (var option in field.EnumOptions ?? [])
-                                                {
-                                                    <option value="@option">@option</option>
-                                                }
-                                            </select>
+                                            <FluentLabel>@field.Name</FluentLabel>
+                                            <FluentSelect TOption="string" Style="width:100%;"
+                                                Items="@(field.EnumOptions ?? [])"
+                                                OptionText="@(option => option)"
+                                                OptionValue="@(option => option)"
+                                                SelectedOption="@GetText(section.Id, field.Key)"
+                                                SelectedOptionChanged="@(v => SetText(section.Id, field.Key, v ?? string.Empty))" />
                                             break;
                                         case "list":
-                                            <textarea id="@InputElementId(section.Id, field.Key)" class="form-control config-list-editor" rows="4"
-                                                      @onchange="e => SetListText(section.Id, field.Key, e.Value?.ToString())">@GetText(section.Id, field.Key)</textarea>
-                                            <div class="config-field-description">请使用 JSON 数组，例如 <code>[123, 456]</code>。</div>
+                                            <FluentTextArea Label="@field.Name" Rows="4" Style="width:100%;"
+                                                    Value="@GetText(section.Id, field.Key)"
+                                                    ValueChanged="@(v => SetListText(section.Id, field.Key, v))" />
+                                            <small>请使用 JSON 数组，例如 <code>[123, 456]</code>。</small>
                                             break;
                                         case "stringlist":
-                                            <div class="config-stringlist">
-                                                @foreach (var (item, index) in GetStringList(section.Id, field.Key).Select((value, i) => (value, i)))
-                                                {
-                                                    <div class="config-stringlist-row">
-                                                        <input class="form-control" value="@item"
-                                                               @onchange="e => SetStringListItem(section.Id, field.Key, index, e.Value?.ToString() ?? string.Empty)" />
-                                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => RemoveStringListItem(section.Id, field.Key, index)">删除</button>
-                                                    </div>
-                                                }
-                                                <div class="config-stringlist-add">
-                                                    <input class="form-control" list="saved-llm-models" value="@GetStringListDraft(section.Id, field.Key)"
-                                                           @onchange="e => SetStringListDraft(section.Id, field.Key, e.Value?.ToString() ?? string.Empty)"
-                                                           placeholder="选择或输入模型 ID" />
-                                                    <button type="button" class="btn btn-primary btn-sm" @onclick="() => AddStringListItem(section.Id, field.Key)">添加</button>
-                                                </div>
-                                                <div class="config-field-description">按顺序使用；某个模型失效时自动切换到下一个。</div>
-                                            </div>
+                                            <FluentLabel>@field.Name</FluentLabel>
+                                            @foreach (var (item, index) in GetStringList(section.Id, field.Key).Select((value, i) => (value, i)))
+                                            {
+                                                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                                                    <FluentTextField Value="@item" Style="flex:1"
+                                                           ValueChanged="@(v => SetStringListItem(section.Id, field.Key, index, v ?? string.Empty))" />
+                                                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => RemoveStringListItem(section.Id, field.Key, index)">删除</FluentButton>
+                                                </FluentStack>
+                                            }
+                                            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                                                <FluentTextField DataList="saved-llm-models" Placeholder="选择或输入模型 ID" Style="flex:1"
+                                                       Value="@GetStringListDraft(section.Id, field.Key)"
+                                                       ValueChanged="@(v => SetStringListDraft(section.Id, field.Key, v ?? string.Empty))" />
+                                                <FluentButton Appearance="Appearance.Accent" OnClick="() => AddStringListItem(section.Id, field.Key)">添加</FluentButton>
+                                            </FluentStack>
+                                            <small>按顺序使用；某个模型失效时自动切换到下一个。</small>
                                             break;
                                     }
-                                </div>
+                                    @if (!string.IsNullOrWhiteSpace(field.Description))
+                                    {
+                                        <small>@field.Description</small>
+                                    }
+                                </FluentStack>
                             }
-                        </div>
 
-                        @if (SaveErrors.TryGetValue(section.Id, out var saveError))
-                        {
-                            <div class="config-save-error">@saveError</div>
-                        }
-                        @if (SaveStatus.TryGetValue(section.Id, out var saveStatus))
-                        {
-                            <div class="config-save-status">@saveStatus</div>
-                        }
-                        <button type="button" class="btn btn-primary" @onclick="() => SaveAsync(section)" disabled="@(SavingSectionId == section.Id)">
-                            @(SavingSectionId == section.Id ? "保存中…" : "保存此配置")
-                        </button>
-                    </section>
-                }
-            </div>
-        </div>
+                                    @if (SaveErrors.TryGetValue(section.Id, out var saveError))
+                                    {
+                                        <FluentMessageBar Intent="MessageIntent.Error">@saveError</FluentMessageBar>
+                                    }
+                                    @if (SaveStatus.TryGetValue(section.Id, out var saveStatus))
+                                    {
+                                        <FluentMessageBar Intent="MessageIntent.Success">@saveStatus</FluentMessageBar>
+                                    }
+                                    <div>
+                                        <FluentButton Appearance="Appearance.Accent" OnClick="() => SaveAsync(section)"
+                                                      Disabled="@(SavingSectionId == section.Id)" Loading="@(SavingSectionId == section.Id)">
+                                            @(SavingSectionId == section.Id ? "保存中…" : "保存此配置")
+                                        </FluentButton>
+                                    </div>
+                                </FluentStack>
+                            </FluentCard>
+                        </section>
+                    }
+                </FluentStack>
+            </FluentGridItem>
+        </FluentGrid>
         <datalist id="saved-llm-models">
             @foreach (var modelId in LlmModelIds)
             {
@@ -142,7 +151,7 @@
             }
         </datalist>
     }
-</div>
+</FluentStack>
 
 @code {
     private ConfigPanelDto? Snapshot;
@@ -339,5 +348,6 @@
     }
 
     private static string SectionElementId(string sectionId) => $"config-section-{sectionId}";
+
     private static string InputElementId(string sectionId, string key) => $"config-field-{sectionId}-{key}";
 }

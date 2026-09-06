@@ -9,65 +9,64 @@
 
 <PageTitle>转发消息</PageTitle>
 
-<div class="container-custom" style="height: 100%;">
-    <div class="card-full-height">
-        <div class="card-header-custom">
-            @if (IsEmbed)
-            {
-                <button type="button" class="modal-close-btn-embed" aria-label="关闭" @onclick="CloseModal">×</button>
-            }
-            else
-            {
-                <button type="button" class="btn-link-custom back-link-custom" @onclick="NavigateBack">← 返回</button>
-            }
-            @(ForwardEntry != null ? $"转发消息详情 ({ForwardEntry.Messages.Count} 条)" : "转发消息")
-        </div>
-        <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;">
-            @if (string.IsNullOrEmpty(Id))
-            {
-                <div class="text-center-custom text-muted-custom mt-5-custom">
-                    未指定转发消息ID
-                </div>
-            }
-            else if (IsLoading)
-            {
-                <div class="text-center-custom text-muted-custom mt-5-custom">
-                    加载中...
-                </div>
-            }
-            else if (ForwardEntry == null)
-            {
-                <div class="text-center-custom text-muted-custom mt-5-custom">
-                    未找到转发消息
-                </div>
-            }
-            else
-            {
-                <div class="message-container-custom">
-                    @foreach (var message in SortedMessages)
-                    {
-                        <div class="message-item-custom mb-3-custom">
-                            <div class="message-header-custom">
-                                <p>
-                                    <strong>@message.SenderNickname</strong>
-                                    @message.SenderId
-                                    @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
-                                </p>
-                                <span class="text-muted-custom float-end-custom">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
-                            </div>
-                            <div class="message-content-custom">
-                                @foreach (var msg in message.Messages)
-                                {
-                                    <MessageRenderer Msg="msg" Mode="MessageRenderMode.Link" />
-                                }
-                            </div>
+<FluentCard Style="height: 100%;">
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+        @if (IsEmbed)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" aria-label="关闭" @onclick="CloseModal">×</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="NavigateBack">← 返回</FluentButton>
+        }
+        <strong>@(ForwardEntry != null ? $"转发消息详情 ({ForwardEntry.Messages.Count} 条)" : "转发消息")</strong>
+    </FluentStack>
+    <div style="max-height: 90vh; overflow: auto; margin-top: 8px;">
+        @if (string.IsNullOrEmpty(Id))
+        {
+            <p style="text-align: center; margin-top: 48px;">
+                未指定转发消息ID
+            </p>
+        }
+        else if (IsLoading)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentProgressRing />
+                <span>加载中...</span>
+            </FluentStack>
+        }
+        else if (ForwardEntry == null)
+        {
+            <p style="text-align: center; margin-top: 48px;">
+                未找到转发消息
+            </p>
+        }
+        else
+        {
+            <div>
+                @foreach (var message in SortedMessages)
+                {
+                    <FluentCard Style="margin-bottom: 12px;">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                            <strong>@message.SenderNickname</strong>
+                            <span>@message.SenderId
+                                @(!string.IsNullOrEmpty(message.SenderGroupNickname) ? $"({message.SenderGroupNickname})" : "")
+                            </span>
+                            <FluentSpacer />
+                            <span style="font-size: 12px; color: var(--neutral-foreground-hint);">@message.Time.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                        </FluentStack>
+                        <div style="margin-top: 8px;">
+                            @foreach (var msg in message.Messages)
+                            {
+                                <MessageRenderer Msg="msg" Mode="MessageRenderMode.Link" />
+                            }
                         </div>
-                    }
-                </div>
-            }
-        </div>
+                    </FluentCard>
+                }
+            </div>
+        }
     </div>
-</div>
+</FluentCard>
 
 @code {
     [Parameter]

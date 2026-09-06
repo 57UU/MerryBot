@@ -8,139 +8,104 @@
 
 <PageTitle>会话快照</PageTitle>
 
-<div class="container-custom h-100-custom" style="height: 100%;">
-
-    <div class="row-layout">
-        <!-- 左侧 session 列表 -->
-        <div class="col-left">
-            <div class="card-full-height">
-                <div class="card-header-custom">
-                    Session 列表
-                </div>
-                <div class="card-body-custom overflow-auto-custom" style="max-height: 80vh;">
-                    @if (LoadError != null)
-                    {
-                        <div class="text-center-custom text-danger-custom py-2-custom">
-                            @LoadError
-                            <br />
-                            <button type="button" class="btn-link-custom" @onclick="LoadSessionsAsync">点击重试</button>
-                        </div>
-                    }
-                    else if (Sessions is null)
-                    {
-                        <div class="text-center-custom text-muted-custom py-2-custom">
-                            加载 session 列表中...
-                        </div>
-                    }
-                    else if (Sessions.Count == 0)
-                    {
-                        <div class="text-center-custom text-muted-custom py-2-custom">
-                            暂无上下文快照。
-                        </div>
-                    }
-                    else
-                    {
-                        <ul class="list-group-custom">
-                            @foreach (var session in Sessions)
-                            {
-                                <li class="list-group-item-custom @(SelectedSessionKey == session.SessionKey ? "active-custom" : "")"
-                                    tabindex="0"
-                                    role="button"
-                                    @onclick="() => SelectSessionAsync(session.SessionKey)"
-                                    @onkeydown="() => SelectSessionAsync(session.SessionKey)">
-                                    <div>@session.DisplayName</div>
-                                    <small class="text-muted-custom">@session.MessageCount 条 · @session.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</small>
-                                </li>
-                            }
-                        </ul>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- 右侧上下文展示 -->
-        <div class="col-right">
-            <div class="card-full-height">
-                <div class="card-header-custom">
-                    @if (!string.IsNullOrEmpty(SelectedSessionKey))
-                    {
-                        <span>@SelectedSessionKey 的当前上下文</span>
-                    }
-                    else
-                    {
-                        <span>请选择一个 session</span>
-                    }
-                </div>
-                <div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;" id="snapshot-scroll">
-                    @if (LoadError != null && Snapshot is null)
-                    {
-                        <div class="text-center-custom text-danger-custom mt-5-custom">@LoadError</div>
-                    }
-                    else if (Snapshot is null && !string.IsNullOrEmpty(SelectedSessionKey))
-                    {
-                        <div class="text-center-custom text-muted-custom mt-5-custom">
-                            @if (SnapshotLoading)
-                            {
-                                <span>加载中…</span>
-                            }
-                            else
-                            {
-                                <span>该 session 暂无上下文快照。</span>
-                            }
-                        </div>
-                    }
-                    else if (Snapshot is null)
-                    {
-                        <div class="text-center-custom text-muted-custom mt-5-custom">请从左侧选择一个 session</div>
-                    }
-                    else if (Snapshot.Messages.Count == 0)
-                    {
-                        <div class="text-center-custom text-muted-custom mt-5-custom">上下文为空（可能是刚压缩或重置过）。</div>
-                    }
-                    else
-                    {
-                        @foreach (var message in Snapshot.Messages)
-                        {
-                            <div class="message-item-custom mb-3-custom">
-                                <div class="message-header-custom">
-                                    <strong>@message.Role</strong>
-                                </div>
-                                <div class="message-content-custom">
-                                    @if (!string.IsNullOrEmpty(message.Content))
-                                    {
-                                        <div>@message.Content</div>
-                                    }
-                                    @if (message.ToolCalls.Count > 0)
-                                    {
-                                        <div class="text-muted-custom small-custom mt-1-custom">
-                                            工具调用：
-                                            @foreach (var call in message.ToolCalls)
-                                            {
-                                                <div>· @(call.Name)(@(call.Arguments))</div>
-                                            }
-                                        </div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(message.ReasoningContent))
-                                    {
-                                        <div class="text-muted-custom small-custom mt-1-custom">
-                                            <details>
-                                                <summary>思维链</summary>
-                                                <div style="white-space: pre-wrap;">@message.ReasoningContent</div>
-                                            </details>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        }
-                        <div class="text-muted-custom small-custom mt-2-custom">
-                            快照时间：@Snapshot.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
+<FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" Style="height: 100%;">
+    @* 左侧 session 列表 *@
+    <div style="width: 280px; flex-shrink: 0;">
+        <SelectableList TItem="ContextSessionDto"
+                        Title="Session 列表"
+                        Items="Sessions"
+                        GetKey="@(session => session.SessionKey)"
+                        SelectedKey="SelectedSessionKey"
+                        OnSelected="SelectSessionAsync"
+                        RowTitle="@(session => session.DisplayName)"
+                        RowSub="@(session => $"{session.MessageCount} 条 · {session.UpdatedAtUtc.LocalDateTime:yyyy-MM-dd HH:mm}")"
+                        LoadingText="加载 session 列表中..."
+                        EmptyText="暂无上下文快照。"
+                        LoadError="@LoadError"
+                        OnRetry="LoadSessionsAsync"
+                        ListMaxHeight="80vh"
+                        CardStyle="height: 100%;" />
     </div>
-</div>
+
+    @* 右侧上下文展示 *@
+    <div style="flex-grow: 1; min-width: 0;">
+        <FluentCard Style="height: 100%;">
+            @if (!string.IsNullOrEmpty(SelectedSessionKey))
+            {
+                <strong>@SelectedSessionKey 的当前上下文</strong>
+            }
+            else
+            {
+                <strong>请选择一个 session</strong>
+            }
+            <div style="max-height: 90vh; overflow: auto; margin-top: 8px;" id="snapshot-scroll">
+                @if (LoadError != null && Snapshot is null)
+                {
+                    <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+                }
+                else if (Snapshot is null && !string.IsNullOrEmpty(SelectedSessionKey))
+                {
+                    @if (SnapshotLoading)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentProgressRing />
+                            <span>加载中…</span>
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        <p style="text-align: center; margin-top: 48px;">该 session 暂无上下文快照。</p>
+                    }
+                }
+                else if (Snapshot is null)
+                {
+                    <p style="text-align: center; margin-top: 48px;">请从左侧选择一个 session</p>
+                }
+                else if (Snapshot.Messages.Count == 0)
+                {
+                    <p style="text-align: center; margin-top: 48px;">上下文为空（可能是刚压缩或重置过）。</p>
+                }
+                else
+                {
+                    @foreach (var message in Snapshot.Messages)
+                    {
+                        <FluentCard Style="margin-bottom: 12px;">
+                            <FluentBadge Appearance="Appearance.Accent">@message.Role</FluentBadge>
+                            <div style="margin-top: 8px;">
+                                @if (!string.IsNullOrEmpty(message.Content))
+                                {
+                                    <div>@message.Content</div>
+                                }
+                                @if (message.ToolCalls.Count > 0)
+                                {
+                                    <div style="font-size: 12px; color: var(--neutral-foreground-hint); margin-top: 4px;">
+                                        工具调用：
+                                        @foreach (var call in message.ToolCalls)
+                                        {
+                                            <div>· @(call.Name)(@(call.Arguments))</div>
+                                        }
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(message.ReasoningContent))
+                                {
+                                    <div style="font-size: 12px; color: var(--neutral-foreground-hint); margin-top: 4px;">
+                                        <details>
+                                            <summary>思维链</summary>
+                                            <div style="white-space: pre-wrap;">@message.ReasoningContent</div>
+                                        </details>
+                                    </div>
+                                }
+                            </div>
+                        </FluentCard>
+                    }
+                    <div style="font-size: 12px; color: var(--neutral-foreground-hint); margin-top: 8px;">
+                        快照时间：@Snapshot.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    </div>
+                }
+            </div>
+        </FluentCard>
+    </div>
+</FluentStack>
 
 @code {
     private List<ContextSessionDto>? Sessions;

@@ -1,3 +1,4 @@
+/* Blazor 电路重连弹窗：显隐由 blazor.web.js 按状态类切换，此文件仅保留框架必需的可见性规则与基础定位 */
 .components-reconnect-first-attempt-visible,
 .components-reconnect-repeated-attempt-visible,
 .components-reconnect-failed-visible,
@@ -19,61 +20,19 @@
     display: block;
 }
 
-
 #components-reconnect-modal {
-    background-color: white;
+    background-color: var(--neutral-layer-1, white);
+    color: var(--neutral-foreground-rest, black);
     width: 20rem;
     margin: 20vh auto;
     padding: 2rem;
     border: 0;
     border-radius: 0.5rem;
     box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
-    opacity: 0;
-    transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
-    animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
-    &[open]
-
-{
-    animation: components-reconnect-modal-slideUp 1.5s cubic-bezier(.05, .89, .25, 1.02) 0.3s, components-reconnect-modal-fadeInOpacity 0.5s ease-in-out 0.3s;
-    animation-fill-mode: both;
-}
-
 }
 
 #components-reconnect-modal::backdrop {
     background-color: rgba(0, 0, 0, 0.4);
-    animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
-    opacity: 1;
-}
-
-@keyframes components-reconnect-modal-slideUp {
-    0% {
-        transform: translateY(30px) scale(0.95);
-    }
-
-    100% {
-        transform: translateY(0);
-    }
-}
-
-@keyframes components-reconnect-modal-fadeInOpacity {
-    0% {
-        opacity: 0;
-    }
-
-    100% {
-        opacity: 1;
-    }
-}
-
-@keyframes components-reconnect-modal-fadeOutOpacity {
-    0% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
-    }
 }
 
 .components-reconnect-container {
@@ -90,19 +49,11 @@
 
 #components-reconnect-modal button {
     border: 0;
-    background-color: var(--accent, #4f46e5);
+    background-color: var(--accent-fill-rest, #4f46e5);
     color: white;
     padding: 4px 24px;
     border-radius: 6px;
 }
-
-    #components-reconnect-modal button:hover {
-        background-color: var(--accent-hover, #4338ca);
-    }
-
-    #components-reconnect-modal button:active {
-        background-color: var(--accent, #4f46e5);
-    }
 
 .components-rejoining-animation {
     position: relative;
@@ -112,7 +63,7 @@
 
     .components-rejoining-animation div {
         position: absolute;
-        border: 3px solid var(--accent, #4f46e5);
+        border: 3px solid var(--accent-fill-rest, #4f46e5);
         opacity: 1;
         border-radius: 50%;
         animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
@@ -124,14 +75,6 @@
 
 @keyframes components-rejoining-animation {
     0% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 0;
-    }
-
-    4.9% {
         top: 40px;
         left: 40px;
         width: 0;

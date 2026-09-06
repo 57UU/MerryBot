@@ -37,10 +37,3 @@ window.closeForwardModal = function () {
     if (iframe) iframe.src = '';
 };
 
-// 导航菜单：移动端点击后关闭展开的 checkbox 菜单
-window.closeNavMenu = function () {
-    const toggler = document.querySelector('.nav-toggler');
-    if (toggler && toggler.checked) {
-        toggler.checked = false;
-    }
-};

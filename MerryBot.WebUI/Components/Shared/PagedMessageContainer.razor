@@ -2,50 +2,48 @@
 @implements IAsyncDisposable
 @using Microsoft.Extensions.Logging
 
-<div class="card-full-height">
-	<div class="card-header-custom">
-		@HeaderContent
-	</div>
-	<div class="card-body-custom overflow-auto-custom" style="max-height: 90vh;"
-		@onscroll="HandleScroll" id="@ElementId">
-		@if (string.IsNullOrEmpty(Key))
-		{
-			<div class="text-center-custom text-muted-custom mt-5-custom">
-				@EmptySelectionHint
-			</div>
-		}
-		else if (IsLoadingMessages)
-		{
-			<div class="text-center-custom text-muted-custom mt-5-custom">
-				加载消息中...
-			</div>
-		}
-		else if (MessagesLoadError != null)
-		{
-			<div class="text-center-custom text-danger-custom mt-5-custom">
-				@MessagesLoadError
-			</div>
-		}
-		else if (Items.Count == 0)
-		{
-			<div class="text-center-custom text-muted-custom mt-5-custom">
-				@EmptyText
-			</div>
-		}
-		else
-		{
-			@if (IsLoadingMore)
-			{
-				<div class="text-center-custom text-muted-custom py-2-custom">
-					加载更多消息...
-				</div>
-			}
-			<div class="message-container-custom" id="@($"{ElementId}-list")">
-				@BodyContent(Items)
-			</div>
-		}
-	</div>
-</div>
+@* 分页消息容器：泛型参数、JS 滚动互操作与分页逻辑原样保留，只改内部展示 *@
+<FluentCard Style="height: 100%;">
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Size20.Chat())" />
+        <strong>@HeaderContent</strong>
+    </FluentStack>
+    <div style="max-height: 90vh; overflow: auto; margin-top: 8px;"
+        @onscroll="HandleScroll" id="@ElementId">
+        @if (string.IsNullOrEmpty(Key))
+        {
+            <p style="text-align: center; margin-top: 48px;">@EmptySelectionHint</p>
+        }
+        else if (IsLoadingMessages)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentProgressRing />
+                <span>加载消息中...</span>
+            </FluentStack>
+        }
+        else if (MessagesLoadError != null)
+        {
+            <FluentMessageBar Intent="MessageIntent.Error">@MessagesLoadError</FluentMessageBar>
+        }
+        else if (Items.Count == 0)
+        {
+            <p style="text-align: center; margin-top: 48px;">@EmptyText</p>
+        }
+        else
+        {
+            @if (IsLoadingMore)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentProgressRing />
+                    <span>加载更多消息...</span>
+                </FluentStack>
+            }
+            <div id="@($"{ElementId}-list")">
+                @BodyContent(Items)
+            </div>
+        }
+    </div>
+</FluentCard>
 
 @code {
 	[Parameter]

@@ -1,399 +1,309 @@
 @page "/llmproviders"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IJSRuntime JSRuntime
 
 <PageTitle>模型配置</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>模型配置</h1>
-        <p class="page-header-sub">models.dev 用于目录导入；真正使用的 API 地址、模型启用状态和 Key 都保存在本机数据库。Key 仅可写入，不会再次显示。</p>
-    </div>
-</div>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+    <h1>模型配置</h1>
+    <p>models.dev 用于目录导入；真正使用的 API 地址、模型启用状态和 Key 都保存在本机数据库。Key 仅可写入，不会再次显示。</p>
+</FluentStack>
 
 @if (!string.IsNullOrWhiteSpace(Error))
 {
-    <div class="lp-alert mb-3-custom">@Error</div>
+    <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
 }
 
-<section class="lp-section mb-3-custom">
-    <div class="lp-section-head"><strong>本地运行配置</strong></div>
-    <div class="lp-section-body">
-        @if (Config == null)
+<FluentCard Style="margin-bottom: 12px;">
+    <h3>本地运行配置</h3>
+    @if (Config == null)
+    {
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+            <FluentProgressRing />
+            <span>加载中…</span>
+        </FluentStack>
+    }
+    else if (Config.Providers.Count == 0)
+    {
+        <p>暂无已导入的配置。可从页面底部 models.dev 目录导入，或在「手工维护配置」中手动添加。</p>
+    }
+    else
+    {
+        @foreach (var provider in Config.Providers)
         {
-            <span class="text-muted-custom">加载中…</span>
-        }
-        else if (Config.Providers.Count == 0)
-        {
-            <span class="text-muted-custom">暂无已导入的配置。可从页面底部 models.dev 目录导入，或在「手工维护配置」中手动添加。</span>
-        }
-        else
-        {
-            @foreach (var provider in Config.Providers)
-            {
-                <div class="lp-provider" @key="provider.Id">
-                    <div class="lp-provider-head">
-                        <div class="lp-provider-title">
-                            <strong>@provider.Name</strong>
-                            <code>@provider.Id</code>
-                            <span class="badge">@provider.ApiFormat</span>
-                            @if (provider.Enabled)
-                            {
-                                <span class="badge badge-success">启用</span>
-                            }
-                            else
-                            {
-                                <span class="badge">禁用</span>
-                            }
-                        </div>
-                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</button>
-                    </div>
-                    <div class="lp-provider-sub"><small class="text-muted-custom">@provider.BaseUrl</small></div>
-
-                    @if (provider.Keys.Count > 0)
+            <FluentCard Style="margin-bottom: 12px;" @key="provider.Id">
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                    <strong>@provider.Name</strong>
+                    <code>@provider.Id</code>
+                    <FluentBadge Appearance="Appearance.Neutral">@provider.ApiFormat</FluentBadge>
+                    @if (provider.Enabled)
                     {
-                        <div class="lp-keys">
-                            <small class="text-muted-custom">Key</small>
-                            @foreach (var key in provider.Keys)
-                            {
-                                <span class="lp-key-chip" @key="key.Id">
-                                    <strong>@key.Name</strong>
-                                    <code>@key.Fingerprint</code>
-                                    <button type="button" class="lp-chip-delete" title="删除此 Key" aria-label="删除此 Key" @onclick="() => DeleteKeyAsync(key.Id)">×</button>
-                                </span>
-                            }
-                        </div>
+                        <FluentBadge Appearance="Appearance.Accent">启用</FluentBadge>
                     }
-
-                    @if (provider.Models.Count > 0)
+                    else
                     {
-                        <div class="lp-models">
-                            @foreach (var model in provider.Models)
-                            {
-                                <div class="lp-model" @key="model.Id">
-                                    <div class="lp-model-info">
-                                        <div class="lp-model-name">
-                                            <code>@model.Id</code><span class="lp-arrow">→</span><code>@model.RemoteModelId</code>
+                        <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
+                    }
+                    <FluentSpacer />
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</FluentButton>
+                </FluentStack>
+                <p><small>@provider.BaseUrl</small></p>
+
+                @if (provider.Keys.Count > 0)
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Style="margin-top: 8px;">
+                        <span>Key</span>
+                        @foreach (var key in provider.Keys)
+                        {
+                            <FluentBadge Appearance="Appearance.Neutral" @key="key.Id">
+                                <strong>@key.Name</strong>
+                                <code>@key.Fingerprint</code>
+                                <FluentButton Appearance="Appearance.Lightweight" Title="删除此 Key" aria-label="删除此 Key" OnClick="() => DeleteKeyAsync(key.Id)">×</FluentButton>
+                            </FluentBadge>
+                        }
+                    </FluentStack>
+                }
+
+                @if (provider.Models.Count > 0)
+                {
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-top: 8px;">
+                        @foreach (var model in provider.Models)
+                        {
+                            <FluentCard @key="model.Id">
+                                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                                            <code>@model.Id</code><span>→</span><code>@model.RemoteModelId</code>
                                             @if (Config.DefaultModelId == model.Id)
                                             {
-                                                <span class="badge badge-success">默认</span>
+                                                <FluentBadge Appearance="Appearance.Accent">默认</FluentBadge>
                                             }
                                             @if (!model.Enabled)
                                             {
-                                                <span class="badge">禁用</span>
+                                                <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
                                             }
                                             @if (!string.IsNullOrEmpty(model.ReasoningEffort))
                                             {
-                                                <span class="badge">思维 @model.ReasoningEffort</span>
+                                                <FluentBadge Appearance="Appearance.Neutral">思维 @model.ReasoningEffort</FluentBadge>
                                             }
                                             @if (model.EnablePromptCache)
                                             {
-                                                <span class="badge">缓存</span>
+                                                <FluentBadge Appearance="Appearance.Neutral">缓存</FluentBadge>
                                             }
-                                        </div>
-                                        <small class="text-muted-custom">
+                                        </FluentStack>
+                                        <small>
                                             @FormatLimit(model.ContextLength) context · @FormatLimit(model.MaxOutputTokens) output · @FormatCapabilities(model.Capabilities) · @FormatReasoningOptions(model.ReasoningOptions)
                                         </small>
-                                    </div>
-                                    <div class="lp-model-actions">
+                                    </FluentStack>
+                                    <FluentSpacer />
+                                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
                                         @if (Config.DefaultModelId != model.Id)
                                         {
-                                            <button class="btn btn-secondary btn-sm" @onclick="() => SetDefaultAsync(model.Id)">设为默认</button>
+                                            <FluentButton Appearance="Appearance.Neutral" OnClick="() => SetDefaultAsync(model.Id)">设为默认</FluentButton>
                                         }
-                                        <button class="btn btn-secondary btn-sm" @onclick="() => FillManualFormAsync(model)">编辑</button>
-                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteModelAsync(model.Id)">删除模型</button>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
+                                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillManualFormAsync(model)">编辑</FluentButton>
+                                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteModelAsync(model.Id)">删除模型</FluentButton>
+                                    </FluentStack>
+                                </FluentStack>
+                            </FluentCard>
+                        }
+                    </FluentStack>
+                }
+            </FluentCard>
         }
-    </div>
-</section>
+    }
+</FluentCard>
 
-<section class="lp-section mb-3-custom" @ref="ManualFormSection">
-    <div class="lp-section-head">
-        <strong>手工维护配置</strong>
+@* 手工维护表单：外层 div 保留 ElementReference，供 llmProviderApi.scrollIntoView 定位 *@
+<div @ref="ManualFormSection" style="margin-bottom: 12px;">
+<FluentCard>
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+        <h3>手工维护配置</h3>
         @if (EditingModelId is not null)
         {
-            <span class="lp-editing">
-                正在编辑 <code>@EditingModelId</code>
-                <button type="button" class="btn btn-secondary btn-sm" @onclick="ClearManualForm">清空表单</button>
-            </span>
+            <span>正在编辑 <code>@EditingModelId</code></span>
+            <FluentButton Appearance="Appearance.Neutral" OnClick="ClearManualForm">清空表单</FluentButton>
         }
-    </div>
-    <div class="lp-section-body">
-        <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
-            <h5>Provider</h5>
-            <div class="lp-form-grid">
-                <div class="lp-field">
-                    <label class="form-label">Provider ID</label>
-                    <input class="form-control" @bind="EditProviderId" placeholder="provider-id，例如 openai-compatible" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">显示名称</label>
-                    <input class="form-control" @bind="EditProviderName" placeholder="显示名称" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">API 地址</label>
-                    <input class="form-control" @bind="EditProviderBaseUrl" placeholder="https://api.example.com/v1" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">API 格式</label>
-                    <select class="form-control" @bind="EditApiFormat">
-                        <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
-                        <option value="openai-responses">OpenAI Responses（/responses）</option>
-                        <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
-                    </select>
-                </div>
-            </div>
-            <button class="btn btn-primary mt-2" type="submit">保存 Provider</button>
-        </form>
+    </FluentStack>
+    <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
+        <h5>Provider</h5>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+            <FluentTextField Label="Provider ID" Placeholder="provider-id，例如 openai-compatible" Required="true" @bind-Value="EditProviderId" />
+            <FluentTextField Label="显示名称" Placeholder="显示名称" Required="true" @bind-Value="EditProviderName" />
+            <FluentTextField Label="API 地址" Placeholder="https://api.example.com/v1" Required="true" @bind-Value="EditProviderBaseUrl" />
+            <FluentSelect TOption="string" Label="API 格式" @bind-Value="EditApiFormat">
+                <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
+                <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
+                <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
+            </FluentSelect>
+        </FluentStack>
+        <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Style="margin-top: 8px;">保存 Provider</FluentButton>
+    </form>
 
-        <form class="mt-3" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
-            <h5>模型</h5>
-            <div class="lp-form-grid">
-                <div class="lp-field">
-                    <label class="form-label">本地模型 ID</label>
-                    <input class="form-control" @bind="EditModelId" placeholder="本地模型 ID，例如 provider/model" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">Provider ID</label>
-                    <input class="form-control" @bind="EditModelProviderId" placeholder="Provider ID" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">显示名称</label>
-                    <input class="form-control" @bind="EditModelName" placeholder="显示名称" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">上游 model ID</label>
-                    <input class="form-control" @bind="EditModelRemoteId" placeholder="上游 model ID" required />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">上下文长度</label>
-                    <input class="form-control" type="number" @bind="EditModelContextLength" min="1" placeholder="上下文长度" />
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">最大输出</label>
-                    <input class="form-control" type="number" @bind="EditModelMaxOutput" min="1" placeholder="最大输出" />
-                </div>
-            </div>
-            <div class="lp-field">
-                <label class="form-label">能力（Capabilities）</label>
-                <small class="text-muted-custom d-block">Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
-                <div class="form-check mt-1">
-                    <input class="form-check-input" type="checkbox" id="capImageInput" @bind="EditModelImageInput" />
-                    <label class="form-label" for="capImageInput" style="margin-bottom:0">视觉输入（ImageInput）</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="capAttachment" @bind="EditModelAttachmentInput" />
-                    <label class="form-label" for="capAttachment" style="margin-bottom:0">附件输入（AttachmentInput）</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="capToolCalls" @bind="EditModelToolCalls" />
-                    <label class="form-label" for="capToolCalls" style="margin-bottom:0">工具调用（ToolCalls）</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="capReasoning" @bind="EditModelReasoningCap" />
-                    <label class="form-label" for="capReasoning" style="margin-bottom:0">推理（Reasoning）</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="capStructured" @bind="EditModelStructuredOutput" />
-                    <label class="form-label" for="capStructured" style="margin-bottom:0">结构化输出（StructuredOutput）</label>
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" id="editModelEnabled" @bind="EditModelEnabled" />
-                <label class="form-label" for="editModelEnabled" style="margin-bottom:0">启用此模型</label>
-            </div>
-            <div class="lp-field mt-2">
-                <label class="form-label">推理选项（Reasoning Options）</label>
-                <small class="text-muted-custom d-block">直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
-                @for (var _roIdx = 0; _roIdx < EditReasoningOptions.Count; _roIdx++)
-                {
-                    var _ro = EditReasoningOptions[_roIdx];
-                    var _idx = _roIdx;
-                    <div class="d-flex gap-2 mt-1" @key="_idx">
-                        <select class="form-control" style="max-width:160px" value="@_ro.Type" @onchange="e => OnReasoningOptionTypeChanged(_idx, e.Value?.ToString())">
-                            <option value="toggle">toggle（开关）</option>
-                            <option value="effort">effort（档位）</option>
-                        </select>
-                        <input class="form-control" placeholder="可选值，逗号分隔，如 low, medium, high" value="@_ro.ValuesText" @oninput="e => OnReasoningOptionValuesChanged(_idx, e.Value?.ToString())" disabled="@(_ro.Type == "toggle")" />
-                        <button type="button" class="btn btn-danger btn-sm" @onclick="() => RemoveReasoningOption(_idx)">删除</button>
-                    </div>
-                }
-                <button type="button" class="btn btn-secondary btn-sm mt-2" @onclick="AddReasoningOption">添加推理选项</button>
-            </div>
-            <div class="lp-form-grid">
-                <div class="lp-field">
-                    <label class="form-label">思维强度（Reasoning Effort）</label>
-                    <select class="form-control" @bind="EditModelReasoningEffort">
-                        <option value="">不开启</option>
-                        @foreach (var _eff in GetReasoningEffortOptions())
-                        {
-                            <option value="@_eff">@_eff</option>
-                        }
-                    </select>
-                    <small class="text-muted-custom">anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" id="enablePromptCache" @bind="EditModelEnablePromptCache" />
-                <label class="form-label" for="enablePromptCache" style="margin-bottom:0">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</label>
-            </div>
-            <button class="btn btn-primary mt-2" type="submit">保存模型</button>
-        </form>
-    </div>
-</section>
-
-<section class="lp-section mb-3-custom">
-    <div class="lp-section-head"><strong>添加或替换 Provider Key</strong></div>
-    <div class="lp-section-body">
-        @if (Config?.Providers.Count > 0)
-        {
-            <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
-                <div class="lp-form-grid">
-                    <div class="lp-field">
-                        <label class="form-label">Provider</label>
-                        <select class="form-control" @bind="KeyProviderId">
-                            @foreach (var provider in Config.Providers)
-                            {
-                                <option value="@provider.Id">@provider.Name (@provider.Id)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="lp-field">
-                        <label class="form-label">名称</label>
-                        <input class="form-control" @bind="KeyName" placeholder="生产 Key" />
-                    </div>
-                    <div class="lp-field">
-                        <label class="form-label">API Key</label>
-                        <input class="form-control" type="password" @bind="KeySecret" autocomplete="new-password" required />
-                    </div>
-                    <div class="lp-field">
-                        <label class="form-label">优先级（数字越小越优先）</label>
-                        <input class="form-control" type="number" @bind="KeyPriority" />
-                    </div>
-                </div>
-                <button class="btn btn-primary mt-2" type="submit">保存 Key</button>
-            </form>
-        }
-        else
-        {
-            <span class="text-muted-custom">请先从 models.dev 导入至少一个模型。</span>
-        }
-    </div>
-</section>
-
-<section class="lp-section mb-3-custom">
-    <div class="lp-section-head"><strong>从 models.dev 添加模型</strong></div>
-    <div class="lp-section-body">
-        <p class="text-muted-custom">目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
-        <div class="mb-3-custom">
-            <div class="lp-step-title">步骤 1 · 选择 Provider</div>
-            <input class="form-control" value="@CatalogProviderQuery" @oninput="OnProviderQueryChanged" placeholder="例如 OpenCode、OpenAI、DeepSeek" />
-            <div class="mt-2 inline-row flex-wrap">
-                <button class="btn btn-primary btn-sm" @onclick="SearchProvidersAsync" disabled="@IsLoadingCatalog">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</button>
-                <button class="btn btn-secondary btn-sm" @onclick="RefreshCatalogAsync" disabled="@IsLoadingCatalog">刷新 models.dev</button>
-            </div>
-            @if (CatalogStatus is not null)
+    <form style="margin-top: 12px;" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
+        <h5>模型</h5>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+            <FluentTextField Label="本地模型 ID" Placeholder="本地模型 ID，例如 provider/model" Required="true" @bind-Value="EditModelId" />
+            <FluentTextField Label="Provider ID" Placeholder="Provider ID" Required="true" @bind-Value="EditModelProviderId" />
+            <FluentTextField Label="显示名称" Placeholder="显示名称" Required="true" @bind-Value="EditModelName" />
+            <FluentTextField Label="上游 model ID" Placeholder="上游 model ID" Required="true" @bind-Value="EditModelRemoteId" />
+            <FluentNumberField Label="上下文长度" Placeholder="上下文长度" @bind-Value="EditModelContextLength" />
+            <FluentNumberField Label="最大输出" Placeholder="最大输出" @bind-Value="EditModelMaxOutput" />
+        </FluentStack>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+            <span>能力（Capabilities）</span>
+            <small>Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
+            <FluentCheckbox @bind-Value="EditModelImageInput">视觉输入（ImageInput）</FluentCheckbox>
+            <FluentCheckbox @bind-Value="EditModelAttachmentInput">附件输入（AttachmentInput）</FluentCheckbox>
+            <FluentCheckbox @bind-Value="EditModelToolCalls">工具调用（ToolCalls）</FluentCheckbox>
+            <FluentCheckbox @bind-Value="EditModelReasoningCap">推理（Reasoning）</FluentCheckbox>
+            <FluentCheckbox @bind-Value="EditModelStructuredOutput">结构化输出（StructuredOutput）</FluentCheckbox>
+        </FluentStack>
+        <FluentCheckbox Style="margin-top: 8px;" @bind-Value="EditModelEnabled">启用此模型</FluentCheckbox>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
+            <span>推理选项（Reasoning Options）</span>
+            <small>直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
+            @for (var _roIdx = 0; _roIdx < EditReasoningOptions.Count; _roIdx++)
             {
-                <div><small class="text-muted-custom">目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
-                @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
-                {
-                    <div><small class="text-muted-custom">刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
-                }
+                var _ro = EditReasoningOptions[_roIdx];
+                var _idx = _roIdx;
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 4px;" @key="_idx">
+                    <FluentSelect TOption="string" Label="类型" Value="@_ro.Type" ValueChanged="@((string v) => OnReasoningOptionTypeChanged(_idx, v))">
+                        <FluentOption TOption="string" Value="toggle">toggle（开关）</FluentOption>
+                        <FluentOption TOption="string" Value="effort">effort（档位）</FluentOption>
+                    </FluentSelect>
+                    <FluentTextField Label="可选值" Placeholder="可选值，逗号分隔，如 low, medium, high" Immediate="true" Value="@_ro.ValuesText" ValueChanged="@((string v) => OnReasoningOptionValuesChanged(_idx, v))" Disabled="@(_ro.Type == "toggle")" />
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => RemoveReasoningOption(_idx)">删除</FluentButton>
+                </FluentStack>
             }
-        </div>
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
+                <FluentButton Appearance="Appearance.Neutral" OnClick="AddReasoningOption">添加推理选项</FluentButton>
+            </FluentStack>
+        </FluentStack>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-top: 8px;">
+            <FluentSelect TOption="string" Label="思维强度（Reasoning Effort）" @bind-Value="EditModelReasoningEffort">
+                <FluentOption TOption="string" Value="">不开启</FluentOption>
+                @foreach (var _eff in GetReasoningEffortOptions())
+                {
+                    <FluentOption TOption="string" Value="@_eff">@_eff</FluentOption>
+                }
+            </FluentSelect>
+        </FluentStack>
+        <small>anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
+        <FluentCheckbox Style="margin-top: 8px;" @bind-Value="EditModelEnablePromptCache">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</FluentCheckbox>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
+            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit">保存模型</FluentButton>
+        </FluentStack>
+    </form>
+</FluentCard>
+</div>
 
-        @if (HasSearchedProviders && CatalogProviders.Count == 0)
-        {
-            <p class="text-muted-custom">没有找到匹配的 Provider。</p>
-        }
-        else if (CatalogProviders.Count > 0)
-        {
-            <div class="table-scroll mb-3-custom">
-                <table class="table">
-                    <thead><tr><th>Provider</th><th>ID</th><th>可用模型</th><th></th></tr></thead>
-                    <tbody>
-                    @foreach (var provider in CatalogProviders)
+<FluentCard Style="margin-bottom: 12px;">
+    <h3>添加或替换 Provider Key</h3>
+    @if (Config?.Providers.Count > 0)
+    {
+        <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+                <FluentSelect TOption="string" Label="Provider" @bind-Value="KeyProviderId">
+                    @foreach (var provider in Config.Providers)
                     {
-                        <tr @key="provider.Id">
-                            <td>@provider.Name</td>
-                            <td><code>@provider.Id</code></td>
-                            <td>@provider.ModelCount</td>
-                            <td><button class="btn btn-secondary btn-sm" @onclick="() => SelectProviderAsync(provider)">选择并查看模型</button></td>
-                        </tr>
+                        <FluentOption TOption="string" Value="@provider.Id">@provider.Name (@provider.Id)</FluentOption>
                     }
-                    </tbody>
-                </table>
-            </div>
-        }
+                </FluentSelect>
+                <FluentTextField Label="名称" Placeholder="生产 Key" @bind-Value="KeyName" />
+                <FluentTextField Label="API Key" TextFieldType="TextFieldType.Password" AutoComplete="new-password" Required="true" @bind-Value="KeySecret" />
+                <FluentNumberField Label="优先级（数字越小越优先）" @bind-Value="KeyPriority" />
+            </FluentStack>
+            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Style="margin-top: 8px;">保存 Key</FluentButton>
+        </form>
+    }
+    else
+    {
+        <p>请先从 models.dev 导入至少一个模型。</p>
+    }
+</FluentCard>
 
-        @if (SelectedCatalogProvider is not null)
+<FluentCard Style="margin-bottom: 12px;">
+    <h3>从 models.dev 添加模型</h3>
+    <p>目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-bottom: 12px;">
+        <span><strong>步骤 1 · 选择 Provider</strong></span>
+        <FluentSearch Immediate="true" Placeholder="例如 OpenCode、OpenAI、DeepSeek" Value="@CatalogProviderQuery" ValueChanged="@(v => OnProviderQueryChanged(new ChangeEventArgs { Value = v }))" />
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+            <FluentButton Appearance="Appearance.Accent" Loading="@IsLoadingCatalog" Disabled="@IsLoadingCatalog" OnClick="SearchProvidersAsync">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="RefreshCatalogAsync">刷新 models.dev</FluentButton>
+        </FluentStack>
+        @if (CatalogStatus is not null)
         {
-            <div class="mb-3-custom">
-                <div class="lp-step-title">步骤 2 · 为 @SelectedCatalogProvider.Name 添加模型</div>
-                <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
-            </div>
-            <div class="lp-form-grid mb-3-custom">
-                <div class="lp-field">
-                    <label class="form-label">筛选模型（输入即过滤）</label>
-                    <input class="form-control" value="@CatalogModelQuery" @oninput="OnModelQueryChanged" placeholder="例如 gpt、deepseek、flash" />
-                    <div class="mt-2"><button class="btn btn-secondary btn-sm" @onclick="LoadModelsAsync" disabled="@IsLoadingCatalog">搜索此 Provider 的模型</button></div>
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">首次添加此 Provider 时使用的 API 地址</label>
-                    <input class="form-control" @bind="ImportBaseUrl" placeholder="https://api.example.com/v1" />
-                    <small class="text-muted-custom">默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。</small>
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">API 格式</label>
-                    <select class="form-control" @bind="ImportApiFormat">
-                        <option value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</option>
-                        <option value="openai-responses">OpenAI Responses（/responses）</option>
-                        <option value="anthropic-messages">Anthropic Messages（/v1/messages）</option>
-                    </select>
-                    <small class="text-muted-custom">按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small>
-                </div>
-                <div class="lp-field">
-                    <label class="form-label">添加模型时一并保存的 API Key（可留空，随后单独添加）</label>
-                    <input class="form-control" type="password" @bind="ImportApiKey" autocomplete="new-password" />
-                </div>
-            </div>
-            @if (HasSearchedModels && CatalogModels.Count == 0)
+            <div><small>目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
+            @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
             {
-                <p class="text-muted-custom">这个 Provider 中没有匹配的模型。</p>
-            }
-            else if (CatalogModels.Count > 0)
-            {
-                <div class="table-scroll">
-                    <table class="table">
-                        <thead><tr><th>模型</th><th>上下文</th><th>输出</th><th>能力</th><th>推理选项</th><th></th></tr></thead>
-                        <tbody>
-                        @foreach (var model in CatalogModels)
-                        {
-                            <tr @key="@($"{model.ProviderId}/{model.ModelId}")">
-                                <td><code>@model.ModelId</code><br /><small>@model.Name</small></td>
-                                <td>@FormatLimit(model.ContextLength)</td>
-                                <td>@FormatLimit(model.MaxOutputTokens)</td>
-                                <td>@model.Capabilities</td>
-                                <td><small>@FormatReasoningOptions(model.ReasoningOptions)</small></td>
-                                <td class="inline-row flex-wrap gap-2">
-                                    <button class="btn btn-primary btn-sm" @onclick="() => ImportAsync(model)">添加模型</button>
-                                    <button class="btn btn-secondary btn-sm" @onclick="() => FillManualFormAsync(model)">填入编辑表单</button>
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
+                <div><small>刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
             }
         }
-    </div>
-</section>
+    </FluentStack>
+
+    @if (HasSearchedProviders && CatalogProviders.Count == 0)
+    {
+        <p>没有找到匹配的 Provider。</p>
+    }
+    else if (CatalogProviders.Count > 0)
+    {
+        <FluentDataGrid Items="@CatalogProviders.AsQueryable()" Style="margin-bottom: 12px;">
+            <PropertyColumn Property="@(p => p.Name)" Title="Provider" Sortable="true" />
+            <TemplateColumn Title="ID" Context="catalogProvider"><code>@catalogProvider.Id</code></TemplateColumn>
+            <PropertyColumn Property="@(p => p.ModelCount)" Title="可用模型" Sortable="true" />
+            <TemplateColumn Title="操作" Context="catalogProvider">
+                <FluentButton Appearance="Appearance.Neutral" OnClick="() => SelectProviderAsync(catalogProvider)">选择并查看模型</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+
+    @if (SelectedCatalogProvider is not null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-bottom: 12px;">
+            <span><strong>步骤 2 · 为 @SelectedCatalogProvider.Name 添加模型</strong></span>
+            <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
+        </FluentStack>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-bottom: 12px;">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                <FluentSearch Immediate="true" Label="筛选模型（输入即过滤）" Placeholder="例如 gpt、deepseek、flash" Value="@CatalogModelQuery" ValueChanged="@(v => OnModelQueryChanged(new ChangeEventArgs { Value = v }))" />
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
+                    <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="LoadModelsAsync">搜索此 Provider 的模型</FluentButton>
+                </FluentStack>
+            </FluentStack>
+            <FluentTextField Label="首次添加此 Provider 时使用的 API 地址" Placeholder="https://api.example.com/v1" @bind-Value="ImportBaseUrl" />
+            <FluentSelect TOption="string" Label="API 格式" @bind-Value="ImportApiFormat">
+                <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
+                <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
+                <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
+            </FluentSelect>
+            <FluentTextField Label="添加模型时一并保存的 API Key（可留空，随后单独添加）" TextFieldType="TextFieldType.Password" AutoComplete="new-password" @bind-Value="ImportApiKey" />
+        </FluentStack>
+        <p><small>默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small></p>
+        @if (HasSearchedModels && CatalogModels.Count == 0)
+        {
+            <p>这个 Provider 中没有匹配的模型。</p>
+        }
+        else if (CatalogModels.Count > 0)
+        {
+            <FluentDataGrid Items="@CatalogModels.AsQueryable()">
+                <TemplateColumn Title="模型" Context="catalogModel"><code>@catalogModel.ModelId</code><br /><small>@catalogModel.Name</small></TemplateColumn>
+                <TemplateColumn Title="上下文" Context="catalogModel">@FormatLimit(catalogModel.ContextLength)</TemplateColumn>
+                <TemplateColumn Title="输出" Context="catalogModel">@FormatLimit(catalogModel.MaxOutputTokens)</TemplateColumn>
+                <PropertyColumn Property="@(m => m.Capabilities)" Title="能力" />
+                <TemplateColumn Title="推理选项" Context="catalogModel"><small>@FormatReasoningOptions(catalogModel.ReasoningOptions)</small></TemplateColumn>
+                <TemplateColumn Title="操作" Context="catalogModel">
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                        <FluentButton Appearance="Appearance.Accent" OnClick="() => ImportAsync(catalogModel)">添加模型</FluentButton>
+                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillManualFormAsync(catalogModel)">填入编辑表单</FluentButton>
+                    </FluentStack>
+                </TemplateColumn>
+            </FluentDataGrid>
+        }
+    }
+</FluentCard>
 
 @code {
     private LlmConfigSnapshot? Config;
@@ -450,11 +360,19 @@
     private int _providerSearchSeq;
     private int _modelSearchSeq;
 
-    protected override async Task OnInitializedAsync()
+    private bool _initialized;
+
+    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadConfigAsync();
-        // 初始加载完整 Provider 列表，输入框实时过滤
-        await SearchProvidersAsync();
+        if (firstRender && !_initialized)
+        {
+            _initialized = true;
+            await LoadConfigAsync();
+            // 初始加载完整 Provider 列表，输入框实时过滤
+            await SearchProvidersAsync();
+            StateHasChanged();
+        }
     }
 
     /// <summary>Provider 输入变化：更新查询词并防抖触发搜索。</summary>
@@ -499,7 +417,6 @@
         _providerSearchCts?.Dispose();
         _modelSearchCts?.Cancel();
         _modelSearchCts?.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     private async Task LoadConfigAsync()

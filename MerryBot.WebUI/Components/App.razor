@@ -6,18 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <script>
-        // 首屏前设置主题，避免亮/暗切换闪烁；选择由 theme.js 持久化
-        (function () {
-            var t = null;
-            try { t = localStorage.getItem("merrybot-theme"); } catch (e) { }
-            if (t !== "light" && t !== "dark") {
-                t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-            }
-            document.documentElement.dataset.theme = t;
-        })();
-    </script>
-    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link href="_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" rel="stylesheet" />
+    <link href="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.bundle.scp.css" rel="stylesheet" />
+    <link rel="stylesheet" href="@Assets["css/site.css"]" />
     <link rel="stylesheet" href="@Assets["MerryBot.WebUI.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -28,12 +19,12 @@
     <Routes />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js" type="module" async></script>
     <script src="js/BenzAMRRecorder.min.js"></script>
     <script src="js/scroll.js"></script>
     <script src="js/groupMessages.js"></script>
     <script src="js/llmProvider.js"></script>
     <script src="js/configApi.js"></script>
-    <script src="js/theme.js"></script>
     <script src="js/skillApi.js"></script>
 </body>
 

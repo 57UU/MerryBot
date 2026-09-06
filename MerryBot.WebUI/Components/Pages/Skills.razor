@@ -4,82 +4,89 @@
 
 <PageTitle>技能管理</PageTitle>
 
-<div class="container-custom skill-page">
-    <h1>技能管理</h1>
-    <p class="text-muted-custom">支持直接上传单文件 <code>.md</code>，或上传目录型 Skill 的 <code>.zip</code>，或从 Git 仓库克隆。禁用会将入口文件标记为 <code>.disable</code>，运行中的新会话只会读取启用的 Skill。Git 形式的 Skill 支持一键更新（<code>git pull --ff-only</code>）。</p>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <div>
+        <h1>技能管理</h1>
+        <p>支持直接上传单文件 <code>.md</code>，或上传目录型 Skill 的 <code>.zip</code>，或从 Git 仓库克隆。禁用会将入口文件标记为 <code>.disable</code>，运行中的新会话只会读取启用的 Skill。Git 形式的 Skill 支持一键更新（<code>git pull --ff-only</code>）。</p>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Error))
     {
-        <div class="message-item-custom mb-3-custom">@Error</div>
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
     }
     @if (!string.IsNullOrWhiteSpace(Success))
     {
-        <div class="message-item-custom mb-3-custom" style="border-left:3px solid var(--bs-success,#198754);">@Success</div>
+        <FluentMessageBar Intent="MessageIntent.Success">@Success</FluentMessageBar>
     }
 
-    <section class="message-item-custom mb-3-custom">
-        <div class="message-header-custom"><strong>上传 Skill</strong></div>
-        <div class="message-content-custom skill-upload-row">
-            <input id="skill-upload-file" class="form-control" type="file" accept=".md,.zip" />
-            <button class="btn btn-primary" @onclick="UploadAsync" disabled="@IsUploading">@(IsUploading ? "上传中…" : "上传")</button>
-        </div>
-    </section>
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <strong>上传 Skill</strong>
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <input id="skill-upload-file" type="file" accept=".md,.zip" />
+                <FluentButton Appearance="Appearance.Accent" OnClick="UploadAsync" Disabled="@IsUploading" Loading="@IsUploading">@(IsUploading ? "上传中…" : "上传")</FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
 
-    <section class="message-item-custom mb-3-custom">
-        <div class="message-header-custom"><strong>从 Git 导入</strong></div>
-        <div class="message-content-custom skill-git-row">
-            <input class="form-control" placeholder="Git 地址，如 https://github.com/owner/repo.git" @bind="GitUrl" @bind:event="oninput" />
-            <input class="form-control" style="max-width:14rem" placeholder="名称（可选，默认取仓库名）" @bind="GitName" @bind:event="oninput" />
-            <button class="btn btn-primary" @onclick="CloneGitAsync" disabled="@IsCloning">@(IsCloning ? "克隆中…" : "克隆")</button>
-        </div>
-        <div class="text-muted-custom" style="font-size:.85rem;margin-top:.35rem">支持 https、git at、ssh、git 协议；以 shallow clone 方式克隆。</div>
-    </section>
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <strong>从 Git 导入</strong>
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentTextField Placeholder="Git 地址，如 https://github.com/owner/repo.git" @bind-Value="GitUrl" Immediate="true" Style="flex:1" />
+                <FluentTextField Placeholder="名称（可选，默认取仓库名）" @bind-Value="GitName" Immediate="true" Style="max-width:14rem" />
+                <FluentButton Appearance="Appearance.Accent" OnClick="CloneGitAsync" Disabled="@IsCloning" Loading="@IsCloning">@(IsCloning ? "克隆中…" : "克隆")</FluentButton>
+            </FluentStack>
+            <small>支持 https、git at、ssh、git 协议；以 shallow clone 方式克隆。</small>
+        </FluentStack>
+    </FluentCard>
 
     @if (SkillItems is null)
     {
-        <span>加载中…</span>
+        <FluentProgressRing />
     }
     else if (SkillItems.Count == 0)
     {
-        <div class="message-item-custom">还没有 Skill。</div>
+        <FluentMessageBar Intent="MessageIntent.Info">还没有 Skill。</FluentMessageBar>
     }
     else
     {
-        <div class="message-item-custom">
-            <div class="message-content-custom" style="overflow-x:auto">
-                <table class="table">
-                    <thead><tr><th>名称</th><th>描述</th><th>形式</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
-                    <tbody>
-                    @foreach (var skill in SkillItems)
+        <FluentDataGrid Items="@((SkillItems ?? []).AsQueryable())">
+            <TemplateColumn Title="名称" Context="skill">
+                <code>@skill.Name</code>
+                @if (skill.Layout == SkillLayout.GitRepository && !string.IsNullOrWhiteSpace(skill.GitUrl))
+                {
+                    <div><small title="@skill.GitUrl">@skill.GitUrl @if (!string.IsNullOrWhiteSpace(skill.GitHead)) { <span>(@skill.GitHead)</span> }</small></div>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="描述" Context="skill">
+                <span title="@(skill.Description ?? string.Empty)">@(string.IsNullOrWhiteSpace(skill.Description) ? "—" : skill.Description)</span>
+            </TemplateColumn>
+            <TemplateColumn Title="形式" Context="skill">@LayoutLabel(skill.Layout)</TemplateColumn>
+            <TemplateColumn Title="状态" Context="skill">
+                @if (skill.Enabled)
+                {
+                    <FluentBadge Appearance="Appearance.Accent">启用</FluentBadge>
+                }
+                else
+                {
+                    <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="更新时间" Context="skill">@skill.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</TemplateColumn>
+            <TemplateColumn Title="操作" Context="skill">
+                <FluentStack Orientation="Orientation.Horizontal" Wrap="true">
+                    @if (skill.Layout == SkillLayout.GitRepository)
                     {
-                        <tr @key="skill.Name">
-                            <td>
-                                <code>@skill.Name</code>
-                                @if (skill.Layout == SkillLayout.GitRepository && !string.IsNullOrWhiteSpace(skill.GitUrl))
-                                {
-                                    <div class="skill-git-meta" title="@skill.GitUrl">@skill.GitUrl @if (!string.IsNullOrWhiteSpace(skill.GitHead)) { <span class="skill-git-head">(@skill.GitHead)</span> }</div>
-                                }
-                            </td>
-                            <td class="skill-desc" title="@(skill.Description ?? string.Empty)">@(string.IsNullOrWhiteSpace(skill.Description) ? "—" : skill.Description)</td>
-                            <td>@LayoutLabel(skill.Layout)</td>
-                            <td>@(skill.Enabled ? "启用" : "禁用")</td>
-                            <td>@skill.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td class="skill-actions">
-                                @if (skill.Layout == SkillLayout.GitRepository)
-                                {
-                                    <button class="btn btn-secondary btn-sm" @onclick="() => UpdateGitAsync(skill)" disabled="@IsMutating" title="git pull 更新">更新</button>
-                                }
-                                <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(skill)" disabled="@IsMutating">@(skill.Enabled ? "禁用" : "启用")</button>
-                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(skill)" disabled="@IsMutating">删除</button>
-                            </td>
-                        </tr>
+                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => UpdateGitAsync(skill)" Disabled="@IsMutating" Title="git pull 更新">更新</FluentButton>
                     }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => ToggleAsync(skill)" Disabled="@IsMutating">@(skill.Enabled ? "禁用" : "启用")</FluentButton>
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteAsync(skill)" Disabled="@IsMutating">删除</FluentButton>
+                </FluentStack>
+            </TemplateColumn>
+        </FluentDataGrid>
     }
-</div>
+</FluentStack>
 
 @code {
     private IReadOnlyList<ManagedSkill>? SkillItems;

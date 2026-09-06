@@ -1,75 +1,79 @@
 @page "/logs"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IJSRuntime JSRuntime
 @using System.Text.RegularExpressions
 
 <PageTitle>运行日志</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>运行日志</h1>
-        <p class="page-header-sub">NLog 日志（按天分文件，最新在顶）；级别/关键词过滤在服务端执行，可浏览历史文件。</p>
-    </div>
-    <div class="page-header-actions">
-        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+        <div>
+            <h1>运行日志</h1>
+            <p>NLog 日志（按天分文件，最新在顶）；级别/关键词过滤在服务端执行，可浏览历史文件。</p>
+        </div>
+        <FluentSpacer />
+        <FluentButton Appearance="Appearance.Neutral" OnClick="LoadAsync" Disabled="@IsLoading" Loading="@IsLoading">
             @(IsLoading ? "刷新中…" : "刷新")
-        </button>
-    </div>
-</div>
+        </FluentButton>
+    </FluentStack>
 
-@if (Error != null)
-{
-    <div class="message-item-custom mb-3-custom">@Error</div>
-}
+    @if (Error != null)
+    {
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
+    }
 
-<div class="log-toolbar message-item-custom mb-3-custom">
-    <span class="text-muted-custom small-custom">当前日志：@(Data?.File ?? "—")</span>
-    <select class="form-control log-file-select" @bind="SelectedFile" @bind:after="() => LoadAsync()">
-        <option value="">当前日志</option>
-        @foreach (var f in Files)
-        {
-            <option value="@f.Name">@f.Name</option>
-        }
-    </select>
-    <select class="form-control log-lines-select" @bind="LineCount" @bind:after="() => LoadAsync()">
-        <option value="200">200 行</option>
-        <option value="500">500 行</option>
-        <option value="1000">1000 行</option>
-    </select>
-    <div class="log-levels">
-        @foreach (var level in LevelFilters)
-        {
-            <button type="button" class="log-level @(Level == level ? "active" : "")" @onclick="() => SetLevel(level)">@level</button>
-        }
-    </div>
-    <input class="form-control log-search" placeholder="搜索日志…" @bind="SearchText" @bind:event="oninput" @bind:after="OnSearchInput" />
-    <label class="form-check log-autorefresh">
-        <input type="checkbox" class="form-check-input" @bind="AutoRefresh" @bind:after="ToggleAutoRefresh" />
-        <span>自动刷新</span>
-    </label>
-</div>
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+            <span>当前日志：@(Data?.File ?? "—")</span>
+            <FluentSelect TOption="string" TOption="string"
+                SelectedOption="@(SelectedFile ?? string.Empty)"
+                SelectedOptionChanged="@(async (string? v) => { SelectedFile = string.IsNullOrEmpty(v) ? null : v; await LoadAsync(); })"
+                Style="min-width:12rem">
+                <FluentOption TOption="string" Value="">当前日志</FluentOption>
+                @foreach (var f in Files)
+                {
+                    <FluentOption TOption="string" Value="@f.Name">@f.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentSelect TOption="string" TOption="string"
+                SelectedOption="@LineCount.ToString()"
+                SelectedOptionChanged="@(async (string? v) => { if (int.TryParse(v, out int n)) LineCount = n; await LoadAsync(); })"
+                Style="min-width:7rem">
+                <FluentOption TOption="string" Value="200">200 行</FluentOption>
+                <FluentOption TOption="string" Value="500">500 行</FluentOption>
+                <FluentOption TOption="string" Value="1000">1000 行</FluentOption>
+            </FluentSelect>
+            @foreach (var level in LevelFilters)
+            {
+                <FluentButton Appearance="@(Level == level ? Appearance.Accent : Appearance.Lightweight)" OnClick="() => SetLevel(level)">@level</FluentButton>
+            }
+            <FluentSearch Placeholder="搜索日志…" Immediate="true" ImmediateDelay="300"
+                Value="@SearchText"
+                ValueChanged="@(async (string? v) => { SearchText = v ?? string.Empty; await OnSearchInput(); })"
+                Style="flex:1;min-width:10rem" />
+            <FluentCheckbox Label="自动刷新" @bind-Value="AutoRefresh" @bind-Value:after="ToggleAutoRefresh" />
+        </FluentStack>
+    </FluentCard>
 
-@if (Data == null)
-{
-    <div class="message-item-custom">加载中…</div>
-}
-else if (Data.Lines.Count == 0)
-{
-    <div class="message-item-custom">暂无日志。</div>
-}
-else
-{
-    <div class="log-viewer">
-        @foreach (var line in Data.Lines)
-        {
-            <div class="log-line log-line-@DetectLevel(line).ToLowerInvariant()">@line</div>
-        }
-        @if (!Data.Lines.Any())
-        {
-            <div class="log-line text-muted-custom">没有匹配的日志行。</div>
-        }
-    </div>
-}
+    @if (Data == null)
+    {
+        <FluentProgressRing />
+    }
+    else if (Data.Lines.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageIntent.Info">暂无日志。</FluentMessageBar>
+    }
+    else
+    {
+        <div style="max-height:60vh;overflow:auto;font-family:monospace;font-size:.8rem;padding:8px">
+            @foreach (var line in Data.Lines)
+            {
+                <div style="@LogLineStyle(line)">@line</div>
+            }
+        </div>
+    }
+</FluentStack>
 
 @code {
     private static readonly string[] LevelFilters = { "全部", "DEBUG", "INFO", "WARN", "ERROR", "FATAL" };
@@ -116,6 +120,8 @@ else
             _initialized = true;
             await LoadFilesAsync();
             await LoadAsync();
+            // AutoRefresh 默认勾选：首载后即启动定时器，否则复选框状态与实际行为不一致
+            ToggleAutoRefresh();
             StateHasChanged();
         }
     }
@@ -163,7 +169,17 @@ else
     {
         _searchDebounce?.Dispose();
         _searchDebounce = new System.Threading.Timer(
-            async _ => await InvokeAsync(LoadAsync),
+            async _ =>
+            {
+                try
+                {
+                    await InvokeAsync(LoadAsync);
+                }
+                catch
+                {
+                    // 电路已断开等场景，防抖回调异常不向外传播
+                }
+            },
             null,
             TimeSpan.FromMilliseconds(400),
             Timeout.InfiniteTimeSpan);
@@ -208,8 +224,7 @@ else
     }
 
     /// <summary>宽松识别日志行级别；无级别行（异常堆栈续行等）归为 DEBUG（灰色显示）。</summary>
-    private static string DetectLevel(string line)
-    {
+    private static string DetectLevel(string line)    {
         var match = LevelRegex.Match(line);
         if (!match.Success)
         {
@@ -218,6 +233,15 @@ else
         var level = match.Value;
         return level == "TRACE" ? "DEBUG" : level;
     }
+
+    /// <summary>日志行内联颜色（亮暗主题均可读的固定色，无自定义 CSS）。</summary>
+    private static string LogLineStyle(string line) => DetectLevel(line) switch
+    {
+        "ERROR" or "FATAL" => "color:#d13438;",
+        "WARN" => "color:#9d7300;",
+        "INFO" => "",
+        _ => "color:#888888;",
+    };
 
     public void Dispose()
     {

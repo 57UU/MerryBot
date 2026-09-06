@@ -9,82 +9,122 @@
 
 <PageTitle>数据统计</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>数据统计</h1>
-        <p class="page-header-sub">历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
-    </div>
-</div>
+<h1>数据统计</h1>
+<p>历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
 
-<h2 class="page-title">消息统计</h2>
-<div class="stat-row">
-    <StatCard Title="活跃群聊" Value="@(IsLoadingStats ? "—" : GroupCount.ToString())" IconName="users" Tone="indigo" />
-    <StatCard Title="群聊消息数" Value="@(IsLoadingStats ? "—" : MessageCount.ToString())" IconName="message-square" Tone="cyan" />
-    <StatCard Title="AI 消息数" Value="@(IsLoadingStats ? "—" : AiMessageCount.ToString())" IconName="bot" Tone="violet" />
-    <StatCard Title="图片数量" Value="@(IsLoadingStats ? "—" : ImageCount.ToString())" IconName="image" Tone="green" />
-    <StatCard Title="文件/视频/语音" Value="@(IsLoadingStats ? "—" : FileCount.ToString())" IconName="package" Tone="amber" />
-</div>
+<h2>消息统计</h2>
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.People())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@(IsLoadingStats ? "—" : GroupCount.ToString())</strong>
+                <span>活跃群聊</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Chat())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@(IsLoadingStats ? "—" : MessageCount.ToString())</strong>
+                <span>群聊消息数</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Bot())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@(IsLoadingStats ? "—" : AiMessageCount.ToString())</strong>
+                <span>AI 消息数</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Image())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@(IsLoadingStats ? "—" : ImageCount.ToString())</strong>
+                <span>图片数量</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Box())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@(IsLoadingStats ? "—" : FileCount.ToString())</strong>
+                <span>文件/视频/语音</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
 
-<h2 class="page-title">存储占用</h2>
-<div class="stat-row">
-    <div class="storage-card">
-        <span class="storage-icon tone-indigo"><Icon Name="database" /></span>
-        <div>
-            <div class="storage-label">群聊历史库</div>
-            <div class="storage-value">@GroupHistoryDbSize</div>
-        </div>
-    </div>
-    <div class="storage-card">
-        <span class="storage-icon tone-indigo"><Icon Name="database" /></span>
-        <div>
-            <div class="storage-label">插件数据库</div>
-            <div class="storage-value">@PluginDbSize</div>
-        </div>
-    </div>
-    <div class="storage-card">
-        <span class="storage-icon tone-green"><Icon Name="image" /></span>
-        <div>
-            <div class="storage-label">图片存储</div>
-            <div class="storage-value">@ImageStorageSize</div>
-        </div>
-    </div>
-    <div class="storage-card">
-        <span class="storage-icon tone-amber"><Icon Name="package" /></span>
-        <div>
-            <div class="storage-label">文件存储</div>
-            <div class="storage-value">@FileStorageSize</div>
-        </div>
-    </div>
-</div>
+<h2>存储占用</h2>
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Database())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@GroupHistoryDbSize</strong>
+                <span>群聊历史库</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Database())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@PluginDbSize</strong>
+                <span>插件数据库</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Image())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@ImageStorageSize</strong>
+                <span>图片存储</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+    <FluentCard Style="min-width: 180px;">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Size20.Box())" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <strong>@FileStorageSize</strong>
+                <span>文件存储</span>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
 
-<h2 class="page-title">数据库维护</h2>
-<div class="card-full-height">
-    <div class="card-body-custom">
-        <p class="text-muted-custom small-custom" style="margin-bottom:12px">
-            LiteDB 碎片整理（Rebuild）：重写整个数据库文件，回收删除/更新产生的空洞并重建索引，可减小文件体积。执行期间会阻塞数据库读写，大库可能耗时数秒，请勿频繁操作。
-        </p>
-        @if (!string.IsNullOrEmpty(RebuildError))
-        {
-            <div class="message-item-custom mb-3-custom" style="color:var(--danger)">@RebuildError</div>
-        }
-        @if (!string.IsNullOrEmpty(RebuildMessage))
-        {
-            <div class="message-item-custom mb-3-custom">@RebuildMessage</div>
-        }
-        <div class="d-flex gap-2" style="flex-wrap:wrap">
-            <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("history")' disabled="@IsRebuilding">
-                @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
-            </button>
-            <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("plugin")' disabled="@IsRebuilding">
-                @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
-            </button>
-            <button class="btn btn-primary btn-sm" @onclick='() => RebuildAsync("all")' disabled="@IsRebuilding">
-                @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
-            </button>
-            <button class="btn btn-secondary btn-sm" @onclick="LoadDbSizesAsync" disabled="@IsRebuilding">刷新大小</button>
-        </div>
-    </div>
-</div>
+<h2>数据库维护</h2>
+<FluentCard>
+    <p>LiteDB 碎片整理（Rebuild）：重写整个数据库文件，回收删除/更新产生的空洞并重建索引，可减小文件体积。执行期间会阻塞数据库读写，大库可能耗时数秒，请勿频繁操作。</p>
+    @if (!string.IsNullOrEmpty(RebuildError))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error">@RebuildError</FluentMessageBar>
+    }
+    @if (!string.IsNullOrEmpty(RebuildMessage))
+    {
+        <FluentMessageBar Intent="MessageIntent.Info">@RebuildMessage</FluentMessageBar>
+    }
+    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+        <FluentButton Appearance="Appearance.Neutral" Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "history")" OnClick='() => RebuildAsync("history")'>
+            @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Neutral" Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "plugin")" OnClick='() => RebuildAsync("plugin")'>
+            @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Accent" Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "all")" OnClick='() => RebuildAsync("all")'>
+            @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Neutral" Disabled="@IsRebuilding" OnClick="LoadDbSizesAsync">刷新大小</FluentButton>
+    </FluentStack>
+</FluentCard>
 
 @code {
     private List<long> GroupIds { get; set; } = new List<long>();

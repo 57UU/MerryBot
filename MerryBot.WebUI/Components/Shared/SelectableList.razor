@@ -1,0 +1,140 @@
+@typeparam TItem
+
+@* 左侧选择列表通用组件：标题 + 可选操作区 + 单选行列表。
+   行用原生 button（无 shadow DOM，天然靠左、无省略号顽疾），选中态与滚动行为集中在此一处。 *@
+<FluentCard Style="@CardStyle">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+            @if (TitleIcon is not null)
+            {
+                <FluentIcon Value="@TitleIcon" Color="Color.Accent" />
+            }
+            <strong>@Title</strong>
+            <FluentSpacer />
+            @if (ShowCount && Items is not null && Items.Count > 0)
+            {
+                <FluentBadge Appearance="Appearance.Neutral" Title="@($"{Title}数量")">@Items.Count</FluentBadge>
+            }
+            @HeaderActions
+        </FluentStack>
+        @if (!string.IsNullOrWhiteSpace(LoadError))
+        {
+            <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+            <div>
+                <FluentButton Appearance="Appearance.Lightweight" OnClick="OnRetry">点击重试</FluentButton>
+            </div>
+        }
+        else if (Items is null)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentProgressRing />
+                <span>@LoadingText</span>
+            </FluentStack>
+        }
+        else if (Items.Count == 0 && !string.IsNullOrEmpty(EmptyText))
+        {
+            <span>@EmptyText</span>
+        }
+        else
+        {
+            <div class="select-list-scroll" style="max-height:@ListMaxHeight;">
+                <div class="select-list-rows">
+                    @foreach (TItem item in Items)
+                    {
+                        string key = GetKey(item);
+                        bool isSelected = string.Equals(SelectedKey, key, StringComparison.Ordinal);
+                        <button type="button"
+                                class="select-row@(isSelected ? " selected" : string.Empty)"
+                                aria-current="@(isSelected ? "true" : "false")"
+                                @onclick="() => OnSelected.InvokeAsync(key)"
+                                @key="key">
+                            @if (RowContent is not null)
+                            {
+                                @RowContent(item)
+                            }
+                            else
+                            {
+                                <span class="select-row-title" title="@RowTitle(item)">@RowTitle(item)</span>
+                                string? sub = RowSub?.Invoke(item);
+                                if (!string.IsNullOrWhiteSpace(sub))
+                                {
+                                    <span class="select-row-sub">@sub</span>
+                                }
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    /// <summary>候选项；null 表示加载中。</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TItem>? Items { get; set; }
+
+    /// <summary>行唯一键（选择回调回传此键）。</summary>
+    [Parameter, EditorRequired]
+    public Func<TItem, string> GetKey { get; set; } = null!;
+
+    /// <summary>行主标题（默认模板使用；悬停显示全称）。</summary>
+    [Parameter, EditorRequired]
+    public Func<TItem, string> RowTitle { get; set; } = null!;
+
+    /// <summary>当前选中键；null 表示无选中。</summary>
+    [Parameter]
+    public string? SelectedKey { get; set; }
+
+    /// <summary>选中回调（参数为 <see cref="GetKey"/> 返回的键）。</summary>
+    [Parameter]
+    public EventCallback<string> OnSelected { get; set; }
+
+    /// <summary>列表标题。</summary>
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>标题图标（可空）。</summary>
+    [Parameter]
+    public Icon? TitleIcon { get; set; }
+
+    /// <summary>标题右侧是否显示数量徽章。</summary>
+    [Parameter]
+    public bool ShowCount { get; set; } = true;
+
+    /// <summary>标题行右侧扩展操作（如过滤下拉）。</summary>
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>行副标题（默认模板第二行；null/空则单行）。</summary>
+    [Parameter]
+    public Func<TItem, string>? RowSub { get; set; }
+
+    /// <summary>整行自定义模板（提供则忽略默认标题/副标题模板）。</summary>
+    [Parameter]
+    public RenderFragment<TItem>? RowContent { get; set; }
+
+    /// <summary>加载中提示文案。</summary>
+    [Parameter]
+    public string LoadingText { get; set; } = "加载中…";
+
+    /// <summary>空列表提示；null/空则不显示。</summary>
+    [Parameter]
+    public string? EmptyText { get; set; }
+
+    /// <summary>加载错误文案；非空时显示错误条与重试按钮。</summary>
+    [Parameter]
+    public string? LoadError { get; set; }
+
+    /// <summary>重试回调。</summary>
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+
+    /// <summary>列表滚动区最大高度。</summary>
+    [Parameter]
+    public string ListMaxHeight { get; set; } = "60vh";
+
+    /// <summary>外层卡片 Style（需要撑满高度时传 height:100%）。</summary>
+    [Parameter]
+    public string? CardStyle { get; set; }
+}

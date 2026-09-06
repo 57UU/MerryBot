@@ -114,6 +114,7 @@ public static class DatabaseApiMapper
                 }
                 return Results.Problem($"Rebuild 失败: {baseMsg}", statusCode: StatusCodes.Status500InternalServerError);
             }
+            finally { RebuildLock.Release(); }
         });
 
         // 轻量 Checkpoint：截断 WAL/journal，不重建索引，适合在 Rebuild 损坏时回收部分空间

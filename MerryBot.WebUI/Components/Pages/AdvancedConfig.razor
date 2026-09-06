@@ -5,103 +5,114 @@
 
 <PageTitle>高级配置</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>高级配置</h1>
-        <p class="page-header-sub">查看 / 删除插件数据库（plugin_data.db）中的原始 BSON 数据，用于排查与清理残留数据（如已删除插件遗留的记录）。</p>
-    </div>
-    <div class="page-header-actions">
-        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+        <div>
+            <h1>高级配置</h1>
+            <p>查看 / 删除插件数据库（plugin_data.db）中的原始 BSON 数据，用于排查与清理残留数据（如已删除插件遗留的记录）。</p>
+        </div>
+        <FluentSpacer />
+        <FluentButton Appearance="Appearance.Neutral" OnClick="LoadAsync" Disabled="@IsLoading" Loading="@IsLoading">
             @(IsLoading ? "刷新中…" : "刷新")
-        </button>
-    </div>
-</div>
+        </FluentButton>
+    </FluentStack>
 
-<section class="advanced-section">
-    <h2>数据库维护</h2>
-    <p class="text-muted-custom small-custom">对 plugin_data.db / group_history.db 执行 LiteDB Rebuild（碎片整理），回收空洞并重建索引。执行时阻塞读写，大库可能耗时数秒。</p>
-    @if (!string.IsNullOrEmpty(DbSizesText))
-    {
-        <div class="message-item-custom mb-3-custom">@DbSizesText</div>
-    }
-    @if (!string.IsNullOrEmpty(RebuildResult))
-    {
-        <div class="message-item-custom mb-3-custom">@RebuildResult</div>
-    }
-    @if (!string.IsNullOrEmpty(RebuildError))
-    {
-        <div class="message-item-custom mb-3-custom" style="color:var(--danger)">@RebuildError</div>
-    }
-    <div class="d-flex gap-2" style="flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("plugin")' disabled="@IsRebuilding">
-            @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
-        </button>
-        <button class="btn btn-secondary btn-sm" @onclick='() => RebuildAsync("history")' disabled="@IsRebuilding">
-            @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
-        </button>
-        <button class="btn btn-primary btn-sm" @onclick='() => RebuildAsync("all")' disabled="@IsRebuilding">
-            @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
-        </button>
-        <button class="btn btn-secondary btn-sm" @onclick="LoadDbSizesAsync" disabled="@IsRebuilding">刷新大小</button>
-    </div>
-</section>
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <strong>数据库维护</strong>
+            <small>对 plugin_data.db / group_history.db 执行 LiteDB Rebuild（碎片整理），回收空洞并重建索引。执行时阻塞读写，大库可能耗时数秒。</small>
+            @if (!string.IsNullOrEmpty(DbSizesText))
+            {
+                <span>@DbSizesText</span>
+            }
+            @if (!string.IsNullOrEmpty(RebuildResult))
+            {
+                <FluentMessageBar Intent="MessageIntent.Success">@RebuildResult</FluentMessageBar>
+            }
+            @if (!string.IsNullOrEmpty(RebuildError))
+            {
+                <FluentMessageBar Intent="MessageIntent.Error">@RebuildError</FluentMessageBar>
+            }
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true">
+                <FluentButton Appearance="Appearance.Neutral" OnClick='() => RebuildAsync("plugin")' Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "plugin")">
+                    @(IsRebuilding && RebuildingTarget == "plugin" ? "整理中…" : "整理插件库")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" OnClick='() => RebuildAsync("history")' Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "history")">
+                    @(IsRebuilding && RebuildingTarget == "history" ? "整理中…" : "整理历史库")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Accent" OnClick='() => RebuildAsync("all")' Disabled="@IsRebuilding" Loading="@(IsRebuilding && RebuildingTarget == "all")">
+                    @(IsRebuilding && RebuildingTarget == "all" ? "整理中…" : "全部整理")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" OnClick="LoadDbSizesAsync" Disabled="@IsRebuilding">刷新大小</FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
 
-@if (Error != null)
-{
-    <div class="message-item-custom mb-3-custom">@Error</div>
-}
+    @if (Error != null)
+    {
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
+    }
 
-<section class="advanced-section">
-    <h2>插件数据（Plugin_Data_Table）</h2>
-    <p class="text-muted-custom small-custom">共 @(DataEntries?.Count ?? 0) 条</p>
-    @if (DataEntries == null)
-    {
-        <div class="message-item-custom">加载中…</div>
-    }
-    else if (DataEntries.Count == 0)
-    {
-        <div class="message-item-custom">暂无数据。</div>
-    }
-    else
-    {
-        @foreach (var entry in DataEntries)
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+            <strong>插件数据（Plugin_Data_Table）</strong>
+            <FluentSpacer />
+            <small>共 @(DataEntries?.Count ?? 0) 条</small>
+        </FluentStack>
+        @if (DataEntries == null)
         {
-            <div class="advanced-entry">
-                <div class="advanced-entry-head">
-                    <code class="advanced-entry-id">@entry.Id</code>
-                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteEntryAsync(entry, isConfig: false)">删除</button>
-                </div>
-                <pre class="advanced-entry-bson">@entry.Bson</pre>
-            </div>
+            <FluentProgressRing />
         }
-    }
-</section>
-
-<section class="advanced-section">
-    <h2>插件配置（Plugin_Config_Table）</h2>
-    <p class="text-muted-custom small-custom">共 @(ConfigEntries?.Count ?? 0) 条</p>
-    @if (ConfigEntries == null)
-    {
-        <div class="message-item-custom">加载中…</div>
-    }
-    else if (ConfigEntries.Count == 0)
-    {
-        <div class="message-item-custom">暂无数据。</div>
-    }
-    else
-    {
-        @foreach (var entry in ConfigEntries)
+        else if (DataEntries.Count == 0)
         {
-            <div class="advanced-entry">
-                <div class="advanced-entry-head">
-                    <code class="advanced-entry-id">@entry.Id</code>
-                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteEntryAsync(entry, isConfig: true)">删除</button>
-                </div>
-                <pre class="advanced-entry-bson">@entry.Bson</pre>
-            </div>
+            <FluentMessageBar Intent="MessageIntent.Info">暂无数据。</FluentMessageBar>
         }
-    }
-</section>
+        else
+        {
+            @foreach (var entry in DataEntries)
+            {
+                <FluentCard>
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                        <code>@entry.Id</code>
+                        <FluentSpacer />
+                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteEntryAsync(entry, isConfig: false)">删除</FluentButton>
+                    </FluentStack>
+                    <pre style="white-space:pre-wrap;word-break:break-all;margin:8px 0 0">@entry.Bson</pre>
+                </FluentCard>
+            }
+        }
+    </FluentStack>
+
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+            <strong>插件配置（Plugin_Config_Table）</strong>
+            <FluentSpacer />
+            <small>共 @(ConfigEntries?.Count ?? 0) 条</small>
+        </FluentStack>
+        @if (ConfigEntries == null)
+        {
+            <FluentProgressRing />
+        }
+        else if (ConfigEntries.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageIntent.Info">暂无数据。</FluentMessageBar>
+        }
+        else
+        {
+            @foreach (var entry in ConfigEntries)
+            {
+                <FluentCard>
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                        <code>@entry.Id</code>
+                        <FluentSpacer />
+                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteEntryAsync(entry, isConfig: true)">删除</FluentButton>
+                    </FluentStack>
+                    <pre style="white-space:pre-wrap;word-break:break-all;margin:8px 0 0">@entry.Bson</pre>
+                </FluentCard>
+            }
+        }
+    </FluentStack>
+</FluentStack>
 
 @code {
     private List<RawEntryDto>? DataEntries;

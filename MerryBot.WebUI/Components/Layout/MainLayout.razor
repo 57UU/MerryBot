@@ -1,36 +1,257 @@
 @inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
-@{
-    var isEmbed = GetEmbedParam();
+<FluentDesignTheme Mode="DesignThemeModes.System" />
+
+@if (GetEmbedParam())
+
+{
+    @Body
 }
 
-<div class="page">
-    @if (!isEmbed)
-    {
-        <div class="sidebar">
-            <NavMenu />
-        </div>
-    }
+else
 
-    <main class="@(isEmbed ? "embed-mode" : "")">
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+{
+    <FluentLayout>
+        <FluentHeader>
+            MerryBot
+            <span style="margin-left:8px;font-size:.85rem;opacity:.75;">QQ Bot Framework</span>
+            <FluentSpacer />
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Width="auto" Style="padding-right: 16px;">
+                <FluentButton Appearance="Appearance.Neutral" Loading="@Checking" OnClick="CheckUpdateAsync">检测更新
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" Loading="@Restarting" OnClick="RestartAsync">重启程序
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" Loading="@Reloading" OnClick="ReloadAsync">重载</FluentButton>
+            </FluentStack>
+        </FluentHeader>
+        <FluentStack Class="main" Orientation="Orientation.Horizontal" Width="100%">
+            <div class="side-nav">
+                <NavMenu />
+            </div>
+            <FluentBodyContent Class="body-content">
+                <div class="content">
+                    @Body
+                </div>
+            </FluentBodyContent>
+        </FluentStack>
+    </FluentLayout>
+}
 
-<div id="blazor-error-ui" data-nosnippet role="alert" aria-live="assertive">
+<FluentToastProvider />
+<FluentTooltipProvider />
+<FluentMessageBarProvider />
+<FluentMenuProvider />
+
+<div id="blazor-error-ui" data-nosnippet>
     发生未处理的错误。
-    <a href="." class="reload">刷新</a>
-    <button type="button" class="dismiss" aria-label="关闭错误提示">×</button>
+    <a href=".">刷新</a>
+    <button type="button" class="dismiss">×</button>
 </div>
 
 @code {
+    private bool Restarting;
+
+    private bool Reloading;
+
+    private bool Checking;
+
+
+
     private bool GetEmbedParam()
+
     {
+
         var uri = new Uri(NavigationManager.Uri);
+
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
         return query["embed"] == "1";
+
+    }
+
+
+
+    private async Task<bool> ConfirmAsync(string message)
+
+    {
+
+        try
+
+        {
+
+            return await JSRuntime.InvokeAsync<bool>("confirm", message);
+
+        }
+
+        catch
+
+        {
+
+            return false;
+
+        }
+
+    }
+
+
+
+    private async Task NotifyRestartingAsync()
+
+    {
+
+        try
+
+        {
+
+            await JSRuntime.InvokeVoidAsync("alert", "正在重启,请稍后刷新页面…");
+
+        }
+
+        catch
+
+        {
+
+            // 重启瞬间连接断开属预期
+
+        }
+
+    }
+
+
+
+    private async Task CheckUpdateAsync()
+
+    {
+
+        if (Checking) return;
+
+        Checking = true;
+
+        try
+
+        {
+
+            var result = await JSRuntime.InvokeAsync<UpdateCheckResult>("configApi.request", "POST", "/api/update/check");
+
+            if (result is not { HasUpdate: true })
+
+            {
+
+                await JSRuntime.InvokeVoidAsync("alert", $"已是最新版本\n\n{result?.VersionInfo}");
+
+                return;
+
+            }
+
+
+
+            var confirmed = await JSRuntime.InvokeAsync<bool>(
+
+            "confirm", $"检测到新版本：\n\n{result.CommitMessages}\n\n立即更新并重启？");
+
+            if (!confirmed)
+
+            {
+
+                return;
+
+            }
+
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/update");
+
+            await JSRuntime.InvokeVoidAsync("alert", "正在更新并重启，请稍后刷新页面…");
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            await JSRuntime.InvokeVoidAsync("alert", $"检测更新失败: {ex.Message}");
+
+        }
+
+        finally
+
+        {
+
+            Checking = false;
+
+        }
+
+    }
+
+
+
+    private async Task RestartAsync()
+
+    {
+
+        if (Restarting) return;
+
+        if (!await ConfirmAsync("确定要重新编译并重启 MerryBot 吗?未保存的配置修改会丢失。")) return;
+
+
+
+        Restarting = true;
+
+        try
+
+        {
+
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/restart");
+
+        }
+
+        catch
+
+        {
+
+            // 重启瞬间连接断开属预期
+
+        }
+
+        await NotifyRestartingAsync();
+
+        Restarting = false;
+
+    }
+
+
+
+    private async Task ReloadAsync()
+
+    {
+
+        if (Reloading) return;
+
+        if (!await ConfirmAsync("确定要重载 MerryBot 吗?(不重新编译)未保存的配置修改会丢失。")) return;
+
+
+
+        Reloading = true;
+
+        try
+
+        {
+
+            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/reload");
+
+        }
+
+        catch
+
+        {
+
+            // 重启瞬间连接断开属预期
+
+        }
+
+        await NotifyRestartingAsync();
+
+        Reloading = false;
+
     }
 }

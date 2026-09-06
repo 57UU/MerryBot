@@ -1,252 +1,176 @@
-@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@implements IDisposable
 
-<div class="top-row">
-    <div class="nav-container">
-        <a class="nav-brand" href="">
-            <span class="nav-brand-logo">M</span>
-            <span>
-                MerryBot
-                <span class="nav-brand-sub">QQ Bot Framework</span>
-            </span>
-        </a>
+<FluentNavMenu Width="280" Collapsible="true" Title="导航菜单">
+    <div class="nav-filter">
+        <FluentSearch @bind-Value="Filter" @bind-Value:after="OnFilterChanged"
+                      Placeholder="按标题筛选" AriaLabel="按标题筛选" />
     </div>
-    <div class="top-row-actions">
-        <button class="theme-toggle" title="切换亮/暗主题" aria-label="切换亮/暗主题" @onclick="ToggleThemeAsync">
-            <Icon Name="@(IsDark == true ? "sun" : "moon")" />
-        </button>
-        <input type="checkbox" title="导航菜单" class="nav-toggler" />
-    </div>
-</div>
 
-<div class="nav-scrollable" @onclick="CloseNavIfToggled">
-    <nav class="nav-column">
-        <div class="nav-group">首页</div>
+    @if (Matches("概览"))
+    {
+        <FluentNavLink Href="" Match="NavLinkMatch.All" Icon="@(new Size20.Home())" Tooltip="概览">概览</FluentNavLink>
+    }
 
-        <NavMenuItem Href="" Match=NavLinkMatch.All Icon="home">
-            概览
-        </NavMenuItem>
+    @if (ConfigVisible)
+    {
+        <FluentNavGroup Title="配置管理" Tooltip="配置管理" Icon="@(new Size20.Settings())" @bind-Expanded="ConfigExpanded">
+            @if (Matches("配置管理") || Matches("配置中心"))
+            {
+                <FluentNavLink Href="config" Icon="@(new Size20.Wrench())" Tooltip="配置中心">配置中心</FluentNavLink>
+            }
+            @if (Matches("配置管理") || Matches("高级配置"))
+            {
+                <FluentNavLink Href="advanced" Icon="@(new Size20.Beaker())" Tooltip="高级配置">高级配置</FluentNavLink>
+            }
+            @if (Matches("配置管理") || Matches("群组管理"))
+            {
+                <FluentNavLink Href="groups" Icon="@(new Size20.People())" Tooltip="群组管理">群组管理</FluentNavLink>
+            }
+        </FluentNavGroup>
+    }
 
-        <div class="nav-group">配置管理</div>
+    @if (AiVisible)
+    {
+        <FluentNavGroup Title="AI 服务" Tooltip="AI 服务" Icon="@(new Size20.Sparkle())" @bind-Expanded="AiExpanded">
+            @if (Matches("AI 服务") || Matches("模型配置"))
+            {
+                <FluentNavLink Href="llmproviders" Icon="@(new Size20.Brain())" Tooltip="模型配置">模型配置</FluentNavLink>
+            }
+            @if (Matches("AI 服务") || Matches("技能管理"))
+            {
+                <FluentNavLink Href="skills" Icon="@(new Size20.PuzzleCube())" Tooltip="技能管理">技能管理</FluentNavLink>
+            }
+            @if (Matches("AI 服务") || Matches("记忆管理"))
+            {
+                <FluentNavLink Href="memories" Icon="@(new Size20.Archive())" Tooltip="记忆管理">记忆管理</FluentNavLink>
+            }
+            @if (Matches("AI 服务") || Matches("提示词管理"))
+            {
+                <FluentNavLink Href="prompts" Icon="@(new Size20.TextFont())" Tooltip="提示词管理">提示词管理</FluentNavLink>
+            }
+            @if (Matches("AI 服务") || Matches("定时任务"))
+            {
+                <FluentNavLink Href="clock" Icon="@(new Size20.Clock())" Tooltip="定时任务">定时任务</FluentNavLink>
+            }
+            @if (Matches("AI 服务") || Matches("会话快照"))
+            {
+                <FluentNavLink Href="sessionai" Icon="@(new Size20.Search())" Tooltip="会话快照">会话快照</FluentNavLink>
+            }
+        </FluentNavGroup>
+    }
 
-        <NavMenuItem Href="config" Icon="settings">
-            配置中心
-        </NavMenuItem>
+    @if (AuditVisible)
+    {
+        <FluentNavGroup Title="消息审计" Tooltip="消息审计" Icon="@(new Size20.Eye())" @bind-Expanded="AuditExpanded">
+            @if (Matches("消息审计") || Matches("数据统计"))
+            {
+                <FluentNavLink Href="statistics" Icon="@(new Size20.ChartMultiple())" Tooltip="数据统计">数据统计</FluentNavLink>
+            }
+            @if (Matches("消息审计") || Matches("Token 用量"))
+            {
+                <FluentNavLink Href="tokenusage" Icon="@(new Size20.ArrowTrendingLines())" Tooltip="Token 用量">Token 用量</FluentNavLink>
+            }
+            @if (Matches("消息审计") || Matches("群聊记录"))
+            {
+                <FluentNavLink Href="groupmessages" Icon="@(new Size20.Chat())" Tooltip="群聊记录">群聊记录</FluentNavLink>
+            }
+            @if (Matches("消息审计") || Matches("AI 记录"))
+            {
+                <FluentNavLink Href="aimessages" Icon="@(new Size20.Bot())" Tooltip="AI 记录">AI 记录</FluentNavLink>
+            }
+            @if (Matches("消息审计") || Matches("运行日志"))
+            {
+                <FluentNavLink Href="logs" Icon="@(new Size20.DocumentText())" Tooltip="运行日志">运行日志</FluentNavLink>
+            }
+        </FluentNavGroup>
+    }
 
-        <NavMenuItem Href="advanced" Icon="flask">
-            高级配置
-        </NavMenuItem>
-
-        <NavMenuItem Href="groups" Icon="users">
-            群组管理
-        </NavMenuItem>
-
-        <div class="nav-group">AI 服务</div>
-
-        <NavMenuItem Href="llmproviders" Icon="cpu">
-            模型配置
-        </NavMenuItem>
-
-        <NavMenuItem Href="skills" Icon="puzzle">
-            技能管理
-        </NavMenuItem>
-
-        <NavMenuItem Href="memories" Icon="archive">
-            记忆管理
-        </NavMenuItem>
-
-        <NavMenuItem Href="prompts" Icon="type">
-            提示词管理
-        </NavMenuItem>
-
-        <NavMenuItem Href="clock" Icon="clock">
-            定时任务
-        </NavMenuItem>
-
-        <NavMenuItem Href="sessionai" Icon="search">
-            会话快照
-        </NavMenuItem>
-
-        <div class="nav-group">消息审计</div>
-
-        <NavMenuItem Href="statistics" Icon="bar-chart">
-            数据统计
-        </NavMenuItem>
-
-        <NavMenuItem Href="tokenusage" Icon="trending-up">
-            Token 用量
-        </NavMenuItem>
-
-        <NavMenuItem Href="groupmessages" Icon="message-square">
-            群聊记录
-        </NavMenuItem>
-
-        <NavMenuItem Href="aimessages" Icon="bot">
-            AI 记录
-        </NavMenuItem>
-
-        <NavMenuItem Href="logs" Icon="scroll-text">
-            运行日志
-        </NavMenuItem>
-    </nav>
-
-    <div class="nav-footer">
-        <div class="d-flex flex-column gap-2">
-            <button class="btn btn-secondary btn-sm" @onclick="CheckUpdateAsync" disabled="@Checking">
-                @(Checking ? "检测中…" : "检测更新")
-            </button>
-            <button class="btn btn-danger btn-sm" @onclick="RestartAsync" disabled="@Restarting">
-                @(Restarting ? "重启中…" : "重启程序")
-            </button>
-            <button class="btn btn-secondary btn-sm" @onclick="ReloadAsync" disabled="@Reloading">
-                @(Reloading ? "重载中…" : "重载")
-            </button>
-        </div>
-    </div>
-</div>
+    @if (IsFiltering && !AnyVisible)
+    {
+        <div class="nav-empty">无匹配项</div>
+    }
+</FluentNavMenu>
 
 @code {
-    private bool Restarting;
-    private bool Reloading;
-    private bool Checking;
+    // 分组默认全部展开
+    private bool ConfigExpanded = true;
 
-    // 主题状态：预渲染阶段未知（显示 moon 占位），电路建立后从 JS 读取
-    private bool? IsDark;
-    private bool _themeInitialized;
+    private bool AiExpanded = true;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private bool AuditExpanded = true;
+
+    private string Filter = string.Empty;
+
+    private bool IsFiltering => !string.IsNullOrWhiteSpace(Filter);
+
+    private bool Matches(string title)
     {
-        // 与页面数据加载同因：预渲染阶段无法调 JS，交互连接建立后再读当前主题
-        if (firstRender && !_themeInitialized)
+        if (!IsFiltering)
         {
-            _themeInitialized = true;
-            try
-            {
-                IsDark = await JSRuntime.InvokeAsync<string>("theme.get") == "dark";
-                StateHasChanged();
-            }
-            catch
-            {
-                // 电路断开等场景忽略
-            }
+            return true;
+        }
+        return title.Contains(Filter.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool ConfigVisible =>
+        Matches("配置管理") || Matches("配置中心") || Matches("高级配置") || Matches("群组管理");
+
+    private bool AiVisible =>
+        Matches("AI 服务") || Matches("模型配置") || Matches("技能管理") || Matches("记忆管理")
+        || Matches("提示词管理") || Matches("定时任务") || Matches("会话快照");
+
+    private bool AuditVisible =>
+        Matches("消息审计") || Matches("数据统计") || Matches("Token 用量") || Matches("群聊记录")
+        || Matches("AI 记录") || Matches("运行日志");
+
+    private bool AnyVisible => Matches("概览") || ConfigVisible || AiVisible || AuditVisible;
+
+    protected override void OnInitialized()
+    {
+        ExpandActiveGroup();
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        ExpandActiveGroup();
+        StateHasChanged();
+    }
+
+    private void ExpandActiveGroup()
+    {
+        string path = new Uri(Navigation.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+        if (path is "config" or "advanced" or "groups")
+        {
+            ConfigExpanded = true;
+        }
+        else if (path is "llmproviders" or "skills" or "memories" or "prompts" or "clock" or "sessionai")
+        {
+            AiExpanded = true;
+        }
+        else if (path is "statistics" or "tokenusage" or "groupmessages" or "aimessages" or "forwardedmessage" or "logs")
+        {
+            AuditExpanded = true;
         }
     }
 
-    /// <summary>切换亮/暗主题并持久化选择。</summary>
-    private async Task ToggleThemeAsync()
+    private void OnFilterChanged()
     {
-        try
+        if (IsFiltering)
         {
-            var next = await JSRuntime.InvokeAsync<string>("theme.toggle");
-            IsDark = next == "dark";
+            ConfigExpanded = true;
+            AiExpanded = true;
+            AuditExpanded = true;
         }
-        catch
+        else
         {
-            // 电路断开等场景忽略
+            ExpandActiveGroup();
         }
     }
 
-    private async Task CloseNavIfToggled()
+    public void Dispose()
     {
-        // 移动端：点击导航项后关闭展开的菜单
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("closeNavMenu");
-        }
-        catch
-        {
-            // 忽略 JS 调用失败（例如电路已断开）
-        }
-    }
-
-    private async Task<bool> ConfirmAsync(string message)
-    {
-        try
-        {
-            return await JSRuntime.InvokeAsync<bool>("confirm", message);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private async Task NotifyRestartingAsync()
-    {
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("alert", "正在重启,请稍后刷新页面…");
-        }
-        catch
-        {
-            // 重启瞬间连接断开属预期
-        }
-    }
-
-    private async Task CheckUpdateAsync()
-    {
-        if (Checking) return;
-        Checking = true;
-        try
-        {
-            var result = await JSRuntime.InvokeAsync<UpdateCheckResult>("configApi.request", "POST", "/api/update/check");
-            if (result is not { HasUpdate: true })
-            {
-                await JSRuntime.InvokeVoidAsync("alert", $"已是最新版本\n\n{result?.VersionInfo}");
-                return;
-            }
-
-            var confirmed = await JSRuntime.InvokeAsync<bool>(
-                "confirm", $"检测到新版本：\n\n{result.CommitMessages}\n\n立即更新并重启？");
-            if (!confirmed)
-            {
-                return;
-            }
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/update");
-            await JSRuntime.InvokeVoidAsync("alert", "正在更新并重启，请稍后刷新页面…");
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("alert", $"检测更新失败: {ex.Message}");
-        }
-        finally
-        {
-            Checking = false;
-        }
-    }
-
-    private async Task RestartAsync()
-    {
-        if (Restarting) return;
-        if (!await ConfirmAsync("确定要重新编译并重启 MerryBot 吗?未保存的配置修改会丢失。")) return;
-
-        Restarting = true;
-        try
-        {
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/restart");
-        }
-        catch
-        {
-            // 重启瞬间连接断开属预期
-        }
-        await NotifyRestartingAsync();
-        Restarting = false;
-    }
-
-    private async Task ReloadAsync()
-    {
-        if (Reloading) return;
-        if (!await ConfirmAsync("确定要重载 MerryBot 吗?(不重新编译)未保存的配置修改会丢失。")) return;
-
-        Reloading = true;
-        try
-        {
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/reload");
-        }
-        catch
-        {
-            // 重启瞬间连接断开属预期
-        }
-        await NotifyRestartingAsync();
-        Reloading = false;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

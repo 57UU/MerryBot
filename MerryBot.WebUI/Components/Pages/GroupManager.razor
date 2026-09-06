@@ -4,85 +4,74 @@
 
 <PageTitle>群组管理</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>群组管理</h1>
-        <p class="page-header-sub">管理 MerryBot 在哪些群聊中启用。改动直接写入 core 配置，立即生效，无需重启。</p>
-    </div>
-    <div class="page-header-actions">
-        <button class="btn btn-secondary btn-sm" @onclick="LoadAsync" disabled="@IsLoading">
-            @(IsLoading ? "刷新中…" : "刷新")
-        </button>
-    </div>
-</div>
-
-@if (Error != null)
-{
-    <div class="message-item-custom mb-3-custom">@Error</div>
-}
-
-<section class="message-item-custom mb-3-custom">
-    <div class="message-header-custom"><strong>启用新群</strong></div>
-    <div class="message-content-custom inline-row">
-        <input class="form-control" @bind="NewGroupText" placeholder="输入 QQ 群号" />
-        <button class="btn btn-primary" @onclick="AddGroupAsync" disabled="@(IsMutating || string.IsNullOrWhiteSpace(NewGroupText))">
-            @(IsMutating ? "处理中…" : "启用")
-        </button>
-    </div>
-</section>
-
-@if (Data == null)
-{
-    <div class="message-item-custom">加载中…</div>
-}
-else if (Data.Groups.Count == 0)
-{
-    <div class="message-item-custom">还没有任何群聊记录，输入群号即可启用。</div>
-}
-else
-{
-    <div class="message-item-custom">
-        <div class="message-content-custom" style="overflow-x:auto">
-            <table class="table">
-                <thead>
-                <tr><th>群号</th><th>群名</th><th>人数</th><th>消息数</th><th>AI 消息数</th><th>状态</th><th></th></tr>
-                </thead>
-                <tbody>
-                @foreach (var group in Data.Groups)
-                {
-                    <tr @key="group.GroupId">
-                        <td><code>@group.GroupId</code></td>
-                        <td>@(string.IsNullOrEmpty(group.Name) ? "—" : group.Name)</td>
-                        <td>@(group.MemberCount > 0 ? group.MemberCount.ToString() : "—")</td>
-                        <td>@group.MessageCount</td>
-                        <td>@group.AiMessageCount</td>
-                        <td>
-                            @if (group.Enabled)
-                            {
-                                <span class="badge badge-success">已启用</span>
-                            }
-                            else
-                            {
-                                <span class="badge">未启用</span>
-                            }
-                        </td>
-                        <td class="inline-row">
-                            @if (group.Enabled)
-                            {
-                                <button class="btn btn-danger btn-sm" @onclick="() => ToggleAsync(group.GroupId, false)" disabled="@IsMutating">禁用</button>
-                            }
-                            else
-                            {
-                                <button class="btn btn-secondary btn-sm" @onclick="() => ToggleAsync(group.GroupId, true)" disabled="@IsMutating">启用</button>
-                            }
-                        </td>
-                    </tr>
-                }
-                </tbody>
-            </table>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+        <div>
+            <h1>群组管理</h1>
+            <p>管理 MerryBot 在哪些群聊中启用。改动直接写入 core 配置，立即生效，无需重启。</p>
         </div>
-    </div>
-}
+        <FluentSpacer />
+        <FluentButton Appearance="Appearance.Neutral" OnClick="LoadAsync" Disabled="@IsLoading" Loading="@IsLoading">
+            @(IsLoading ? "刷新中…" : "刷新")
+        </FluentButton>
+    </FluentStack>
+
+    @if (Error != null)
+    {
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
+    }
+
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <strong>启用新群</strong>
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentTextField Placeholder="输入 QQ 群号" @bind-Value="NewGroupText" Style="flex:1" />
+                <FluentButton Appearance="Appearance.Accent" OnClick="AddGroupAsync" Disabled="@(IsMutating || string.IsNullOrWhiteSpace(NewGroupText))" Loading="@IsMutating">
+                    @(IsMutating ? "处理中…" : "启用")
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+
+    @if (Data == null)
+    {
+        <FluentProgressRing />
+    }
+    else if (Data.Groups.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageIntent.Info">还没有任何群聊记录，输入群号即可启用。</FluentMessageBar>
+    }
+    else
+    {
+        <FluentDataGrid Items="@((Data?.Groups ?? []).AsQueryable())">
+            <PropertyColumn Property="@(group => group.GroupId)" Title="群号" Sortable="true" />
+            <TemplateColumn Title="群名" Context="group">@(string.IsNullOrEmpty(group.Name) ? "—" : group.Name)</TemplateColumn>
+            <TemplateColumn Title="人数" Context="group">@(group.MemberCount > 0 ? group.MemberCount.ToString() : "—")</TemplateColumn>
+            <PropertyColumn Property="@(group => group.MessageCount)" Title="消息数" Sortable="true" />
+            <PropertyColumn Property="@(group => group.AiMessageCount)" Title="AI 消息数" Sortable="true" />
+            <TemplateColumn Title="状态" Context="group">
+                @if (group.Enabled)
+                {
+                    <FluentBadge Appearance="Appearance.Accent">已启用</FluentBadge>
+                }
+                else
+                {
+                    <FluentBadge Appearance="Appearance.Neutral">未启用</FluentBadge>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="操作" Context="group">
+                @if (group.Enabled)
+                {
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => ToggleAsync(group.GroupId, false)" Disabled="@IsMutating">禁用</FluentButton>
+                }
+                else
+                {
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => ToggleAsync(group.GroupId, true)" Disabled="@IsMutating">启用</FluentButton>
+                }
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+</FluentStack>
 
 @code {
     private GroupListPayload? Data;

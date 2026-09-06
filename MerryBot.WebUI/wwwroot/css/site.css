@@ -1,0 +1,182 @@
+/* MerryBot WebUI 结构样式（仅页面骨架；控件外观全部由 Fluent UI 提供）。
+   对标官方 Fluent Blazor 模板的 app.css 布局部分，无自定义设计令牌。 */
+
+body {
+    font-family: var(--body-font, "Segoe UI Variable", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
+    margin: 0;
+    /* 跟随 Fluent 主题：内容不足一屏时，剩余区域与页面同色，避免露黑/露白 */
+    background-color: var(--neutral-layer-1);
+    color: var(--neutral-foreground-rest);
+    /* 保底：body 至少撑满视口，末尾外边距塌陷也露不出 html 背景 */
+    min-height: 100vh;
+}
+
+/* 主横排区：侧边导航 + 内容 */
+.main {
+    align-items: stretch !important;
+}
+
+/* 侧边导航列：文档目录式扁平风格，整栏同一底色（容器与菜单项同源），宽度跟随菜单，
+   吸顶全高 + 独立滚动 */
+.side-nav {
+    width: auto;
+    flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    background-color: var(--neutral-layer-2);
+    color: var(--neutral-foreground-rest);
+    border-right: 1px solid var(--neutral-stroke-divider-rest);
+    padding: 12px 8px;
+}
+
+/* 顶部筛选框：占满栏宽 */
+.nav-filter {
+    padding: 0 4px 8px;
+}
+.nav-filter fluent-search {
+    width: 100%;
+}
+
+/* 筛选无结果提示 */
+.nav-empty {
+    padding: 8px 12px;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+}
+
+/* 左侧导航（FluentNavMenu）：扁平目录风——按钮行一律透明，只有选中项有底色。
+   兜底规则：Fluent 把底色画在哪层不固定（item / group 包裹层 / 内层元素），
+   把导航作用域内各层的底色和阴影一次性清掉。
+   全部 !important：Blazor scoped 样式形如 .fluent-nav-item[b-xxx]（三个 class 级），
+   不带 !important 会被它压过；后面的悬停/选中规则同样 !important 且位于其后，
+   特异度更高，不受影响。 */
+.side-nav .fluent-nav-menu,
+.side-nav .fluent-nav-menu div,
+.side-nav .fluent-nav-menu a,
+.side-nav .fluent-nav-menu span,
+.side-nav .fluent-nav-menu fluent-button {
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+.fluent-nav-menu .fluent-nav-item,
+.fluent-nav-menu .fluent-nav-item.expander {
+    color: var(--neutral-foreground-rest);
+}
+.fluent-nav-menu .fluent-nav-item.expander:hover {
+    background-color: rgba(127, 127, 127, 0.15) !important;
+}
+.fluent-nav-menu .fluent-nav-link {
+    border-radius: 6px;
+    margin: 1px 0;
+    background-color: transparent !important;
+}
+.fluent-nav-menu .fluent-nav-link.notactive {
+    color: var(--neutral-foreground-rest);
+    font-weight: 400;
+}
+.fluent-nav-menu a.fluent-nav-link[aria-current="page"],
+.fluent-nav-menu a.fluent-nav-link.active {
+    background-color: rgba(127, 127, 127, 0.28) !important;
+    color: var(--neutral-foreground-rest);
+    font-weight: 600;
+}
+.fluent-nav-menu a.fluent-nav-link:not(.notactive):hover {
+    background-color: rgba(127, 127, 127, 0.15) !important;
+}
+
+/* 通用选择列表（SelectableList）：原生 button 行，无 shadow DOM，天然靠左。
+   选中态 = 中性底 + 左侧主题色条；悬停/选中用中性灰罩，亮暗主题及插件改写下稳定。 */
+.select-list-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.select-list-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.select-row {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-left: 3px solid transparent;
+    border-radius: 8px;
+    padding: 7px 12px 7px 9px;
+}
+.select-row:hover {
+    background: rgba(127, 127, 127, 0.15);
+}
+.select-row.selected {
+    background: rgba(127, 127, 127, 0.22);
+    border-left-color: var(--accent-fill-rest);
+}
+.select-row:focus-visible {
+    outline: 2px solid var(--accent-fill-rest);
+    outline-offset: 1px;
+}
+.select-row-title {
+    display: block;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.select-row-sub {
+    display: block;
+    opacity: 0.7;
+    font-size: 0.85em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.select-row-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.select-row-line .select-row-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* 内容区：占满剩余宽度 */
+.body-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+
+.content {
+    padding: 1rem 1.5rem 3rem;
+    width: 100%;
+    max-width: 1200px;
+}
+
+/* Blazor 默认错误条（模板自带样式的精简版） */
+#blazor-error-ui {
+    background: var(--neutral-layer-floating, lightyellow);
+    color: var(--neutral-foreground-rest, #000);
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}

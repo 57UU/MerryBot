@@ -6,49 +6,45 @@
 
 <PageTitle>AI 记录</PageTitle>
 
-<div class="container-custom h-100-custom" style="height: 100%;">
-
-    <div class="row-layout">
-        <!-- 左侧群聊列表 -->
-        <div class="col-left">
-            <GroupListPanel SelectedGroupId="SelectedAiGroupId"
-                            OnGroupSelected="OnGroupSelected"
-                            OnLoaded="OnGroupsLoaded" />
-        </div>
-
-        <!-- 右侧消息展示 -->
-        <div class="col-right">
-            <PagedMessageContainer TItem="AiMessageEntry"
-                                   ElementId="ai-message-container"
-                                   Key="@(SelectedAiGroupId > 0 ? SelectedAiGroupId.ToString() : string.Empty)"
-                                   EmptySelectionHint="请从左侧选择一个群聊"
-                                   EmptyText="暂无 AI 消息"
-                                   LoadPageAsync="LoadAiMessagesPage">
-                <HeaderContent>
-                    @(SelectedAiGroupId > 0 ? $"群聊 {SelectedAiGroupId} 的 AI 消息" : "请选择一个群聊")
-                </HeaderContent>
-                <BodyContent>
-                    @foreach (var message in context)
-                    {
-                        <div class="message-item-custom mb-3-custom">
-                            <div class="message-header-custom">
-                                <strong>@message.MessageType</strong>
-                                <span class="text-muted-custom float-end-custom">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
-                            </div>
-                            <div class="message-content-custom">
-                                <div>@message.Content</div>
-                                @if (message.InputTokens > 0 || message.OutputTokens > 0)
-                                {
-                                    <div class="text-muted-custom small-custom mt-1-custom">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @(message.InputTokens + message.OutputTokens)</div>
-                                }
-                            </div>
-                        </div>
-                    }
-                </BodyContent>
-            </PagedMessageContainer>
-        </div>
+<FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" Style="height: 100%;">
+    @* 左侧群聊列表 *@
+    <div style="width: 280px; flex-shrink: 0;">
+        <GroupListPanel SelectedGroupId="SelectedAiGroupId"
+                        OnGroupSelected="OnGroupSelected"
+                        OnLoaded="OnGroupsLoaded" />
     </div>
-</div>
+
+    @* 右侧消息展示 *@
+    <div style="flex-grow: 1; min-width: 0;">
+        <PagedMessageContainer TItem="AiMessageEntry"
+                               ElementId="ai-message-container"
+                               Key="@(SelectedAiGroupId > 0 ? SelectedAiGroupId.ToString() : string.Empty)"
+                               EmptySelectionHint="请从左侧选择一个群聊"
+                               EmptyText="暂无 AI 消息"
+                               LoadPageAsync="LoadAiMessagesPage">
+            <HeaderContent>
+                @(SelectedAiGroupId > 0 ? $"群聊 {SelectedAiGroupId} 的 AI 消息" : "请选择一个群聊")
+            </HeaderContent>
+            <BodyContent>
+                @foreach (var message in context)
+                {
+                    <FluentCard Style="margin-bottom: 12px;">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentBadge Appearance="Appearance.Accent">@message.MessageType</FluentBadge>
+                            <FluentSpacer />
+                            <span style="font-size: 12px; color: var(--neutral-foreground-hint);">@DateTimeOffset.FromUnixTimeSeconds(message.Time).ToString("yyyy-MM-dd HH:mm:ss")</span>
+                        </FluentStack>
+                        <div style="margin-top: 8px;">@message.Content</div>
+                        @if (message.InputTokens > 0 || message.OutputTokens > 0)
+                        {
+                            <div style="font-size: 12px; color: var(--neutral-foreground-hint); margin-top: 4px;">Token 用量：输入 @message.InputTokens · 输出 @message.OutputTokens · 共 @(message.InputTokens + message.OutputTokens)</div>
+                        }
+                    </FluentCard>
+                }
+            </BodyContent>
+        </PagedMessageContainer>
+    </div>
+</FluentStack>
 
 @code {
     private long SelectedAiGroupId { get; set; } = 0;

@@ -1,9 +1,12 @@
+using System.Net;
 using DataService;
 using MerryBot.WebUI.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace MerryBot.WebUI;
 
@@ -33,6 +36,9 @@ public class Program
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+        // Blazor Server 场景下先注册默认 HttpClient，再注册 Fluent UI 组件服务
+        builder.Services.AddHttpClient();
+        builder.Services.AddFluentUIComponents();
         // data
         builder.Services.AddSingleton(historyRecorder);
 
@@ -75,6 +81,15 @@ public class Program
             .AddInteractiveServerRenderMode();
 
         app.Urls.Add(webAddress);
+
+        // WebUI 无内置鉴权（by design）：非本地回环监听意味着局域网/公网可直达全部管理 API，启动时明确告警
+        if (!IsLoopbackAddress(webAddress))
+        {
+            app.Logger.LogWarning(
+                "WebUI 正在非本地地址上监听 {WebAddress}：WebUI 无内置鉴权，所有管理 API（含配置/Key/重启/更新）将对该网络可见。"
+                + "建议仅绑定 localhost 并经 SSH 端口转发远程管理；如确需远程访问，请经受控内网或 HTTPS 反向代理保护，风险自担。",
+                webAddress);
+        }
 
         // 图片API
         app.MapGet("/api/image/{id}", async (long id, HistoryRecorder historyRecorder) =>
@@ -143,6 +158,28 @@ public class Program
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// 判断监听地址是否为本地回环（localhost / 127.x / ::1）。
+    /// 解析失败时返回 true（交由后续启动流程报错，避免误报）。
+    /// </summary>
+    private static bool IsLoopbackAddress(string webAddress)
+    {
+        if (!Uri.TryCreate(webAddress, UriKind.Absolute, out Uri? uri))
+        {
+            return true;
+        }
+        string host = uri.Host.Trim().Trim('[', ']');
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (IPAddress.TryParse(host, out IPAddress? address))
+        {
+            return IPAddress.IsLoopback(address);
+        }
+        return false;
     }
 
     private static string GetImageContentType(string? url)

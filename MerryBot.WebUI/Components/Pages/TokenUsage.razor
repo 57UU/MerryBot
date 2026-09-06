@@ -7,69 +7,113 @@
 
 <PageTitle>Token 用量</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1>Token 用量</h1>
-        <p class="page-header-sub">AI 会话 token 消耗统计，数据来自消息审计的 AI 消息。</p>
-    </div>
-</div>
+<h1>Token 用量</h1>
+<p>AI 会话 token 消耗统计，数据来自消息审计的 AI 消息。</p>
 
-<div class="stat-row mb-3-custom">
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
     @foreach (var range in Ranges)
     {
         var kind = range;
-        <button class="btn btn-sm @(Selected == kind ? "btn-primary" : "btn-secondary")" @onclick="() => SelectRangeAsync(kind)">@Describe(kind)</button>
+        <FluentButton Appearance="@(Selected == kind ? Appearance.Accent : Appearance.Neutral)" OnClick="() => SelectRangeAsync(kind)">@Describe(kind)</FluentButton>
     }
-</div>
+</FluentStack>
 
 @if (IsLoading)
 {
-    <p class="text-muted-custom">加载中…</p>
+    <FluentProgressRing />
 }
 else
 {
-    <h2 class="page-title">用量汇总（@Describe(Selected)）</h2>
-    <div class="stat-row">
-        <StatCard Title="总输入" Value="@FormatTokens(TotalInput)" IconName="download" Tone="cyan" />
-        <StatCard Title="缓存命中" Value="@FormatTokens(TotalCached)" IconName="zap" Tone="green" />
-        <StatCard Title="缓存命中率" Value="@FormatRate(TotalCached, TotalUncached)" IconName="target" Tone="green" />
-        <StatCard Title="未缓存输入" Value="@FormatTokens(TotalUncached)" IconName="type" Tone="indigo" />
-        <StatCard Title="输出" Value="@FormatTokens(TotalOutput)" IconName="upload" Tone="violet" />
-        <StatCard Title="总计 / 消息数" Value="@($"{FormatTokens(TotalAll)} / {MessageCount}")" IconName="cpu" Tone="amber" />
-    </div>
+    <h2>用量汇总（@Describe(Selected)）</h2>
+    <FluentGrid Spacing="3" Style="margin-bottom:12px;width:100%;">
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.ArrowDownload())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@FormatTokens(TotalInput)</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">总输入</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.Sparkle())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@FormatTokens(TotalCached)</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">缓存命中</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.Target())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@FormatRate(TotalCached, TotalUncached)</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">缓存命中率</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.TextFont())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@FormatTokens(TotalUncached)</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">未缓存输入</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.ArrowUpload())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@FormatTokens(TotalOutput)</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">输出</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem xs="12" sm="6" lg="4" xl="2">
+            <FluentCard Style="height:100%;">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Size20.Brain())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                        <strong style="font-size:1.35rem;line-height:1.2;">@($"{FormatTokens(TotalAll)} / {MessageCount}")</strong>
+                        <span style="color:var(--neutral-foreground-hint);font-size:.85rem;">总计 / 消息数</span>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+    </FluentGrid>
 
-    <h2 class="page-title">@GranularityTitle 柱状图</h2>
+    <h2>@GranularityTitle 柱状图</h2>
     <TokenBarChart Buckets="PaddedBuckets" BucketSeconds="BucketSeconds" />
 
-    <h2 class="page-title">会话明细</h2>
+    <h2>会话明细</h2>
     @if (Sessions.Count == 0)
     {
-        <p class="text-muted-custom">该时间范围内没有 AI 消息记录</p>
+        <p>该时间范围内没有 AI 消息记录</p>
     }
     else
     {
-        <div class="container-custom">
-            <table class="table">
-                <thead>
-                <tr><th>会话</th><th>消息数</th><th>缓存命中</th><th>未缓存输入</th><th>输出</th><th>命中率</th><th>合计</th><th>最后活动</th></tr>
-                </thead>
-                <tbody>
-                @foreach (var session in Sessions)
-                {
-                    <tr @key="session.SessionKey">
-                        <td>@DescribeSession(session.SessionKey)</td>
-                        <td>@session.MessageCount</td>
-                        <td>@session.CachedTokens</td>
-                        <td>@session.UncachedInputTokens</td>
-                        <td>@session.OutputTokens</td>
-                        <td>@FormatRate(session.CachedTokens, session.UncachedInputTokens)</td>
-                        <td>@session.TotalTokens</td>
-                        <td>@DateTimeOffset.FromUnixTimeSeconds(session.LastTime).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </div>
+        <FluentDataGrid Items="@Sessions.AsQueryable()">
+            <TemplateColumn Title="会话" Context="session">@DescribeSession(session.SessionKey)</TemplateColumn>
+            <PropertyColumn Property="@(s => s.MessageCount)" Title="消息数" Sortable="true" />
+            <PropertyColumn Property="@(s => s.CachedTokens)" Title="缓存命中" Sortable="true" />
+            <PropertyColumn Property="@(s => s.UncachedInputTokens)" Title="未缓存输入" Sortable="true" />
+            <PropertyColumn Property="@(s => s.OutputTokens)" Title="输出" Sortable="true" />
+            <TemplateColumn Title="命中率" Context="session">@FormatRate(session.CachedTokens, session.UncachedInputTokens)</TemplateColumn>
+            <PropertyColumn Property="@(s => s.TotalTokens)" Title="合计" Sortable="true" />
+            <TemplateColumn Title="最后活动" Context="session">@DateTimeOffset.FromUnixTimeSeconds(session.LastTime).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</TemplateColumn>
+        </FluentDataGrid>
     }
 }
 

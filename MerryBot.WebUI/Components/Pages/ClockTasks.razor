@@ -6,149 +6,145 @@
 
 <PageTitle>定时任务</PageTitle>
 
-<div class="container-custom clock-page">
-    <h1>定时任务</h1>
-    <p class="text-muted-custom">所有插件的定时任务（按 pluginId 隔离）。可编辑调度与文本型内容、启停或删除任务；插件自定义模型的内容为只读，请在插件侧修改。任务的创建由插件/模型工具完成。</p>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <div>
+        <h1>定时任务</h1>
+        <p>所有插件的定时任务（按 pluginId 隔离）。可编辑调度与文本型内容、启停或删除任务；插件自定义模型的内容为只读，请在插件侧修改。任务的创建由插件/模型工具完成。</p>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Error))
     {
-        <div class="message-item-custom mb-3-custom">@Error</div>
+        <FluentMessageBar Intent="MessageIntent.Error">@Error</FluentMessageBar>
     }
 
     @if (Tasks is null)
     {
-        <span>加载中…</span>
+        <FluentProgressRing />
     }
     else if (Tasks.Count == 0)
     {
-        <div class="message-item-custom">暂时没有任何定时任务。</div>
+        <FluentMessageBar Intent="MessageIntent.Info">暂时没有任何定时任务。</FluentMessageBar>
     }
     else
     {
-        <div class="clock-layout">
-            <aside class="message-item-custom clock-list">
-                <div class="clock-list-header">
-                    <strong>任务</strong>
-                    <select class="form-select form-select-sm" value="@PluginFilter" @onchange="e => OnPluginFilterChangedAsync(e.Value?.ToString())">
-                        <option value="">全部插件</option>
-                        @foreach (var pluginId in PluginIds)
-                        {
-                            <option value="@pluginId">@pluginId</option>
-                        }
-                    </select>
-                </div>
-                @foreach (var task in FilteredTasks)
-                {
-                    <button class="clock-task @(SelectedTask?.Id == task.Id ? "active" : "")" @onclick="() => SelectTaskAsync(task)">
-                        <span class="clock-task-title">
-                            <span class="clock-badge @(task.Enabled ? "on" : "off")">@(task.Enabled ? "启用" : "停用")</span>
-                            <code>@task.CronExpression</code>
+        <FluentGrid Style="width:100%;">
+            <FluentGridItem xs="12" md="4" Style="align-self:start;">
+                <SelectableList TItem="ClockTaskDto"
+                                Title="任务"
+                                Items="FilteredTasks.ToList()"
+                                GetKey="@(task => task.Id.ToString())"
+                                SelectedKey="SelectedTask?.Id.ToString()"
+                                OnSelected="SelectTaskByKeyAsync"
+                                RowTitle="@(task => task.CronExpression)"
+                                LoadingText="加载任务中…"
+                                EmptyText="暂时没有任何定时任务。">
+                    <HeaderActions>
+                        <FluentSelect TOption="string"
+                            SelectedOption="@PluginFilter"
+                            SelectedOptionChanged="@((string? v) => OnPluginFilterChangedAsync(v))">
+                            <FluentOption TOption="string" Value="">全部插件</FluentOption>
+                            @foreach (var pluginId in PluginIds)
+                            {
+                                <FluentOption TOption="string" Value="@pluginId">@pluginId</FluentOption>
+                            }
+                        </FluentSelect>
+                    </HeaderActions>
+                    <RowContent Context="task">
+                        <span class="select-row-line">
+                            @if (task.Enabled)
+                            {
+                                <FluentBadge Appearance="Appearance.Accent">启用</FluentBadge>
+                            }
+                            else
+                            {
+                                <FluentBadge Appearance="Appearance.Neutral">停用</FluentBadge>
+                            }
+                            <code class="select-row-title" title="@task.CronExpression">@task.CronExpression</code>
                         </span>
-                        <small>@task.PluginId / @ShortSession(task.SessionId)</small>
-                        <small>下次: @(task.NextRunAtUtc?.LocalDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</small>
-                    </button>
-                }
-            </aside>
+                        <span class="select-row-sub">@task.PluginId / @ShortSession(task.SessionId)</span>
+                        <span class="select-row-sub">下次: @(task.NextRunAtUtc?.LocalDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</span>
+                    </RowContent>
+                </SelectableList>
+            </FluentGridItem>
 
-            <section class="clock-detail">
+            <FluentGridItem xs="12" md="8">
                 @if (SelectedTask is null)
                 {
-                    <div class="message-item-custom">从左侧选择一个任务进行编辑。</div>
+                    <FluentMessageBar Intent="MessageIntent.Info">从左侧选择一个任务进行编辑。</FluentMessageBar>
                 }
                 else
                 {
-                    <div class="message-item-custom mb-3-custom">
-                        <div class="message-header-custom">
-                            <strong>编辑任务</strong>
-                            <small class="text-muted-custom">@SelectedTask.PluginId / @SelectedTask.SessionId</small>
-                        </div>
-                        <div class="message-content-custom clock-form">
-                            <div class="clock-field">
-                                <label class="form-label">Cron 表达式（分 时 日 月 周）</label>
-                                <input class="form-control" placeholder="0 9 * * 1-5" value="@EditCron" @onchange="e => EditCron = e.Value?.ToString() ?? string.Empty" />
-                            </div>
-                            <div class="clock-field">
-                                <label class="form-label">时区</label>
-                                <input class="form-control" placeholder="Asia/Shanghai" value="@EditTimeZone" @onchange="e => EditTimeZone = e.Value?.ToString() ?? string.Empty" />
-                            </div>
-                            <div class="clock-field">
-                                <label class="form-label">超时（秒，1-86400）</label>
-                                <input class="form-control" type="number" min="1" max="86400" value="@EditTimeout" @onchange="e => EditTimeout = e.Value?.ToString() ?? string.Empty" />
-                            </div>
-                            <div class="clock-field clock-checks">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" checked="@EditRunOnce" @onchange="e => EditRunOnce = e.Value is bool v && v" />
-                                    <label class="form-check-label">只执行一次（run_once）</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" checked="@EditEnabled" @onchange="e => EditEnabled = e.Value is bool v && v" />
-                                    <label class="form-check-label">启用</label>
-                                </div>
-                            </div>
-                            @if (SelectedTask.ContentIsText)
-                            {
-                                <div class="clock-field">
-                                    <label class="form-label">内容（留空保存则保持原内容不变）</label>
-                                    <textarea class="form-control" rows="5" value="@EditContent" @onchange="e => EditContent = e.Value?.ToString() ?? string.Empty"></textarea>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="clock-field">
-                                    <label class="form-label">内容（插件自定义类型，只读）</label>
-                                    <pre class="clock-json">@ObjectJsonText</pre>
-                                </div>
-                            }
-                            <div class="clock-actions">
-                                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@IsSaving">@(IsSaving ? "保存中…" : "保存修改")</button>
-                                <button class="btn btn-secondary" @onclick="() => ToggleEnabledAsync()" disabled="@IsSaving">@(!EditEnabled ? "启用" : "停用")</button>
-                                <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@IsSaving">删除任务</button>
-                            </div>
-                            @if (!string.IsNullOrWhiteSpace(SaveError))
-                            {
-                                <div class="clock-save-error">@SaveError</div>
-                            }
-                        </div>
-                    </div>
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                        <FluentCard>
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                                    <strong>编辑任务</strong>
+                                    <FluentSpacer />
+                                    <small>@SelectedTask.PluginId / @SelectedTask.SessionId</small>
+                                </FluentStack>
+                                <FluentTextField Label="Cron 表达式（分 时 日 月 周）" Placeholder="0 9 * * 1-5"
+                                       Value="@EditCron" ValueChanged="@(v => { EditCron = v ?? string.Empty; })" />
+                                <FluentTextField Label="时区" Placeholder="Asia/Shanghai"
+                                       Value="@EditTimeZone" ValueChanged="@(v => { EditTimeZone = v ?? string.Empty; })" />
+                                <FluentTextField Label="超时（秒，1-86400）" TextFieldType="TextFieldType.Number"
+                                       Value="@EditTimeout" ValueChanged="@(v => { EditTimeout = v ?? string.Empty; })" />
+                                <FluentCheckbox Label="只执行一次（run_once）" Value="@EditRunOnce" ValueChanged="@(v => { EditRunOnce = v; })" />
+                                <FluentCheckbox Label="启用" Value="@EditEnabled" ValueChanged="@(v => { EditEnabled = v; })" />
+                                @if (SelectedTask.ContentIsText)
+                                {
+                                    <FluentTextArea Label="内容（留空保存则保持原内容不变）" Rows="5"
+                                            Value="@EditContent" ValueChanged="@(v => { EditContent = v ?? string.Empty; })" Style="width:100%" />
+                                }
+                                else
+                                {
+                                    <FluentLabel>内容（插件自定义类型，只读）</FluentLabel>
+                                    <pre style="white-space:pre-wrap;word-break:break-word;margin:0">@ObjectJsonText</pre>
+                                }
+                                <FluentStack Orientation="Orientation.Horizontal" Wrap="true">
+                                    <FluentButton Appearance="Appearance.Accent" OnClick="SaveAsync" Disabled="@IsSaving" Loading="@IsSaving">@(IsSaving ? "保存中…" : "保存修改")</FluentButton>
+                                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => ToggleEnabledAsync()" Disabled="@IsSaving">@(!EditEnabled ? "启用" : "停用")</FluentButton>
+                                    <FluentButton Appearance="Appearance.Neutral" OnClick="DeleteAsync" Disabled="@IsSaving">删除任务</FluentButton>
+                                </FluentStack>
+                                @if (!string.IsNullOrWhiteSpace(SaveError))
+                                {
+                                    <FluentMessageBar Intent="MessageIntent.Error">@SaveError</FluentMessageBar>
+                                }
+                            </FluentStack>
+                        </FluentCard>
 
-                    <div class="message-item-custom">
-                        <div class="message-header-custom"><strong>执行记录</strong></div>
-                        <div class="message-content-custom">
-                            @if (Logs is null || Logs.Count == 0)
-                            {
-                                <span>暂无执行记录。</span>
-                            }
-                            else
-                            {
-                                <table class="table clock-log-table">
-                                    <thead>
-                                        <tr>
-                                            <th>计划时间</th>
-                                            <th>状态</th>
-                                            <th>耗时</th>
-                                            <th>结果 / 错误</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var log in Logs)
-                                        {
-                                            <tr>
-                                                <td>@log.ScheduledAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                                <td><span class="clock-badge st-@log.Status.ToString().ToLowerInvariant()">@StatusText(log.Status)</span></td>
-                                                <td>@(log.DurationMilliseconds is { } ms ? $"{ms / 1000.0:F1}s" : "-")</td>
-                                                <td class="clock-log-result">@(log.Error ?? log.SkipReason ?? TruncateText(log.ResultSummary, 160))</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            }
-                        </div>
-                    </div>
+                        <FluentCard>
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                <strong>执行记录</strong>
+                                @if (Logs is null || Logs.Count == 0)
+                                {
+                                    <span>暂无执行记录。</span>
+                                }
+                                else
+                                {
+                                    <FluentDataGrid Items="@((Logs ?? []).AsQueryable())">
+                                        <TemplateColumn Title="计划时间" Context="log">@log.ScheduledAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</TemplateColumn>
+                                        <TemplateColumn Title="状态" Context="log">
+                                            @if (log.Status == ClockRunStatus.Succeeded)
+                                            {
+                                                <FluentBadge Appearance="Appearance.Accent">@StatusText(log.Status)</FluentBadge>
+                                            }
+                                            else
+                                            {
+                                                <FluentBadge Appearance="Appearance.Neutral">@StatusText(log.Status)</FluentBadge>
+                                            }
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="耗时" Context="log">@(log.DurationMilliseconds is { } ms ? $"{ms / 1000.0:F1}s" : "-")</TemplateColumn>
+                                        <TemplateColumn Title="结果 / 错误" Context="log">@(log.Error ?? log.SkipReason ?? TruncateText(log.ResultSummary, 160))</TemplateColumn>
+                                    </FluentDataGrid>
+                                }
+                            </FluentStack>
+                        </FluentCard>
+                    </FluentStack>
                 }
-            </section>
-        </div>
+            </FluentGridItem>
+        </FluentGrid>
     }
-</div>
+</FluentStack>
 
 @code {
     private IReadOnlyList<ClockTaskDto>? Tasks;
@@ -217,6 +213,13 @@
     {
         PluginFilter = pluginId ?? string.Empty;
         await Task.CompletedTask;
+    }
+
+    /// <summary>键选择（列表组件回传任务 Id 字符串）转对象选择。</summary>
+    private Task SelectTaskByKeyAsync(string key)
+    {
+        ClockTaskDto? task = (Tasks ?? []).FirstOrDefault(t => t.Id.ToString() == key);
+        return task is null ? Task.CompletedTask : SelectTaskAsync(task);
     }
 
     private async Task SelectTaskAsync(ClockTaskDto task)

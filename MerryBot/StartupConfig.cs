@@ -76,6 +76,8 @@ public static class StartupConfig
         # 修改后需重启 MerryBot 生效。
 
         # WebUI 监听地址（默认 http://localhost:5000）
+        # 注意：WebUI 无内置鉴权，仅建议绑定本地回环（localhost/127.0.0.1）；远程管理请用 SSH 端口转发。
+        # 若改为 0.0.0.0 等非本地地址，须经受控内网或 HTTPS 反向代理保护，风险自担（启动时会打 WARNING 日志）。
         web-address: "http://localhost:5000"
         """;
 }

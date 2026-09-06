@@ -25,7 +25,6 @@ public sealed record SystemStatusDto(
     double UptimeSeconds,
     long WorkingSetBytes,
     long GcMemoryBytes,
-    string Version,
     string GitInfo);
 
 /// <summary>概览页状态 API；系统信息直接取自当前进程，Bot 状态由主程序注入，git 信息来自 HostLifecycle。</summary>
@@ -63,7 +62,6 @@ public static class StatusApiMapper
                 UptimeSeconds: (DateTime.UtcNow - ProcessStartUtc).TotalSeconds,
                 WorkingSetBytes: Environment.WorkingSet,
                 GcMemoryBytes: GC.GetTotalMemory(forceFullCollection: false),
-                Version: typeof(StatusApiMapper).Assembly.GetName().Version?.ToString() ?? "unknown",
                 GitInfo: gitInfo));
         });
     }
