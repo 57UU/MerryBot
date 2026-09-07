@@ -49,7 +49,6 @@ public static class LlmProviderApiMapper
             var modelId = Uri.UnescapeDataString(id);
             await manager.SaveModelAsync(modelId, new LlmModelSaveCommand(
                 request.ProviderId,
-                request.Name,
                 request.RemoteModelId,
                 request.ContextLength,
                 request.MaxOutputTokens,
@@ -68,7 +67,7 @@ public static class LlmProviderApiMapper
         });
         routes.MapPost("/keys", async (LlmSaveKeyRequest request, CancellationToken cancellationToken) =>
             Results.Ok(ToDto(await manager.SaveKeyAsync(
-                new LlmProviderKeySaveCommand(request.ProviderId, request.Name, request.Secret, request.Priority, request.Enabled),
+                new LlmProviderKeySaveCommand(request.ProviderId, request.Secret, request.Enabled),
                 cancellationToken))));
         routes.MapPost("/keys/{id}/delete", async (string id, CancellationToken cancellationToken) =>
         {
@@ -100,7 +99,6 @@ public static class LlmProviderApiMapper
         => new(
             source.Id,
             source.ProviderId,
-            source.Name,
             source.RemoteModelId,
             source.ContextLength,
             source.MaxOutputTokens,
@@ -112,7 +110,7 @@ public static class LlmProviderApiMapper
             source.ReasoningOptions?.Select(o => new LlmReasoningOptionDto(o.Type, o.Values)).ToList());
 
     private static LlmKeyDto ToDto(LlmProviderConfigurationKey source)
-        => new(source.Id, source.Name, source.Fingerprint, source.Priority, source.Enabled, source.UpdatedAtUtc);
+        => new(source.Id, source.Fingerprint, source.Enabled, source.UpdatedAtUtc);
 
     private static string ToApiFormatName(LlmApiFormat format)
         => format switch

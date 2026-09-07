@@ -1,0 +1,106 @@
+@implements IDialogContentComponent<ProviderDialogParams>
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentLabel Typo="Typography.PaneHeader">@(Content.Existing is null ? "手动添加 Provider" : "编辑 Provider")</FluentLabel>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
+    }
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+        <FluentTextField Label="Provider ID" Placeholder="provider-id，例如 openai-compatible" Required="true" Disabled="@(Content.Existing is not null)" Style="width:100%;" @bind-Value="ProviderId" />
+        <FluentTextField Label="显示名称" Placeholder="显示名称" Required="true" Style="width:100%;" @bind-Value="ProviderName" />
+        <FluentTextField Label="API 地址" Placeholder="https://api.example.com/v1" Required="true" Style="width:100%;" @bind-Value="BaseUrl" />
+        <FluentSelect TOption="string" Label="API 格式" Style="width:100%;" @bind-Value="ApiFormat">
+            <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
+            <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
+            <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
+        </FluentSelect>
+        <FluentTextField Label="API Key" TextFieldType="TextFieldType.Password" AutoComplete="new-password"
+                         Placeholder="@(Content.Existing is null ? "可留空，稍后在编辑中补充" : "留空则不修改已有 Key")"
+                         Style="width:100%;" @bind-Value="ApiKey" />
+        @if (Content.Existing is not null)
+        {
+            <small>@(HasExistingKey ? $"已保存 Key（{ExistingFingerprint}），留空不修改，填写则替换。" : "暂无 Key，可在此填写一个。")</small>
+        }
+    </FluentStack>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Accent" Loading="@Saving" OnClick="SaveAsync">保存</FluentButton>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="CancelAsync">取消</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [Parameter]
+    public ProviderDialogParams Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private string ProviderId = string.Empty;
+    private string ProviderName = string.Empty;
+    private string BaseUrl = string.Empty;
+    private string ApiFormat = "openai-chat-completions";
+    private string ApiKey = string.Empty;
+    private bool HasExistingKey;
+    private string? ExistingFingerprint;
+    private bool Saving;
+    private string? Error;
+
+    protected override void OnInitialized()
+    {
+        if (Content.Existing is { } existing)
+        {
+            ProviderId = existing.Id;
+            ProviderName = existing.Name;
+            BaseUrl = existing.BaseUrl;
+            ApiFormat = existing.ApiFormat;
+            LlmKeyDto? key = existing.Keys.FirstOrDefault();
+            HasExistingKey = key is not null;
+            ExistingFingerprint = key?.Fingerprint;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Saving) return;
+        if (string.IsNullOrWhiteSpace(ProviderId) || string.IsNullOrWhiteSpace(ProviderName) || string.IsNullOrWhiteSpace(BaseUrl))
+        {
+            Error = "请填写 Provider ID、显示名称和 API 地址。";
+            return;
+        }
+        Saving = true;
+        Error = null;
+        try
+        {
+            bool enabled = Content.Existing?.Enabled ?? true;
+            await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST",
+                $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(ProviderId.Trim())}",
+                new LlmSaveProviderRequest(ProviderName.Trim(), BaseUrl.Trim(), ApiFormat, enabled));
+            if (!string.IsNullOrWhiteSpace(ApiKey))
+            {
+                await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST", "/api/plugins/llm-provider/keys",
+                    new LlmSaveKeyRequest(ProviderId.Trim(), ApiKey, true));
+            }
+            Content.SavedProviderId = ProviderId.Trim();
+            Content.SavedProviderName = ProviderName.Trim();
+            await Dialog.CloseAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = DialogErrors.Shorten($"保存 Provider 失败：{ex.Message}");
+        }
+        finally
+        {
+            Saving = false;
+        }
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

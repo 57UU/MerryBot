@@ -53,7 +53,6 @@ public sealed partial class LlmProviderPlugin
                 {
                     var winner = existing.UpdatedAtUtc >= m.UpdatedAtUtc ? existing : m;
                     existing.ProviderId = winner.ProviderId;
-                    existing.Name = winner.Name;
                     existing.RemoteModelId = winner.RemoteModelId;
                     existing.ContextLength = winner.ContextLength;
                     existing.MaxOutputTokens = winner.MaxOutputTokens;

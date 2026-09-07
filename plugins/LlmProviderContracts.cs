@@ -79,7 +79,6 @@ public sealed record LlmProviderConfigurationProvider(
 public sealed record LlmProviderConfigurationModel(
     string Id,
     string ProviderId,
-    string Name,
     string RemoteModelId,
     int ContextLength,
     int MaxOutputTokens,
@@ -92,9 +91,7 @@ public sealed record LlmProviderConfigurationModel(
 
 public sealed record LlmProviderConfigurationKey(
     string Id,
-    string Name,
     string Fingerprint,
-    int Priority,
     bool Enabled,
     DateTimeOffset UpdatedAtUtc);
 
@@ -106,7 +103,6 @@ public sealed record LlmProviderCatalogImportCommand(
     string ProviderId,
     string ProviderName,
     string ModelId,
-    string ModelName,
     string? SuggestedBaseUrl,
     int ContextLength,
     int MaxOutputTokens,
@@ -122,7 +118,6 @@ public sealed record LlmProviderSaveCommand(string Name, string BaseUrl, string?
 
 public sealed record LlmModelSaveCommand(
     string ProviderId,
-    string Name,
     string RemoteModelId,
     int ContextLength,
     int MaxOutputTokens,
@@ -132,4 +127,4 @@ public sealed record LlmModelSaveCommand(
     bool EnablePromptCache = false,
     IReadOnlyList<LlmReasoningOption>? ReasoningOptions = null);
 
-public sealed record LlmProviderKeySaveCommand(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
+public sealed record LlmProviderKeySaveCommand(string ProviderId, string Secret, bool Enabled);

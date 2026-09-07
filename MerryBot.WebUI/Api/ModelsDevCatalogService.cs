@@ -96,7 +96,6 @@ internal sealed class ModelsDevCatalogService
             provider.Id,
             provider.Name,
             model.Id,
-            model.Name,
             provider.Api,
             model.Limit?.Context ?? 0,
             model.Limit?.Output ?? 0,

@@ -15,7 +15,6 @@ public sealed record LlmReasoningOptionDto(string Type, IReadOnlyList<string>? V
 public sealed record LlmModelDto(
     string Id,
     string ProviderId,
-    string Name,
     string RemoteModelId,
     int ContextLength,
     int MaxOutputTokens,
@@ -25,7 +24,7 @@ public sealed record LlmModelDto(
     string? ReasoningEffort,
     bool EnablePromptCache,
     IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions);
-public sealed record LlmKeyDto(string Id, string Name, string Fingerprint, int Priority, bool Enabled, DateTimeOffset UpdatedAtUtc);
+public sealed record LlmKeyDto(string Id, string Fingerprint, bool Enabled, DateTimeOffset UpdatedAtUtc);
 public sealed record LlmCatalogModelDto(
     string ProviderId,
     string ProviderName,
@@ -42,6 +41,6 @@ public sealed record LlmCatalogProviderDto(string Id, string Name, string? Sugge
 public sealed record LlmCatalogStatusDto(string Source, DateTimeOffset? UpdatedAtUtc, string? RefreshError);
 
 public sealed record LlmCatalogImportRequest(string ProviderId, string ModelId, string? BaseUrl, string? ApiFormat, string? ApiKey, bool? Enabled);
-public sealed record LlmSaveKeyRequest(string ProviderId, string? Name, string Secret, int Priority, bool Enabled);
+public sealed record LlmSaveKeyRequest(string ProviderId, string Secret, bool Enabled);
 public sealed record LlmSaveProviderRequest(string Name, string BaseUrl, string? ApiFormat, bool Enabled);
-public sealed record LlmSaveModelRequest(string ProviderId, string Name, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false, IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions = null);
+public sealed record LlmSaveModelRequest(string ProviderId, string RemoteModelId, int ContextLength, int MaxOutputTokens, int Capabilities, bool Enabled, string? ReasoningEffort = null, bool EnablePromptCache = false, IReadOnlyList<LlmReasoningOptionDto>? ReasoningOptions = null);

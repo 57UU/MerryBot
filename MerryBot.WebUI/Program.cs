@@ -67,6 +67,43 @@ public class Program
         }
 
         app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+        // /api 错误统一转 JSON：业务异常只返回原因短语 { "error": "原因" }；
+        // 空错误状态（404/405 等无 body）补一句中性原因，避免被重执行成整页 HTML。
+        // 必须放在 UseStatusCodePages 之后：异常不受它影响（它只处理空响应，会直接透传），
+        // 而空错误必须抢在它重执行之前先占住 body；UseExceptionHandler 包在最外层只收非 /api 的异常。
+        // 约定响应体见 wwwroot/js/configApi.js、llmProvider.js、skillApi.js 的 readError 解析。
+        app.Use(async (context, next) =>
+        {
+            bool isApi = context.Request.Path.StartsWithSegments("/api");
+            try
+            {
+                await next();
+            }
+            catch (Exception ex) when (isApi)
+            {
+                app.Logger.LogError(ex, "API {Method} {Path} 失败", context.Request.Method, context.Request.Path);
+                if (context.Response.HasStarted) throw;
+                context.Response.Clear();
+                context.Response.StatusCode = ex switch
+                {
+                    ArgumentException => StatusCodes.Status400BadRequest,
+                    KeyNotFoundException => StatusCodes.Status404NotFound,
+                    _ => StatusCodes.Status500InternalServerError,
+                };
+                await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+                return;
+            }
+            if (isApi
+                && context.Response.StatusCode >= 400
+                && !context.Response.HasStarted
+                && context.Response.ContentLength is null or 0L
+                && context.Response.ContentType is null)
+            {
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new { error = $"请求失败：HTTP {context.Response.StatusCode}" });
+            }
+        });
         app.UseAntiforgery();
 
 

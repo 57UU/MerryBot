@@ -21,7 +21,6 @@ public sealed partial class LlmProviderPlugin
     {
         [BsonId] public string Id { get; set; } = string.Empty;
         public string ProviderId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
         public string RemoteModelId { get; set; } = string.Empty;
         public int ContextLength { get; set; }
         public int MaxOutputTokens { get; set; }
@@ -50,10 +49,8 @@ public sealed partial class LlmProviderPlugin
     {
         [BsonId] public string Id { get; set; } = string.Empty;
         public string ProviderId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
         public string ProtectedSecret { get; set; } = string.Empty;
         public string Fingerprint { get; set; } = string.Empty;
-        public int Priority { get; set; }
         public bool Enabled { get; set; } = true;
         public DateTimeOffset CreatedAtUtc { get; set; }
         public DateTimeOffset UpdatedAtUtc { get; set; }

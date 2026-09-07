@@ -1,7 +1,7 @@
 @page "/llmproviders"
 @rendermode InteractiveServer
-@implements IDisposable
 @inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
 
 <PageTitle>模型配置</PageTitle>
 
@@ -15,6 +15,12 @@
     <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
 }
 
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8" Style="margin-bottom: 12px;">
+    <FluentButton Appearance="Appearance.Accent" OnClick="OpenImportDialogAsync">从 models.dev 导入</FluentButton>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="() => OpenProviderDialogAsync()">手动添加 Provider</FluentButton>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="() => OpenModelDialogAsync()">手动添加模型</FluentButton>
+</FluentStack>
+
 <FluentCard Style="margin-bottom: 12px;">
     <h3>本地运行配置</h3>
     @if (Config == null)
@@ -26,7 +32,7 @@
     }
     else if (Config.Providers.Count == 0)
     {
-        <p>暂无已导入的配置。可从页面底部 models.dev 目录导入，或在「手工维护配置」中手动添加。</p>
+        <p>暂无已导入的配置，可手动添加 Provider 或从 models.dev 导入。</p>
     }
     else
     {
@@ -35,8 +41,6 @@
             <FluentCard Style="margin-bottom: 12px;" @key="provider.Id">
                 <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
                     <strong>@provider.Name</strong>
-                    <code>@provider.Id</code>
-                    <FluentBadge Appearance="Appearance.Neutral">@provider.ApiFormat</FluentBadge>
                     @if (provider.Enabled)
                     {
                         <FluentBadge Appearance="Appearance.Accent">启用</FluentBadge>
@@ -46,9 +50,10 @@
                         <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
                     }
                     <FluentSpacer />
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => OpenProviderDialogAsync(provider)">编辑</FluentButton>
                     <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteProviderAsync(provider.Id)">删除 Provider（含模型和 Key）</FluentButton>
                 </FluentStack>
-                <p><small>@provider.BaseUrl</small></p>
+                <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@($"{provider.Id} · {provider.ApiFormat} · {provider.BaseUrl}")"><small><code>@provider.Id</code> · @provider.ApiFormat · @provider.BaseUrl</small></div>
 
                 @if (provider.Keys.Count > 0)
                 {
@@ -57,7 +62,6 @@
                         @foreach (var key in provider.Keys)
                         {
                             <FluentBadge Appearance="Appearance.Neutral" @key="key.Id">
-                                <strong>@key.Name</strong>
                                 <code>@key.Fingerprint</code>
                                 <FluentButton Appearance="Appearance.Lightweight" Title="删除此 Key" aria-label="删除此 Key" OnClick="() => DeleteKeyAsync(key.Id)">×</FluentButton>
                             </FluentBadge>
@@ -71,41 +75,43 @@
                         @foreach (var model in provider.Models)
                         {
                             <FluentCard @key="model.Id">
-                                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-                                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
-                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-                                            <code>@model.Id</code><span>→</span><code>@model.RemoteModelId</code>
-                                            @if (Config.DefaultModelId == model.Id)
-                                            {
-                                                <FluentBadge Appearance="Appearance.Accent">默认</FluentBadge>
-                                            }
-                                            @if (!model.Enabled)
-                                            {
-                                                <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
-                                            }
-                                            @if (!string.IsNullOrEmpty(model.ReasoningEffort))
-                                            {
-                                                <FluentBadge Appearance="Appearance.Neutral">思维 @model.ReasoningEffort</FluentBadge>
-                                            }
-                                            @if (model.EnablePromptCache)
-                                            {
-                                                <FluentBadge Appearance="Appearance.Neutral">缓存</FluentBadge>
-                                            }
-                                        </FluentStack>
+                                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:start;width:100%;">
+                                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                                        <span style="display:block;overflow-wrap:break-word;"><code>@model.Id</code><span>→</span><code>@model.RemoteModelId</code></span>
+                                        @if (Config.DefaultModelId == model.Id || !model.Enabled || !string.IsNullOrEmpty(model.ReasoningEffort) || model.EnablePromptCache)
+                                        {
+                                            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="4">
+                                                @if (Config.DefaultModelId == model.Id)
+                                                {
+                                                    <FluentBadge Appearance="Appearance.Accent">默认</FluentBadge>
+                                                }
+                                                @if (!model.Enabled)
+                                                {
+                                                    <FluentBadge Appearance="Appearance.Neutral">禁用</FluentBadge>
+                                                }
+                                                @if (!string.IsNullOrEmpty(model.ReasoningEffort))
+                                                {
+                                                    <FluentBadge Appearance="Appearance.Neutral">思维 @model.ReasoningEffort</FluentBadge>
+                                                }
+                                                @if (model.EnablePromptCache)
+                                                {
+                                                    <FluentBadge Appearance="Appearance.Neutral">缓存</FluentBadge>
+                                                }
+                                            </FluentStack>
+                                        }
                                         <small>
                                             @FormatLimit(model.ContextLength) context · @FormatLimit(model.MaxOutputTokens) output · @FormatCapabilities(model.Capabilities) · @FormatReasoningOptions(model.ReasoningOptions)
                                         </small>
                                     </FluentStack>
-                                    <FluentSpacer />
                                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
                                         @if (Config.DefaultModelId != model.Id)
                                         {
                                             <FluentButton Appearance="Appearance.Neutral" OnClick="() => SetDefaultAsync(model.Id)">设为默认</FluentButton>
                                         }
-                                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillManualFormAsync(model)">编辑</FluentButton>
+                                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => OpenModelDialogAsync(model)">编辑</FluentButton>
                                         <FluentButton Appearance="Appearance.Neutral" OnClick="() => DeleteModelAsync(model.Id)">删除模型</FluentButton>
                                     </FluentStack>
-                                </FluentStack>
+                                </div>
                             </FluentCard>
                         }
                     </FluentStack>
@@ -115,270 +121,16 @@
     }
 </FluentCard>
 
-@* 手工维护表单：外层 div 保留 ElementReference，供 llmProviderApi.scrollIntoView 定位 *@
-<div @ref="ManualFormSection" style="margin-bottom: 12px;">
-<FluentCard>
-    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-        <h3>手工维护配置</h3>
-        @if (EditingModelId is not null)
-        {
-            <span>正在编辑 <code>@EditingModelId</code></span>
-            <FluentButton Appearance="Appearance.Neutral" OnClick="ClearManualForm">清空表单</FluentButton>
-        }
-    </FluentStack>
-    <form @onsubmit="SaveProviderAsync" @onsubmit:preventDefault>
-        <h5>Provider</h5>
-        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
-            <FluentTextField Label="Provider ID" Placeholder="provider-id，例如 openai-compatible" Required="true" @bind-Value="EditProviderId" />
-            <FluentTextField Label="显示名称" Placeholder="显示名称" Required="true" @bind-Value="EditProviderName" />
-            <FluentTextField Label="API 地址" Placeholder="https://api.example.com/v1" Required="true" @bind-Value="EditProviderBaseUrl" />
-            <FluentSelect TOption="string" Label="API 格式" @bind-Value="EditApiFormat">
-                <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
-                <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
-                <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
-            </FluentSelect>
-        </FluentStack>
-        <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Style="margin-top: 8px;">保存 Provider</FluentButton>
-    </form>
-
-    <form style="margin-top: 12px;" @onsubmit="SaveModelAsync" @onsubmit:preventDefault>
-        <h5>模型</h5>
-        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
-            <FluentTextField Label="本地模型 ID" Placeholder="本地模型 ID，例如 provider/model" Required="true" @bind-Value="EditModelId" />
-            <FluentTextField Label="Provider ID" Placeholder="Provider ID" Required="true" @bind-Value="EditModelProviderId" />
-            <FluentTextField Label="显示名称" Placeholder="显示名称" Required="true" @bind-Value="EditModelName" />
-            <FluentTextField Label="上游 model ID" Placeholder="上游 model ID" Required="true" @bind-Value="EditModelRemoteId" />
-            <FluentNumberField Label="上下文长度" Placeholder="上下文长度" @bind-Value="EditModelContextLength" />
-            <FluentNumberField Label="最大输出" Placeholder="最大输出" @bind-Value="EditModelMaxOutput" />
-        </FluentStack>
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-            <span>能力（Capabilities）</span>
-            <small>Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
-            <FluentCheckbox @bind-Value="EditModelImageInput">视觉输入（ImageInput）</FluentCheckbox>
-            <FluentCheckbox @bind-Value="EditModelAttachmentInput">附件输入（AttachmentInput）</FluentCheckbox>
-            <FluentCheckbox @bind-Value="EditModelToolCalls">工具调用（ToolCalls）</FluentCheckbox>
-            <FluentCheckbox @bind-Value="EditModelReasoningCap">推理（Reasoning）</FluentCheckbox>
-            <FluentCheckbox @bind-Value="EditModelStructuredOutput">结构化输出（StructuredOutput）</FluentCheckbox>
-        </FluentStack>
-        <FluentCheckbox Style="margin-top: 8px;" @bind-Value="EditModelEnabled">启用此模型</FluentCheckbox>
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-top: 8px;">
-            <span>推理选项（Reasoning Options）</span>
-            <small>直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
-            @for (var _roIdx = 0; _roIdx < EditReasoningOptions.Count; _roIdx++)
-            {
-                var _ro = EditReasoningOptions[_roIdx];
-                var _idx = _roIdx;
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 4px;" @key="_idx">
-                    <FluentSelect TOption="string" Label="类型" Value="@_ro.Type" ValueChanged="@((string v) => OnReasoningOptionTypeChanged(_idx, v))">
-                        <FluentOption TOption="string" Value="toggle">toggle（开关）</FluentOption>
-                        <FluentOption TOption="string" Value="effort">effort（档位）</FluentOption>
-                    </FluentSelect>
-                    <FluentTextField Label="可选值" Placeholder="可选值，逗号分隔，如 low, medium, high" Immediate="true" Value="@_ro.ValuesText" ValueChanged="@((string v) => OnReasoningOptionValuesChanged(_idx, v))" Disabled="@(_ro.Type == "toggle")" />
-                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => RemoveReasoningOption(_idx)">删除</FluentButton>
-                </FluentStack>
-            }
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
-                <FluentButton Appearance="Appearance.Neutral" OnClick="AddReasoningOption">添加推理选项</FluentButton>
-            </FluentStack>
-        </FluentStack>
-        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-top: 8px;">
-            <FluentSelect TOption="string" Label="思维强度（Reasoning Effort）" @bind-Value="EditModelReasoningEffort">
-                <FluentOption TOption="string" Value="">不开启</FluentOption>
-                @foreach (var _eff in GetReasoningEffortOptions())
-                {
-                    <FluentOption TOption="string" Value="@_eff">@_eff</FluentOption>
-                }
-            </FluentSelect>
-        </FluentStack>
-        <small>anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
-        <FluentCheckbox Style="margin-top: 8px;" @bind-Value="EditModelEnablePromptCache">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</FluentCheckbox>
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
-            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit">保存模型</FluentButton>
-        </FluentStack>
-    </form>
-</FluentCard>
-</div>
-
-<FluentCard Style="margin-bottom: 12px;">
-    <h3>添加或替换 Provider Key</h3>
-    @if (Config?.Providers.Count > 0)
-    {
-        <form @onsubmit="SaveKeyAsync" @onsubmit:preventDefault>
-            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
-                <FluentSelect TOption="string" Label="Provider" @bind-Value="KeyProviderId">
-                    @foreach (var provider in Config.Providers)
-                    {
-                        <FluentOption TOption="string" Value="@provider.Id">@provider.Name (@provider.Id)</FluentOption>
-                    }
-                </FluentSelect>
-                <FluentTextField Label="名称" Placeholder="生产 Key" @bind-Value="KeyName" />
-                <FluentTextField Label="API Key" TextFieldType="TextFieldType.Password" AutoComplete="new-password" Required="true" @bind-Value="KeySecret" />
-                <FluentNumberField Label="优先级（数字越小越优先）" @bind-Value="KeyPriority" />
-            </FluentStack>
-            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Style="margin-top: 8px;">保存 Key</FluentButton>
-        </form>
-    }
-    else
-    {
-        <p>请先从 models.dev 导入至少一个模型。</p>
-    }
-</FluentCard>
-
-<FluentCard Style="margin-bottom: 12px;">
-    <h3>从 models.dev 添加模型</h3>
-    <p>目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-bottom: 12px;">
-        <span><strong>步骤 1 · 选择 Provider</strong></span>
-        <FluentSearch Immediate="true" Placeholder="例如 OpenCode、OpenAI、DeepSeek" Value="@CatalogProviderQuery" ValueChanged="@(v => OnProviderQueryChanged(new ChangeEventArgs { Value = v }))" />
-        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
-            <FluentButton Appearance="Appearance.Accent" Loading="@IsLoadingCatalog" Disabled="@IsLoadingCatalog" OnClick="SearchProvidersAsync">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</FluentButton>
-            <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="RefreshCatalogAsync">刷新 models.dev</FluentButton>
-        </FluentStack>
-        @if (CatalogStatus is not null)
-        {
-            <div><small>目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
-            @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
-            {
-                <div><small>刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
-            }
-        }
-    </FluentStack>
-
-    @if (HasSearchedProviders && CatalogProviders.Count == 0)
-    {
-        <p>没有找到匹配的 Provider。</p>
-    }
-    else if (CatalogProviders.Count > 0)
-    {
-        <FluentDataGrid Items="@CatalogProviders.AsQueryable()" Style="margin-bottom: 12px;">
-            <PropertyColumn Property="@(p => p.Name)" Title="Provider" Sortable="true" />
-            <TemplateColumn Title="ID" Context="catalogProvider"><code>@catalogProvider.Id</code></TemplateColumn>
-            <PropertyColumn Property="@(p => p.ModelCount)" Title="可用模型" Sortable="true" />
-            <TemplateColumn Title="操作" Context="catalogProvider">
-                <FluentButton Appearance="Appearance.Neutral" OnClick="() => SelectProviderAsync(catalogProvider)">选择并查看模型</FluentButton>
-            </TemplateColumn>
-        </FluentDataGrid>
-    }
-
-    @if (SelectedCatalogProvider is not null)
-    {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-bottom: 12px;">
-            <span><strong>步骤 2 · 为 @SelectedCatalogProvider.Name 添加模型</strong></span>
-            <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
-        </FluentStack>
-        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-bottom: 12px;">
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                <FluentSearch Immediate="true" Label="筛选模型（输入即过滤）" Placeholder="例如 gpt、deepseek、flash" Value="@CatalogModelQuery" ValueChanged="@(v => OnModelQueryChanged(new ChangeEventArgs { Value = v }))" />
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
-                    <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="LoadModelsAsync">搜索此 Provider 的模型</FluentButton>
-                </FluentStack>
-            </FluentStack>
-            <FluentTextField Label="首次添加此 Provider 时使用的 API 地址" Placeholder="https://api.example.com/v1" @bind-Value="ImportBaseUrl" />
-            <FluentSelect TOption="string" Label="API 格式" @bind-Value="ImportApiFormat">
-                <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
-                <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
-                <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
-            </FluentSelect>
-            <FluentTextField Label="添加模型时一并保存的 API Key（可留空，随后单独添加）" TextFieldType="TextFieldType.Password" AutoComplete="new-password" @bind-Value="ImportApiKey" />
-        </FluentStack>
-        <p><small>默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small></p>
-        @if (HasSearchedModels && CatalogModels.Count == 0)
-        {
-            <p>这个 Provider 中没有匹配的模型。</p>
-        }
-        else if (CatalogModels.Count > 0)
-        {
-            <FluentDataGrid Items="@CatalogModels.AsQueryable()">
-                <TemplateColumn Title="模型" Context="catalogModel"><code>@catalogModel.ModelId</code><br /><small>@catalogModel.Name</small></TemplateColumn>
-                <TemplateColumn Title="上下文" Context="catalogModel">@FormatLimit(catalogModel.ContextLength)</TemplateColumn>
-                <TemplateColumn Title="输出" Context="catalogModel">@FormatLimit(catalogModel.MaxOutputTokens)</TemplateColumn>
-                <PropertyColumn Property="@(m => m.Capabilities)" Title="能力" />
-                <TemplateColumn Title="推理选项" Context="catalogModel"><small>@FormatReasoningOptions(catalogModel.ReasoningOptions)</small></TemplateColumn>
-                <TemplateColumn Title="操作" Context="catalogModel">
-                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
-                        <FluentButton Appearance="Appearance.Accent" OnClick="() => ImportAsync(catalogModel)">添加模型</FluentButton>
-                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillManualFormAsync(catalogModel)">填入编辑表单</FluentButton>
-                    </FluentStack>
-                </TemplateColumn>
-            </FluentDataGrid>
-        }
-    }
-</FluentCard>
-
 @code {
     private LlmConfigSnapshot? Config;
-    private List<LlmCatalogProviderDto> CatalogProviders { get; set; } = [];
-    private List<LlmCatalogModelDto> CatalogModels { get; set; } = [];
-    private LlmCatalogProviderDto? SelectedCatalogProvider { get; set; }
-    private LlmCatalogStatusDto? CatalogStatus { get; set; }
-    private string CatalogProviderQuery { get; set; } = string.Empty;
-    private string CatalogModelQuery { get; set; } = string.Empty;
-    private string ImportApiKey { get; set; } = string.Empty;
-    private string ImportBaseUrl { get; set; } = string.Empty;
-    private string ImportApiFormat { get; set; } = "openai-chat-completions";
-    private string KeyProviderId { get; set; } = string.Empty;
-    private string KeyName { get; set; } = "API Key";
-    private string KeySecret { get; set; } = string.Empty;
-    private int KeyPriority { get; set; }
     private string? error;
 
-    /// <summary>页面级错误文案：服务端 500 会把整页 HTML 吐进异常消息，入库前先压成一句话，避免白墙。</summary>
+    /// <summary>页面级错误文案：入库前先经 DialogErrors 压成一句话，避免服务端 HTML 白墙。</summary>
     private string? Error
     {
         get => error;
-        set => error = ShortenError(value);
+        set => error = DialogErrors.Shorten(value);
     }
-
-    private static string? ShortenError(string? message)
-    {
-        if (string.IsNullOrWhiteSpace(message)) return message;
-        var text = message.Trim();
-        if (text.StartsWith("<!", StringComparison.OrdinalIgnoreCase)
-            || text.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
-        {
-            return "服务器内部错误（返回了 HTML 错误页），请查看服务端日志。";
-        }
-        const int maxLength = 300;
-        return text.Length <= maxLength ? text : text[..maxLength] + "…";
-    }
-    private bool IsLoadingCatalog { get; set; }
-    private bool HasSearchedProviders { get; set; }
-    private bool HasSearchedModels { get; set; }
-    private string EditProviderId { get; set; } = string.Empty;
-    private string EditProviderName { get; set; } = string.Empty;
-    private string EditProviderBaseUrl { get; set; } = string.Empty;
-    private string EditApiFormat { get; set; } = "openai-chat-completions";
-    private string EditModelId { get; set; } = string.Empty;
-    private string EditModelProviderId { get; set; } = string.Empty;
-    private string EditModelName { get; set; } = string.Empty;
-    private string EditModelRemoteId { get; set; } = string.Empty;
-    private int EditModelContextLength { get; set; } = 32_768;
-    private int EditModelMaxOutput { get; set; } = 4_096;
-    private bool EditModelImageInput { get; set; }
-    private bool EditModelAttachmentInput { get; set; }
-    private bool EditModelToolCalls { get; set; }
-    private bool EditModelReasoningCap { get; set; }
-    private bool EditModelStructuredOutput { get; set; }
-    private bool EditModelEnabled { get; set; } = true;
-    private List<EditReasoningOption> EditReasoningOptions { get; set; } = [];
-    private sealed class EditReasoningOption
-    {
-        public string Type { get; set; } = "toggle";
-        public string ValuesText { get; set; } = string.Empty;
-    }
-    private string EditModelReasoningEffort { get; set; } = string.Empty;
-    private bool EditModelEnablePromptCache { get; set; }
-    private ElementReference ManualFormSection;
-
-    /// <summary>当前正在编辑的已保存模型 ID；null 表示表单为空白新增状态。</summary>
-    private string? EditingModelId;
-
-    // 输入即过滤：防抖计时器，连续输入时只执行最后一次查询
-    private CancellationTokenSource? _providerSearchCts;
-    private CancellationTokenSource? _modelSearchCts;
-    // 请求序号守卫：响应乱序时丢弃过期结果，只应用最后一次查询
-    private int _providerSearchSeq;
-    private int _modelSearchSeq;
 
     private bool _initialized;
 
@@ -389,54 +141,8 @@
         {
             _initialized = true;
             await LoadConfigAsync();
-            // 初始加载完整 Provider 列表，输入框实时过滤
-            await SearchProvidersAsync();
             StateHasChanged();
         }
-    }
-
-    /// <summary>Provider 输入变化：更新查询词并防抖触发搜索。</summary>
-    private async Task OnProviderQueryChanged(ChangeEventArgs e)
-    {
-        CatalogProviderQuery = e.Value?.ToString() ?? string.Empty;
-        _providerSearchCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _providerSearchCts = cts;
-        try
-        {
-            await Task.Delay(300, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            return; // 期间又有新输入，本次查询作废
-        }
-        await SearchProvidersAsync();
-    }
-
-    /// <summary>模型输入变化：更新查询词并防抖触发搜索。</summary>
-    private async Task OnModelQueryChanged(ChangeEventArgs e)
-    {
-        CatalogModelQuery = e.Value?.ToString() ?? string.Empty;
-        _modelSearchCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _modelSearchCts = cts;
-        try
-        {
-            await Task.Delay(300, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        await LoadModelsAsync();
-    }
-
-    public void Dispose()
-    {
-        _providerSearchCts?.Cancel();
-        _providerSearchCts?.Dispose();
-        _modelSearchCts?.Cancel();
-        _modelSearchCts?.Dispose();
     }
 
     private async Task LoadConfigAsync()
@@ -445,10 +151,6 @@
         {
             Error = null;
             Config = await RequestAsync<LlmConfigSnapshot>("GET", "/api/plugins/llm-provider/config");
-            if (string.IsNullOrWhiteSpace(KeyProviderId))
-            {
-                KeyProviderId = Config?.Providers.FirstOrDefault()?.Id ?? string.Empty;
-            }
         }
         catch (Exception ex)
         {
@@ -456,246 +158,52 @@
         }
     }
 
-    private async Task SearchProvidersAsync()
+    private async Task OpenProviderDialogAsync(LlmProviderDto? existing = null)
     {
-        var seq = ++_providerSearchSeq;
-        try
+        var parameters = new ProviderDialogParams { Existing = existing };
+        var dialog = await DialogService.ShowDialogAsync<ProviderDialog>(parameters, new DialogParameters
         {
-            Error = null;
-            IsLoadingCatalog = true;
-            var query = Uri.EscapeDataString(CatalogProviderQuery ?? string.Empty);
-            var providers = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
-            if (seq != _providerSearchSeq) return; // 已有更新的查询，丢弃过期结果
-            CatalogProviders = providers;
-            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("GET", "/api/plugins/llm-provider/catalog/status");
-            if (seq != _providerSearchSeq) return;
-            HasSearchedProviders = true;
-        }
-        catch (Exception ex)
-        {
-            if (seq != _providerSearchSeq) return;
-            Error = $"读取本地 models.dev 目录失败：{ex.Message}";
-        }
-        finally
-        {
-            if (seq == _providerSearchSeq) IsLoadingCatalog = false;
-        }
+            Title = existing is null ? "手动添加 Provider" : "编辑 Provider",
+            Width = "560px",
+            Modal = true,
+        });
+        await dialog.Result;
+        await LoadConfigAsync();
     }
 
-    private async Task RefreshCatalogAsync()
+    private async Task OpenModelDialogAsync(LlmModelDto? existing = null, LlmCatalogModelDto? prefill = null)
     {
-        try
+        if (Config is null) return;
+        var parameters = new ModelDialogParams { Providers = Config.Providers, Existing = existing, Prefill = prefill };
+        var dialog = await DialogService.ShowDialogAsync<ModelDialog>(parameters, new DialogParameters
         {
-            Error = null;
-            IsLoadingCatalog = true;
-            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("POST", "/api/plugins/llm-provider/catalog/refresh");
-        }
-        catch (Exception ex)
-        {
-            Error = $"刷新 models.dev 失败：{ex.Message}";
-        }
-        finally
-        {
-            IsLoadingCatalog = false;
-        }
-
-        if (Error is null)
-        {
-            await SearchProvidersAsync();
-            if (SelectedCatalogProvider is not null)
-            {
-                await LoadModelsAsync();
-            }
-        }
+            Title = existing is null ? "手动添加模型" : "编辑模型",
+            Width = "720px",
+            Modal = true,
+        });
+        await dialog.Result;
+        await LoadConfigAsync();
     }
 
-    private async Task SelectProviderAsync(LlmCatalogProviderDto provider)
+    private async Task OpenImportDialogAsync()
     {
-        SelectedCatalogProvider = provider;
-        CatalogModelQuery = string.Empty;
-        CatalogModels = [];
-        HasSearchedModels = false;
-        ImportBaseUrl = provider.SuggestedBaseUrl ?? string.Empty;
-        ImportApiFormat = provider.Id.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
-            ? "anthropic-messages"
-            : "openai-chat-completions";
-        await LoadModelsAsync();
-    }
-
-    private async Task LoadModelsAsync()
-    {
-        if (SelectedCatalogProvider is null)
+        var parameters = new ImportDialogParams();
+        var dialog = await DialogService.ShowDialogAsync<ImportDialog>(parameters, new DialogParameters
         {
-            return;
-        }
-
-        var seq = ++_modelSearchSeq;
-        try
+            Title = "从 models.dev 导入",
+            Width = "900px",
+            Modal = true,
+        });
+        await dialog.Result;
+        // 不依赖 result.Cancelled：× 关闭也可能发生在导入之后，以回填对象为准
+        if (parameters.FillIntoForm is { } catalogModel)
         {
-            Error = null;
-            IsLoadingCatalog = true;
-            var providerId = Uri.EscapeDataString(SelectedCatalogProvider.Id);
-            var query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
-            var models = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
-            if (seq != _modelSearchSeq) return; // 已有更新的查询，丢弃过期结果
-            CatalogModels = models;
-            HasSearchedModels = true;
-        }
-        catch (Exception ex)
-        {
-            if (seq != _modelSearchSeq) return;
-            Error = $"读取 Provider 模型失败：{ex.Message}";
-        }
-        finally
-        {
-            if (seq == _modelSearchSeq) IsLoadingCatalog = false;
-        }
-    }
-
-    private async Task ImportAsync(LlmCatalogModelDto model)
-    {
-        try
-        {
-            Error = null;
-            Config = await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
-                new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
-                    string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
-                    ImportApiFormat, ImportApiKey, true));
-            ImportApiKey = string.Empty;
-            KeyProviderId = model.ProviderId;
-        }
-        catch (Exception ex)
-        {
-            Error = $"导入失败：{ex.Message}";
-        }
-    }
-
-    /// <summary>把 models.dev 目录模型填入「手工维护配置」的模型表单（空白新增态），便于微调后保存。</summary>
-    private async Task FillManualFormAsync(LlmCatalogModelDto model)
-    {
-        EditModelId = MakeLocalModelId(model.ProviderId, model.ModelId);
-        EditModelProviderId = model.ProviderId;
-        EditModelName = model.Name;
-        EditModelRemoteId = model.ModelId;
-        EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
-        EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
-        ApplyCapabilitiesFromString(model.Capabilities);
-        EditModelEnabled = true;
-        ApplyReasoningOptions(model.ReasoningOptions);
-        EditModelReasoningEffort = string.Empty;
-        EditModelEnablePromptCache = false;
-        EditingModelId = null;
-        await ScrollToManualFormAsync();
-    }
-
-    /// <summary>把已导入的本地模型回填到「手工维护配置」的模型表单，便于微调后覆盖保存。</summary>
-    private async Task FillManualFormAsync(LlmModelDto model)
-    {
-        EditingModelId = model.Id;
-        EditModelId = model.Id;
-        EditModelProviderId = model.ProviderId;
-        EditModelName = model.Name;
-        EditModelRemoteId = model.RemoteModelId;
-        EditModelContextLength = model.ContextLength > 0 ? model.ContextLength : 32_768;
-        EditModelMaxOutput = model.MaxOutputTokens > 0 ? model.MaxOutputTokens : 4_096;
-        ApplyCapabilitiesFromString(model.Capabilities);
-        EditModelEnabled = model.Enabled;
-        ApplyReasoningOptions(model.ReasoningOptions);
-        EditModelReasoningEffort = model.ReasoningEffort ?? string.Empty;
-        EditModelEnablePromptCache = model.EnablePromptCache;
-        await ScrollToManualFormAsync();
-    }
-
-    private async Task ScrollToManualFormAsync()
-    {
-        if (ManualFormSection.Context is not null)
-        {
-            await JSRuntime.InvokeVoidAsync("llmProviderApi.scrollIntoView", ManualFormSection);
-        }
-    }
-
-    /// <summary>清空模型表单并退出编辑态，回到空白新增状态。</summary>
-    private void ClearManualForm()
-    {
-        EditModelId = string.Empty;
-        EditModelProviderId = string.Empty;
-        EditModelName = string.Empty;
-        EditModelRemoteId = string.Empty;
-        EditModelContextLength = 32_768;
-        EditModelMaxOutput = 4_096;
-        ApplyCapabilitiesFromString(null);
-        EditModelEnabled = true;
-        ApplyReasoningOptions(null);
-        EditModelReasoningEffort = string.Empty;
-        EditModelEnablePromptCache = false;
-        EditingModelId = null;
-    }
-
-    /// <summary>与插件 MakeLocalModelId 一致的本地模型 ID 生成规则。</summary>
-    private static string MakeLocalModelId(string providerId, string modelId)
-        => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
-            ? modelId
-            : $"{providerId}/{modelId}";
-
-    private async Task SaveKeyAsync()
-    {
-        try
-        {
-            Error = null;
-            await RequestAsync<object>("POST", "/api/plugins/llm-provider/keys",
-                new LlmSaveKeyRequest(KeyProviderId, KeyName, KeySecret, KeyPriority, true));
-            KeySecret = string.Empty;
             await LoadConfigAsync();
+            await OpenModelDialogAsync(prefill: catalogModel);
         }
-        catch (Exception ex)
+        else if (parameters.Changed)
         {
-            Error = $"保存 Key 失败：{ex.Message}";
-        }
-    }
-
-    private async Task DeleteKeyAsync(string keyId)
-    {
-        try
-        {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}/delete");
             await LoadConfigAsync();
-        }
-        catch (Exception ex)
-        {
-            Error = $"删除 Key 失败：{ex.Message}";
-        }
-    }
-
-    private async Task SaveProviderAsync()
-    {
-        try
-        {
-            Error = null;
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(EditProviderId)}",
-                new LlmSaveProviderRequest(EditProviderName, EditProviderBaseUrl, EditApiFormat, true));
-            KeyProviderId = EditProviderId;
-            await LoadConfigAsync();
-        }
-        catch (Exception ex)
-        {
-            Error = $"保存 Provider 失败：{ex.Message}";
-        }
-    }
-
-    private async Task SaveModelAsync()
-    {
-        try
-        {
-            Error = null;
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(EditModelId)}",
-                new LlmSaveModelRequest(EditModelProviderId, EditModelName, EditModelRemoteId,
-                    EditModelContextLength, EditModelMaxOutput, BuildCapabilities(), EditModelEnabled, EditModelReasoningEffort, EditModelEnablePromptCache, BuildReasoningOptions()));
-            await LoadConfigAsync();
-            EditingModelId = null;
-        }
-        catch (Exception ex)
-        {
-            Error = $"保存模型失败：{ex.Message}";
         }
     }
 
@@ -714,6 +222,7 @@
 
     private async Task DeleteModelAsync(string modelId)
     {
+        if (!await ConfirmAsync($"确定要删除模型 {modelId} 吗？")) return;
         try
         {
             await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/delete?id={Uri.EscapeDataString(modelId)}");
@@ -727,6 +236,7 @@
 
     private async Task DeleteProviderAsync(string providerId)
     {
+        if (!await ConfirmAsync($"确定要删除 Provider {providerId} 吗？其下所有模型和 Key 会一并删除。")) return;
         try
         {
             await RequestAsync<object>("POST", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(providerId)}/delete");
@@ -738,40 +248,36 @@
         }
     }
 
+    private async Task DeleteKeyAsync(string keyId)
+    {
+        if (!await ConfirmAsync("确定要删除这个 Key 吗？删除后该 Provider 将没有可用 Key，AI 调用会失败。")) return;
+        try
+        {
+            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}/delete");
+            await LoadConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"删除 Key 失败：{ex.Message}";
+        }
+    }
+
+    private async Task<bool> ConfirmAsync(string message)
+    {
+        try
+        {
+            return await JSRuntime.InvokeAsync<bool>("confirm", message);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
         => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
 
-    private int BuildCapabilities()
-        => 1
-            | (EditModelImageInput ? 2 : 0)
-            | (EditModelAttachmentInput ? 4 : 0)
-            | (EditModelToolCalls ? 8 : 0)
-            | (EditModelReasoningCap ? 16 : 0)
-            | (EditModelStructuredOutput ? 32 : 0);
-
-    private void ApplyCapabilitiesFromString(string? caps)
-    {
-        EditModelImageInput = false;
-        EditModelAttachmentInput = false;
-        EditModelToolCalls = false;
-        EditModelReasoningCap = false;
-        EditModelStructuredOutput = false;
-        if (string.IsNullOrWhiteSpace(caps)) return;
-        if (int.TryParse(caps.Trim(), out var numeric))
-        {
-            EditModelImageInput = (numeric & 2) != 0;
-            EditModelAttachmentInput = (numeric & 4) != 0;
-            EditModelToolCalls = (numeric & 8) != 0;
-            EditModelReasoningCap = (numeric & 16) != 0;
-            EditModelStructuredOutput = (numeric & 32) != 0;
-            return;
-        }
-        EditModelImageInput = caps.Contains("ImageInput", StringComparison.OrdinalIgnoreCase);
-        EditModelAttachmentInput = caps.Contains("AttachmentInput", StringComparison.OrdinalIgnoreCase);
-        EditModelToolCalls = caps.Contains("ToolCalls", StringComparison.OrdinalIgnoreCase);
-        EditModelReasoningCap = caps.Contains("Reasoning", StringComparison.OrdinalIgnoreCase);
-        EditModelStructuredOutput = caps.Contains("StructuredOutput", StringComparison.OrdinalIgnoreCase);
-    }
+    private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
 
     private static string FormatCapabilities(string? caps)
     {
@@ -784,94 +290,9 @@
             .Replace("StructuredOutput", "结构化");
     }
 
-    private void AddReasoningOption()
-    {
-        if (EditReasoningOptions.Count >= 2) return;
-        var hasToggle = EditReasoningOptions.Any(o => o.Type == "toggle");
-        var hasEffort = EditReasoningOptions.Any(o => o.Type == "effort");
-        if (!hasToggle) EditReasoningOptions.Add(new EditReasoningOption { Type = "toggle" });
-        else if (!hasEffort) EditReasoningOptions.Add(new EditReasoningOption { Type = "effort" });
-    }
-
-    private void RemoveReasoningOption(int index)
-    {
-        if (index < 0 || index >= EditReasoningOptions.Count) return;
-        EditReasoningOptions.RemoveAt(index);
-    }
-
-    private void OnReasoningOptionTypeChanged(int index, string? value)
-    {
-        if (index < 0 || index >= EditReasoningOptions.Count) return;
-        var normalized = value?.Trim().ToLowerInvariant() == "effort" ? "effort" : "toggle";
-        if (EditReasoningOptions.Where((o, i) => i != index).Any(o => o.Type == normalized)) return;
-        EditReasoningOptions[index].Type = normalized;
-        if (normalized == "toggle") EditReasoningOptions[index].ValuesText = string.Empty;
-    }
-
-    private void OnReasoningOptionValuesChanged(int index, string? value)
-    {
-        if (index < 0 || index >= EditReasoningOptions.Count) return;
-        EditReasoningOptions[index].ValuesText = value ?? string.Empty;
-    }
-
-    private void ApplyReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
-    {
-        EditReasoningOptions = [];
-        if (options == null || options.Count == 0) return;
-        foreach (var o in options)
-        {
-            if (o == null || string.IsNullOrWhiteSpace(o.Type)) continue;
-            var type = o.Type.Trim().ToLowerInvariant();
-            if (type != "toggle" && type != "effort") continue;
-            if (EditReasoningOptions.Any(x => x.Type == type)) continue;
-            var valuesText = o.Values == null || o.Values.Count == 0 ? string.Empty : string.Join(", ", o.Values);
-            EditReasoningOptions.Add(new EditReasoningOption { Type = type, ValuesText = type == "toggle" ? string.Empty : valuesText });
-        }
-    }
-
-    private IReadOnlyList<LlmReasoningOptionDto>? BuildReasoningOptions()
-    {
-        if (EditReasoningOptions.Count == 0) return null;
-        var result = new List<LlmReasoningOptionDto>();
-        foreach (var o in EditReasoningOptions)
-        {
-            var type = o.Type?.Trim().ToLowerInvariant();
-            if (type != "toggle" && type != "effort") continue;
-            IReadOnlyList<string>? values = null;
-            if (type == "effort")
-            {
-                var parsed = (o.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                if (parsed.Count > 0) values = parsed;
-            }
-            result.Add(new LlmReasoningOptionDto(type, values));
-        }
-        return result.Count == 0 ? null : result;
-    }
-
-    private IEnumerable<string> GetReasoningEffortOptions()
-    {
-        var effort = EditReasoningOptions.FirstOrDefault(o => o.Type == "effort");
-        if (effort != null)
-        {
-            var parsed = (effort.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (parsed.Count > 0) return parsed;
-        }
-        return ["low", "medium", "high"];
-    }
-
     private static string FormatReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
     {
         if (options == null || options.Count == 0) return "—";
         return string.Join(" · ", options.Select(o => o.Type == "toggle" ? "toggle" : $"effort: {string.Join(", ", o.Values ?? [])}"));
     }
-
-    private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
-    private static string FormatCatalogSource(string source) => source switch
-    {
-        "local-cache" => "本地缓存",
-        "models.dev" => "models.dev（刚刷新）",
-        _ => source,
-    };
 }

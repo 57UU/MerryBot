@@ -1,0 +1,329 @@
+@implements IDialogContentComponent<ModelDialogParams>
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentLabel Typo="Typography.PaneHeader">@(Content.Existing is null ? "手动添加模型" : "编辑模型")</FluentLabel>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
+    }
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Bottom" HorizontalGap="8">
+            <FluentSelect TOption="string" id="model-dialog-provider-select" Label="Provider" Style="flex:1;min-width:0;"
+                          SelectedOption="@ProviderId" SelectedOptionChanged="@OnProviderChanged">
+                @foreach (LlmProviderDto provider in AllProviders)
+                {
+                    <FluentOption TOption="string" Value="@provider.Id" @key="provider.Id">@provider.Name (@provider.Id)</FluentOption>
+                }
+            </FluentSelect>
+            <FluentButton Appearance="Appearance.Neutral" Title="新增 Provider" OnClick="AddProviderAsync">＋ 新增</FluentButton>
+        </FluentStack>
+        <FluentTextField Label="上游 model ID" Placeholder="上游 model ID" Required="true" Style="width:100%;" @bind-Value="RemoteId" />
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12">
+            <FluentNumberField Label="上下文长度" Style="min-width:180px;flex:1 1 180px;" @bind-Value="ContextLength" />
+            <FluentNumberField Label="最大输出" Style="min-width:180px;flex:1 1 180px;" @bind-Value="MaxOutputTokens" />
+        </FluentStack>
+        <div>
+            <span>能力（Capabilities）</span><br />
+            <small>Text 恒为启用；其余按模型实际能力勾选，影响工具调用与多模态路由。</small>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-top: 4px;">
+                <FluentCheckbox @bind-Value="ImageInput">视觉输入（ImageInput）</FluentCheckbox>
+                <FluentCheckbox @bind-Value="AttachmentInput">附件输入（AttachmentInput）</FluentCheckbox>
+                <FluentCheckbox @bind-Value="ToolCalls">工具调用（ToolCalls）</FluentCheckbox>
+                <FluentCheckbox @bind-Value="ReasoningCap">推理（Reasoning）</FluentCheckbox>
+                <FluentCheckbox @bind-Value="StructuredOutput">结构化输出（StructuredOutput）</FluentCheckbox>
+            </FluentStack>
+        </div>
+        <div>
+            <span>推理选项（Reasoning Options）</span><br />
+            <small>直接编辑入库的 <code>reasoning_options</code>（来源 models.dev）：<code>toggle</code> 开关 / <code>effort</code> 档位 + 可选值列表；目录导入时自动带入，可手工覆盖。</small>
+            @for (var optionIndex = 0; optionIndex < ReasoningOptions.Count; optionIndex++)
+            {
+                var option = ReasoningOptions[optionIndex];
+                var index = optionIndex;
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Bottom" HorizontalGap="8" Style="margin-top: 4px;" @key="index">
+                    <FluentSelect TOption="string" Label="类型" Style="min-width:160px;flex:1 1 160px;" Value="@option.Type" ValueChanged="@((string v) => OnReasoningOptionTypeChanged(index, v))">
+                        <FluentOption TOption="string" Value="toggle">toggle（开关）</FluentOption>
+                        <FluentOption TOption="string" Value="effort">effort（档位）</FluentOption>
+                    </FluentSelect>
+                    <FluentTextField Label="可选值" Placeholder="逗号分隔，如 low, medium, high" Immediate="true" Style="min-width:200px;flex:2 1 200px;" Value="@option.ValuesText" ValueChanged="@((string v) => OnReasoningOptionValuesChanged(index, v))" Disabled="@(option.Type == "toggle")" />
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => RemoveReasoningOption(index)">删除</FluentButton>
+                </FluentStack>
+            }
+            <FluentButton Appearance="Appearance.Neutral" Style="margin-top: 8px;" OnClick="AddReasoningOption">添加推理选项</FluentButton>
+        </div>
+        <FluentSelect TOption="string" Label="思维强度（Reasoning Effort）" Style="width:100%;" @bind-Value="ReasoningEffort">
+            <FluentOption TOption="string" Value="">不开启</FluentOption>
+            @foreach (string effort in GetReasoningEffortOptions())
+            {
+                <FluentOption TOption="string" Value="@effort">@effort</FluentOption>
+            }
+        </FluentSelect>
+        <small>anthropic 格式映射 thinking 预算（low=4096 / medium=16384 / high=32768）；chat_completions 传 reasoning_effort；responses 传 reasoning.effort；若上方 effort 声明了可选值则仅允许其中档位</small>
+        <FluentCheckbox @bind-Value="EnablePromptCache">启用 Anthropic Prompt 缓存（cache_control 断点，5m TTL：写入 1.25x / 读取 0.1x；仅 anthropic 格式生效）</FluentCheckbox>
+        <FluentCheckbox @bind-Value="Enabled">启用此模型</FluentCheckbox>
+    </FluentStack>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Accent" Loading="@Saving" OnClick="SaveAsync">保存</FluentButton>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="CancelAsync">取消</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [Parameter]
+    public ModelDialogParams Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    [Inject]
+    private IDialogService DialogService { get; set; } = default!;
+
+    private List<LlmProviderDto> AllProviders = [];
+    private string ProviderId = string.Empty;
+    private string RemoteId = string.Empty;
+    private int ContextLength = 32_768;
+    private int MaxOutputTokens = 4_096;
+    private bool ImageInput;
+    private bool AttachmentInput;
+    private bool ToolCalls;
+    private bool ReasoningCap;
+    private bool StructuredOutput;
+    private bool Enabled = true;
+    private List<EditReasoningOption> ReasoningOptions = [];
+    private string ReasoningEffort = string.Empty;
+    private bool EnablePromptCache;
+    private bool Saving;
+    private string? Error;
+
+    private sealed class EditReasoningOption
+    {
+        public string Type { get; set; } = "toggle";
+        public string ValuesText { get; set; } = string.Empty;
+    }
+
+    private string? EditingSourceId => Content.Existing?.Id;
+
+    protected override void OnInitialized()
+    {
+        AllProviders = Content.Providers.ToList();
+        if (Content.Existing is { } existing)
+        {
+            ProviderId = existing.ProviderId;
+            RemoteId = existing.RemoteModelId;
+            ContextLength = existing.ContextLength > 0 ? existing.ContextLength : 32_768;
+            MaxOutputTokens = existing.MaxOutputTokens > 0 ? existing.MaxOutputTokens : 4_096;
+            ApplyCapabilitiesFromString(existing.Capabilities);
+            Enabled = existing.Enabled;
+            ApplyReasoningOptions(existing.ReasoningOptions);
+            ReasoningEffort = existing.ReasoningEffort ?? string.Empty;
+            EnablePromptCache = existing.EnablePromptCache;
+        }
+        else if (Content.Prefill is { } prefill)
+        {
+            ProviderId = prefill.ProviderId;
+            RemoteId = prefill.ModelId;
+            ContextLength = prefill.ContextLength > 0 ? prefill.ContextLength : 32_768;
+            MaxOutputTokens = prefill.MaxOutputTokens > 0 ? prefill.MaxOutputTokens : 4_096;
+            ApplyCapabilitiesFromString(prefill.Capabilities);
+            ApplyReasoningOptions(prefill.ReasoningOptions);
+        }
+        if (string.IsNullOrEmpty(ProviderId))
+        {
+            ProviderId = AllProviders.FirstOrDefault()?.Id ?? string.Empty;
+        }
+    }
+
+    private void OnProviderChanged(string? value)
+    {
+        // 空值只出现在选项列表变动的过渡瞬间，忽略，避免把已选值冲掉
+        if (string.IsNullOrEmpty(value)) return;
+        ProviderId = value;
+    }
+
+    /// <summary>模型框内嵌新增 Provider：先把新建项并入下拉渲染一拍，再选中（同拍子里先加 option 后赋值，
+    /// fluent-select 会因新 option 尚未落 DOM 而回落到首选项）。</summary>
+    private async Task AddProviderAsync()
+    {
+        var parameters = new ProviderDialogParams();
+        var dialog = await DialogService.ShowDialogAsync<ProviderDialog>(parameters, new DialogParameters
+        {
+            Title = "新增 Provider",
+            Width = "560px",
+            Modal = true,
+        });
+        await dialog.Result;
+        // 不依赖 result.Cancelled（无参 CloseAsync 的取消标记语义不可靠）：以回填对象为准
+        if (string.IsNullOrWhiteSpace(parameters.SavedProviderId)) return;
+        string savedId = parameters.SavedProviderId;
+        AllProviders.RemoveAll(p => string.Equals(p.Id, savedId, StringComparison.OrdinalIgnoreCase));
+        AllProviders.Add(new LlmProviderDto(savedId, parameters.SavedProviderName ?? savedId,
+            string.Empty, "openai-chat-completions", true, null, [], []));
+        StateHasChanged();
+        await Task.Delay(50);
+        ProviderId = savedId;
+        StateHasChanged();
+        await Task.Delay(50);
+        // fluent-select 在选项动态追加时可能不同步显示值，直接以 DOM 为准对齐一次；
+        // Blazor 侧状态本来就是对的，后续渲染不会再打架
+        await JSRuntime.InvokeVoidAsync("llmProviderApi.setSelectValue", "model-dialog-provider-select", savedId);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Saving) return;
+        if (string.IsNullOrWhiteSpace(ProviderId) || string.IsNullOrWhiteSpace(RemoteId))
+        {
+            Error = "请选择 Provider 并填写上游 model ID。";
+            return;
+        }
+        Saving = true;
+        Error = null;
+        try
+        {
+            string modelId = MakeLocalModelId(ProviderId.Trim(), RemoteId.Trim());
+            await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST",
+                $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}",
+                new LlmSaveModelRequest(ProviderId, RemoteId.Trim(), ContextLength, MaxOutputTokens,
+                    BuildCapabilities(), Enabled, ReasoningEffort, EnablePromptCache, BuildReasoningOptions()));
+            if (!string.IsNullOrEmpty(EditingSourceId)
+                && !string.Equals(EditingSourceId, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST",
+                    $"/api/plugins/llm-provider/models/delete?id={Uri.EscapeDataString(EditingSourceId)}");
+            }
+            Content.SavedModelId = modelId;
+            await Dialog.CloseAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = DialogErrors.Shorten($"保存模型失败：{ex.Message}");
+        }
+        finally
+        {
+            Saving = false;
+        }
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+
+    private static string MakeLocalModelId(string providerId, string modelId)
+        => modelId.StartsWith(providerId + "/", StringComparison.OrdinalIgnoreCase)
+            ? modelId
+            : $"{providerId}/{modelId}";
+
+    private int BuildCapabilities()
+        => 1
+            | (ImageInput ? 2 : 0)
+            | (AttachmentInput ? 4 : 0)
+            | (ToolCalls ? 8 : 0)
+            | (ReasoningCap ? 16 : 0)
+            | (StructuredOutput ? 32 : 0);
+
+    private void ApplyCapabilitiesFromString(string? caps)
+    {
+        ImageInput = false;
+        AttachmentInput = false;
+        ToolCalls = false;
+        ReasoningCap = false;
+        StructuredOutput = false;
+        if (string.IsNullOrWhiteSpace(caps)) return;
+        if (int.TryParse(caps.Trim(), out int numeric))
+        {
+            ImageInput = (numeric & 2) != 0;
+            AttachmentInput = (numeric & 4) != 0;
+            ToolCalls = (numeric & 8) != 0;
+            ReasoningCap = (numeric & 16) != 0;
+            StructuredOutput = (numeric & 32) != 0;
+            return;
+        }
+        ImageInput = caps.Contains("ImageInput", StringComparison.OrdinalIgnoreCase);
+        AttachmentInput = caps.Contains("AttachmentInput", StringComparison.OrdinalIgnoreCase);
+        ToolCalls = caps.Contains("ToolCalls", StringComparison.OrdinalIgnoreCase);
+        ReasoningCap = caps.Contains("Reasoning", StringComparison.OrdinalIgnoreCase);
+        StructuredOutput = caps.Contains("StructuredOutput", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AddReasoningOption()
+    {
+        if (ReasoningOptions.Count >= 2) return;
+        bool hasToggle = ReasoningOptions.Any(o => o.Type == "toggle");
+        bool hasEffort = ReasoningOptions.Any(o => o.Type == "effort");
+        if (!hasToggle) ReasoningOptions.Add(new EditReasoningOption { Type = "toggle" });
+        else if (!hasEffort) ReasoningOptions.Add(new EditReasoningOption { Type = "effort" });
+    }
+
+    private void RemoveReasoningOption(int index)
+    {
+        if (index < 0 || index >= ReasoningOptions.Count) return;
+        ReasoningOptions.RemoveAt(index);
+    }
+
+    private void OnReasoningOptionTypeChanged(int index, string? value)
+    {
+        if (index < 0 || index >= ReasoningOptions.Count) return;
+        string normalized = value?.Trim().ToLowerInvariant() == "effort" ? "effort" : "toggle";
+        if (ReasoningOptions.Where((o, i) => i != index).Any(o => o.Type == normalized)) return;
+        ReasoningOptions[index].Type = normalized;
+        if (normalized == "toggle") ReasoningOptions[index].ValuesText = string.Empty;
+    }
+
+    private void OnReasoningOptionValuesChanged(int index, string? value)
+    {
+        if (index < 0 || index >= ReasoningOptions.Count) return;
+        ReasoningOptions[index].ValuesText = value ?? string.Empty;
+    }
+
+    private void ApplyReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
+    {
+        ReasoningOptions = [];
+        if (options == null || options.Count == 0) return;
+        foreach (LlmReasoningOptionDto o in options)
+        {
+            if (o == null || string.IsNullOrWhiteSpace(o.Type)) continue;
+            string type = o.Type.Trim().ToLowerInvariant();
+            if (type != "toggle" && type != "effort") continue;
+            if (ReasoningOptions.Any(x => x.Type == type)) continue;
+            string valuesText = o.Values == null || o.Values.Count == 0 ? string.Empty : string.Join(", ", o.Values);
+            ReasoningOptions.Add(new EditReasoningOption { Type = type, ValuesText = type == "toggle" ? string.Empty : valuesText });
+        }
+    }
+
+    private IReadOnlyList<LlmReasoningOptionDto>? BuildReasoningOptions()
+    {
+        if (ReasoningOptions.Count == 0) return null;
+        var result = new List<LlmReasoningOptionDto>();
+        foreach (EditReasoningOption o in ReasoningOptions)
+        {
+            string? type = o.Type?.Trim().ToLowerInvariant();
+            if (type != "toggle" && type != "effort") continue;
+            IReadOnlyList<string>? values = null;
+            if (type == "effort")
+            {
+                var parsed = (o.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (parsed.Count > 0) values = parsed;
+            }
+            result.Add(new LlmReasoningOptionDto(type, values));
+        }
+        return result.Count == 0 ? null : result;
+    }
+
+    private IEnumerable<string> GetReasoningEffortOptions()
+    {
+        EditReasoningOption? effort = ReasoningOptions.FirstOrDefault(o => o.Type == "effort");
+        if (effort != null)
+        {
+            var parsed = (effort.ValuesText ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (parsed.Count > 0) return parsed;
+        }
+        return ["low", "medium", "high"];
+    }
+}

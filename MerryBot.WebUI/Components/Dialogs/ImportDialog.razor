@@ -1,0 +1,307 @@
+@implements IDialogContentComponent<ImportDialogParams>
+@implements IDisposable
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentLabel Typo="Typography.PaneHeader">从 models.dev 导入</FluentLabel>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
+    }
+    <p>目录优先从本地缓存读取；只有点击“刷新 models.dev”才会联网更新缓存。</p>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-bottom: 12px;">
+        <span><strong>步骤 1 · 选择 Provider</strong></span>
+        <FluentSearch Immediate="true" Placeholder="例如 OpenCode、OpenAI、DeepSeek" Value="@CatalogProviderQuery" ValueChanged="@(v => OnProviderQueryChanged(new ChangeEventArgs { Value = v }))" />
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+            <FluentButton Appearance="Appearance.Accent" Loading="@IsLoadingCatalog" Disabled="@IsLoadingCatalog" OnClick="SearchProvidersAsync">@(IsLoadingCatalog ? "读取中…" : "搜索 Provider")</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="RefreshCatalogAsync">刷新 models.dev</FluentButton>
+        </FluentStack>
+        @if (CatalogStatus is not null)
+        {
+            <div><small>目录来源：@FormatCatalogSource(CatalogStatus.Source) @if (CatalogStatus.UpdatedAtUtc is { } updatedAt) { <text>· 更新于 @updatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</text> }</small></div>
+            @if (!string.IsNullOrWhiteSpace(CatalogStatus.RefreshError))
+            {
+                <div><small>刷新失败，仍在使用已有缓存：@CatalogStatus.RefreshError</small></div>
+            }
+        }
+    </FluentStack>
+
+    @if (HasSearchedProviders && CatalogProviders.Count == 0)
+    {
+        <p>没有找到匹配的 Provider。</p>
+    }
+    else if (CatalogProviders.Count > 0)
+    {
+        <FluentDataGrid Items="@CatalogProviders.AsQueryable()" Style="margin-bottom: 12px;">
+            <PropertyColumn Property="@(p => p.Name)" Title="Provider" Sortable="true" />
+            <TemplateColumn Title="ID" Context="catalogProvider"><code>@catalogProvider.Id</code></TemplateColumn>
+            <PropertyColumn Property="@(p => p.ModelCount)" Title="可用模型" Sortable="true" />
+            <TemplateColumn Title="操作" Context="catalogProvider">
+                <FluentButton Appearance="Appearance.Neutral" OnClick="() => SelectProviderAsync(catalogProvider)">选择并查看模型</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+
+    @if (SelectedCatalogProvider is not null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="margin-bottom: 12px;">
+            <span><strong>步骤 2 · 为 @SelectedCatalogProvider.Name 添加模型</strong></span>
+            <div><small><code>@SelectedCatalogProvider.Id</code> · models.dev 收录 @SelectedCatalogProvider.ModelCount 个模型</small></div>
+        </FluentStack>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-bottom: 12px;">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                <FluentSearch Immediate="true" Label="筛选模型（输入即过滤）" Placeholder="例如 gpt、deepseek、flash" Value="@CatalogModelQuery" ValueChanged="@(v => OnModelQueryChanged(new ChangeEventArgs { Value = v }))" />
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
+                    <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoadingCatalog" OnClick="LoadModelsAsync">搜索此 Provider 的模型</FluentButton>
+                </FluentStack>
+            </FluentStack>
+            <FluentTextField Label="首次添加此 Provider 时使用的 API 地址" Placeholder="https://api.example.com/v1" @bind-Value="ImportBaseUrl" />
+            <FluentSelect TOption="string" Label="API 格式" @bind-Value="ImportApiFormat">
+                <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
+                <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
+                <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
+            </FluentSelect>
+            <FluentTextField Label="添加模型时一并保存的 API Key（可留空，随后单独添加）" TextFieldType="TextFieldType.Password" AutoComplete="new-password" @bind-Value="ImportApiKey" />
+        </FluentStack>
+        <p><small>默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small></p>
+        @if (HasSearchedModels && CatalogModels.Count == 0)
+        {
+            <p>这个 Provider 中没有匹配的模型。</p>
+        }
+        else if (CatalogModels.Count > 0)
+        {
+            <FluentDataGrid Items="@CatalogModels.AsQueryable()">
+                <TemplateColumn Title="模型" Context="catalogModel"><code>@catalogModel.ModelId</code><br /><small>@catalogModel.Name</small></TemplateColumn>
+                <TemplateColumn Title="上下文" Context="catalogModel">@FormatLimit(catalogModel.ContextLength)</TemplateColumn>
+                <TemplateColumn Title="输出" Context="catalogModel">@FormatLimit(catalogModel.MaxOutputTokens)</TemplateColumn>
+                <PropertyColumn Property="@(m => m.Capabilities)" Title="能力" />
+                <TemplateColumn Title="推理选项" Context="catalogModel"><small>@FormatReasoningOptions(catalogModel.ReasoningOptions)</small></TemplateColumn>
+                <TemplateColumn Title="操作" Context="catalogModel">
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                        <FluentButton Appearance="Appearance.Accent" OnClick="() => ImportAsync(catalogModel)">添加模型</FluentButton>
+                        <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillIntoFormAsync(catalogModel)">填入编辑表单</FluentButton>
+                    </FluentStack>
+                </TemplateColumn>
+            </FluentDataGrid>
+        }
+    }
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="CloseAsync">关闭</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [Parameter]
+    public ImportDialogParams Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private List<LlmCatalogProviderDto> CatalogProviders { get; set; } = [];
+    private List<LlmCatalogModelDto> CatalogModels { get; set; } = [];
+    private LlmCatalogProviderDto? SelectedCatalogProvider { get; set; }
+    private LlmCatalogStatusDto? CatalogStatus { get; set; }
+    private string CatalogProviderQuery { get; set; } = string.Empty;
+    private string CatalogModelQuery { get; set; } = string.Empty;
+    private string ImportApiKey { get; set; } = string.Empty;
+    private string ImportBaseUrl { get; set; } = string.Empty;
+    private string ImportApiFormat { get; set; } = "openai-chat-completions";
+    private string? Error;
+    private bool IsLoadingCatalog;
+    private bool HasSearchedProviders;
+    private bool HasSearchedModels;
+
+    // 输入即过滤：防抖计时器 + 请求序号守卫，响应乱序时只应用最后一次查询
+    private CancellationTokenSource? _providerSearchCts;
+    private CancellationTokenSource? _modelSearchCts;
+    private int _providerSearchSeq;
+    private int _modelSearchSeq;
+
+    protected override async Task OnInitializedAsync() => await SearchProvidersAsync();
+
+    public void Dispose()
+    {
+        _providerSearchCts?.Cancel();
+        _providerSearchCts?.Dispose();
+        _modelSearchCts?.Cancel();
+        _modelSearchCts?.Dispose();
+    }
+
+    private async Task OnProviderQueryChanged(ChangeEventArgs e)
+    {
+        CatalogProviderQuery = e.Value?.ToString() ?? string.Empty;
+        _providerSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _providerSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await SearchProvidersAsync();
+    }
+
+    private async Task OnModelQueryChanged(ChangeEventArgs e)
+    {
+        CatalogModelQuery = e.Value?.ToString() ?? string.Empty;
+        _modelSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _modelSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await LoadModelsAsync();
+    }
+
+    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
+        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
+
+    private async Task SearchProvidersAsync()
+    {
+        int seq = ++_providerSearchSeq;
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            string query = Uri.EscapeDataString(CatalogProviderQuery ?? string.Empty);
+            var providers = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
+            if (seq != _providerSearchSeq) return;
+            CatalogProviders = providers;
+            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("GET", "/api/plugins/llm-provider/catalog/status");
+            if (seq != _providerSearchSeq) return;
+            HasSearchedProviders = true;
+        }
+        catch (Exception ex)
+        {
+            if (seq != _providerSearchSeq) return;
+            Error = DialogErrors.Shorten($"读取本地 models.dev 目录失败：{ex.Message}");
+        }
+        finally
+        {
+            if (seq == _providerSearchSeq) IsLoadingCatalog = false;
+        }
+    }
+
+    private async Task RefreshCatalogAsync()
+    {
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("POST", "/api/plugins/llm-provider/catalog/refresh");
+        }
+        catch (Exception ex)
+        {
+            Error = DialogErrors.Shorten($"刷新 models.dev 失败：{ex.Message}");
+        }
+        finally
+        {
+            IsLoadingCatalog = false;
+        }
+
+        if (Error is null)
+        {
+            await SearchProvidersAsync();
+            if (SelectedCatalogProvider is not null)
+            {
+                await LoadModelsAsync();
+            }
+        }
+    }
+
+    private async Task SelectProviderAsync(LlmCatalogProviderDto provider)
+    {
+        SelectedCatalogProvider = provider;
+        CatalogModelQuery = string.Empty;
+        CatalogModels = [];
+        HasSearchedModels = false;
+        ImportBaseUrl = provider.SuggestedBaseUrl ?? string.Empty;
+        ImportApiFormat = provider.Id.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+            ? "anthropic-messages"
+            : "openai-chat-completions";
+        await LoadModelsAsync();
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        if (SelectedCatalogProvider is null) return;
+        int seq = ++_modelSearchSeq;
+        try
+        {
+            Error = null;
+            IsLoadingCatalog = true;
+            string providerId = Uri.EscapeDataString(SelectedCatalogProvider.Id);
+            string query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
+            var models = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            if (seq != _modelSearchSeq) return;
+            CatalogModels = models;
+            HasSearchedModels = true;
+        }
+        catch (Exception ex)
+        {
+            if (seq != _modelSearchSeq) return;
+            Error = DialogErrors.Shorten($"读取 Provider 模型失败：{ex.Message}");
+        }
+        finally
+        {
+            if (seq == _modelSearchSeq) IsLoadingCatalog = false;
+        }
+    }
+
+    private async Task ImportAsync(LlmCatalogModelDto model)
+    {
+        try
+        {
+            Error = null;
+            await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
+                new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
+                    string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
+                    ImportApiFormat, ImportApiKey, true));
+            ImportApiKey = string.Empty;
+            Content.Changed = true;
+        }
+        catch (Exception ex)
+        {
+            Error = DialogErrors.Shorten($"导入失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>填入编辑表单：把目录模型带回页面，由页面接着弹模型框，关闭前标记已变更以便页面重载。</summary>
+    private async Task FillIntoFormAsync(LlmCatalogModelDto model)
+    {
+        Content.FillIntoForm = model;
+        Content.Changed = true;
+        await Dialog.CloseAsync();
+    }
+
+    private async Task CloseAsync() => await Dialog.CloseAsync();
+
+    private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
+
+    private static string FormatCatalogSource(string source) => source switch
+    {
+        "local-cache" => "本地缓存",
+        "models.dev" => "models.dev（刚刷新）",
+        _ => source,
+    };
+
+    private static string FormatReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
+    {
+        if (options == null || options.Count == 0) return "—";
+        return string.Join(" · ", options.Select(o => o.Type == "toggle" ? "toggle" : $"effort: {string.Join(", ", o.Values ?? [])}"));
+    }
+}

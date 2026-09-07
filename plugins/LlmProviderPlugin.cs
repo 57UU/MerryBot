@@ -91,8 +91,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
 
         var key = (await keys.FindAllAsync())
             .Where(item => item.ProviderId == provider.Id && item.Enabled)
-            .OrderBy(item => item.Priority)
-            .ThenBy(item => item.CreatedAtUtc)
+            .OrderBy(item => item.CreatedAtUtc)
             .FirstOrDefault()
             ?? throw new PluginNotUsableException($"Provider {provider.Id} 没有可用 API Key。");
         var apiKey = keyProtector.Unprotect(key.ProtectedSecret);
@@ -128,7 +127,6 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
                     .Select(model => new LlmProviderConfigurationModel(
                         model.Id,
                         model.ProviderId,
-                        model.Name,
                         model.RemoteModelId,
                         model.ContextLength,
                         model.MaxOutputTokens,
@@ -140,8 +138,8 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
                         ToContractOptions(model.ReasoningOptions)))
                     .ToList(),
                 allKeys.Where(key => key.ProviderId == provider.Id)
-                    .OrderBy(key => key.Priority)
-                    .Select(key => new LlmProviderConfigurationKey(key.Id, key.Name, key.Fingerprint, key.Priority, key.Enabled, key.UpdatedAtUtc))
+                    .OrderBy(key => key.CreatedAtUtc)
+                    .Select(key => new LlmProviderConfigurationKey(key.Id, key.Fingerprint, key.Enabled, key.UpdatedAtUtc))
                     .ToList()))
             .ToList();
         return new LlmProviderConfiguration(defaultModelId, configuredProviders);
@@ -187,7 +185,6 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
             ProviderId = provider.Id,
             CreatedAtUtc = now,
         };
-        model.Name = RequireText(command.ModelName, nameof(command.ModelName));
         model.RemoteModelId = catalogModelId;
         model.ContextLength = command.ContextLength > 0 ? command.ContextLength : 32_768;
         model.MaxOutputTokens = command.MaxOutputTokens > 0 ? command.MaxOutputTokens : 4_096;
@@ -202,7 +199,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
 
         if (!string.IsNullOrWhiteSpace(command.ApiKey))
         {
-            await SaveKeyAsync(new LlmProviderKeySaveCommand(provider.Id, "默认 Key", command.ApiKey, 0, true), cancellationToken);
+            await SaveKeyAsync(new LlmProviderKeySaveCommand(provider.Id, command.ApiKey, true), cancellationToken);
         }
         return await GetConfigurationAsync(cancellationToken);
     }
@@ -228,8 +225,10 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     public async Task SaveModelAsync(string id, LlmModelSaveCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var modelId = NormalizeModelId(id, nameof(id));
+        // 本地 ID 不再由调用方指定，固定按 provider/remoteId 推导
         var providerId = RequireId(command.ProviderId, nameof(command.ProviderId));
+        var remoteId = RequireText(command.RemoteModelId, nameof(command.RemoteModelId));
+        var modelId = MakeLocalModelId(providerId, remoteId);
         if (await providers.FindByIdAsync(providerId) == null)
         {
             throw new KeyNotFoundException($"未找到 Provider: {providerId}");
@@ -245,8 +244,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
             CreatedAtUtc = now,
         };
         model.ProviderId = providerId;
-        model.Name = RequireText(command.Name, nameof(command.Name));
-        model.RemoteModelId = RequireText(command.RemoteModelId, nameof(command.RemoteModelId));
+        model.RemoteModelId = remoteId;
         model.ContextLength = command.ContextLength;
         model.MaxOutputTokens = command.MaxOutputTokens;
         model.Capabilities = command.Capabilities;
@@ -270,23 +268,28 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
         }
         var secret = RequireText(command.Secret, nameof(command.Secret));
         var now = DateTimeOffset.UtcNow;
-        var name = string.IsNullOrWhiteSpace(command.Name) ? "API Key" : command.Name.Trim();
+        // 一个 Provider 只保留一个 Key：有旧 Key 直接复用其行并覆盖，其余同 Provider 的 Key 清理掉
         var record = (await keys.FindAllAsync())
-            .FirstOrDefault(item => item.ProviderId == providerId && item.Name == name)
+            .Where(item => item.ProviderId == providerId)
+            .OrderBy(item => item.CreatedAtUtc)
+            .FirstOrDefault()
             ?? new KeyRecord
             {
                 Id = Guid.NewGuid().ToString("N"),
                 ProviderId = providerId,
                 CreatedAtUtc = now,
             };
-        record.Name = name;
+        foreach (var stale in (await keys.FindAllAsync())
+            .Where(item => item.ProviderId == providerId && item.Id != record.Id))
+        {
+            await keys.DeleteAsync(stale.Id);
+        }
         record.ProtectedSecret = keyProtector.Protect(secret);
         record.Fingerprint = Fingerprint(secret);
-        record.Priority = command.Priority;
         record.Enabled = command.Enabled;
         record.UpdatedAtUtc = now;
         await keys.UpsertAsync(record);
-        return new LlmProviderConfigurationKey(record.Id, record.Name, record.Fingerprint, record.Priority, record.Enabled, record.UpdatedAtUtc);
+        return new LlmProviderConfigurationKey(record.Id, record.Fingerprint, record.Enabled, record.UpdatedAtUtc);
     }
 
     public async Task DeleteProviderAsync(string id, CancellationToken cancellationToken = default)
@@ -354,7 +357,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
     }
 
     private static LlmModelDescriptor ToDescriptor(ModelRecord source)
-        => new(source.Id, source.ProviderId, source.Name, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort, ToContractOptions(source.ReasoningOptions));
+        => new(source.Id, source.ProviderId, source.RemoteModelId, source.RemoteModelId, source.ContextLength, source.MaxOutputTokens, source.Capabilities, source.Enabled, source.ReasoningEffort, ToContractOptions(source.ReasoningOptions));
 
     private static IReadOnlyList<LlmReasoningOption>? ToContractOptions(List<StoredReasoningOption>? source)
         => source == null || source.Count == 0
