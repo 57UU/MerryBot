@@ -2,94 +2,30 @@
 @implements IDisposable
 
 <FluentNavMenu Width="280" Collapsible="true" Title="导航菜单">
-    <div class="nav-filter">
-        <FluentSearch @bind-Value="Filter" @bind-Value:after="OnFilterChanged"
-                      Placeholder="按标题筛选" AriaLabel="按标题筛选" />
-    </div>
+    <FluentNavLink Href="" Match="NavLinkMatch.All" Icon="@(new Size20.Home())" Tooltip="概览">概览</FluentNavLink>
 
-    @if (Matches("概览"))
-    {
-        <FluentNavLink Href="" Match="NavLinkMatch.All" Icon="@(new Size20.Home())" Tooltip="概览">概览</FluentNavLink>
-    }
+    <FluentNavGroup Title="配置管理" Tooltip="配置管理" Icon="@(new Size20.Settings())" @bind-Expanded="ConfigExpanded">
+        <FluentNavLink Href="config" Icon="@(new Size20.Wrench())" Tooltip="配置中心">配置中心</FluentNavLink>
+        <FluentNavLink Href="advanced" Icon="@(new Size20.Beaker())" Tooltip="高级配置">高级配置</FluentNavLink>
+        <FluentNavLink Href="groups" Icon="@(new Size20.People())" Tooltip="群组管理">群组管理</FluentNavLink>
+    </FluentNavGroup>
 
-    @if (ConfigVisible)
-    {
-        <FluentNavGroup Title="配置管理" Tooltip="配置管理" Icon="@(new Size20.Settings())" @bind-Expanded="ConfigExpanded">
-            @if (Matches("配置管理") || Matches("配置中心"))
-            {
-                <FluentNavLink Href="config" Icon="@(new Size20.Wrench())" Tooltip="配置中心">配置中心</FluentNavLink>
-            }
-            @if (Matches("配置管理") || Matches("高级配置"))
-            {
-                <FluentNavLink Href="advanced" Icon="@(new Size20.Beaker())" Tooltip="高级配置">高级配置</FluentNavLink>
-            }
-            @if (Matches("配置管理") || Matches("群组管理"))
-            {
-                <FluentNavLink Href="groups" Icon="@(new Size20.People())" Tooltip="群组管理">群组管理</FluentNavLink>
-            }
-        </FluentNavGroup>
-    }
+    <FluentNavGroup Title="AI 服务" Tooltip="AI 服务" Icon="@(new Size20.Sparkle())" @bind-Expanded="AiExpanded">
+        <FluentNavLink Href="llmproviders" Icon="@(new Size20.Brain())" Tooltip="模型配置">模型配置</FluentNavLink>
+        <FluentNavLink Href="skills" Icon="@(new Size20.PuzzleCube())" Tooltip="技能管理">技能管理</FluentNavLink>
+        <FluentNavLink Href="memories" Icon="@(new Size20.Archive())" Tooltip="记忆管理">记忆管理</FluentNavLink>
+        <FluentNavLink Href="prompts" Icon="@(new Size20.TextFont())" Tooltip="提示词管理">提示词管理</FluentNavLink>
+        <FluentNavLink Href="clock" Icon="@(new Size20.Clock())" Tooltip="定时任务">定时任务</FluentNavLink>
+        <FluentNavLink Href="sessionai" Icon="@(new Size20.Search())" Tooltip="会话快照">会话快照</FluentNavLink>
+    </FluentNavGroup>
 
-    @if (AiVisible)
-    {
-        <FluentNavGroup Title="AI 服务" Tooltip="AI 服务" Icon="@(new Size20.Sparkle())" @bind-Expanded="AiExpanded">
-            @if (Matches("AI 服务") || Matches("模型配置"))
-            {
-                <FluentNavLink Href="llmproviders" Icon="@(new Size20.Brain())" Tooltip="模型配置">模型配置</FluentNavLink>
-            }
-            @if (Matches("AI 服务") || Matches("技能管理"))
-            {
-                <FluentNavLink Href="skills" Icon="@(new Size20.PuzzleCube())" Tooltip="技能管理">技能管理</FluentNavLink>
-            }
-            @if (Matches("AI 服务") || Matches("记忆管理"))
-            {
-                <FluentNavLink Href="memories" Icon="@(new Size20.Archive())" Tooltip="记忆管理">记忆管理</FluentNavLink>
-            }
-            @if (Matches("AI 服务") || Matches("提示词管理"))
-            {
-                <FluentNavLink Href="prompts" Icon="@(new Size20.TextFont())" Tooltip="提示词管理">提示词管理</FluentNavLink>
-            }
-            @if (Matches("AI 服务") || Matches("定时任务"))
-            {
-                <FluentNavLink Href="clock" Icon="@(new Size20.Clock())" Tooltip="定时任务">定时任务</FluentNavLink>
-            }
-            @if (Matches("AI 服务") || Matches("会话快照"))
-            {
-                <FluentNavLink Href="sessionai" Icon="@(new Size20.Search())" Tooltip="会话快照">会话快照</FluentNavLink>
-            }
-        </FluentNavGroup>
-    }
-
-    @if (AuditVisible)
-    {
-        <FluentNavGroup Title="消息审计" Tooltip="消息审计" Icon="@(new Size20.Eye())" @bind-Expanded="AuditExpanded">
-            @if (Matches("消息审计") || Matches("数据统计"))
-            {
-                <FluentNavLink Href="statistics" Icon="@(new Size20.ChartMultiple())" Tooltip="数据统计">数据统计</FluentNavLink>
-            }
-            @if (Matches("消息审计") || Matches("Token 用量"))
-            {
-                <FluentNavLink Href="tokenusage" Icon="@(new Size20.ArrowTrendingLines())" Tooltip="Token 用量">Token 用量</FluentNavLink>
-            }
-            @if (Matches("消息审计") || Matches("群聊记录"))
-            {
-                <FluentNavLink Href="groupmessages" Icon="@(new Size20.Chat())" Tooltip="群聊记录">群聊记录</FluentNavLink>
-            }
-            @if (Matches("消息审计") || Matches("AI 记录"))
-            {
-                <FluentNavLink Href="aimessages" Icon="@(new Size20.Bot())" Tooltip="AI 记录">AI 记录</FluentNavLink>
-            }
-            @if (Matches("消息审计") || Matches("运行日志"))
-            {
-                <FluentNavLink Href="logs" Icon="@(new Size20.DocumentText())" Tooltip="运行日志">运行日志</FluentNavLink>
-            }
-        </FluentNavGroup>
-    }
-
-    @if (IsFiltering && !AnyVisible)
-    {
-        <div class="nav-empty">无匹配项</div>
-    }
+    <FluentNavGroup Title="消息审计" Tooltip="消息审计" Icon="@(new Size20.Eye())" @bind-Expanded="AuditExpanded">
+        <FluentNavLink Href="statistics" Icon="@(new Size20.ChartMultiple())" Tooltip="数据统计">数据统计</FluentNavLink>
+        <FluentNavLink Href="tokenusage" Icon="@(new Size20.ArrowTrendingLines())" Tooltip="Token 用量">Token 用量</FluentNavLink>
+        <FluentNavLink Href="groupmessages" Icon="@(new Size20.Chat())" Tooltip="群聊记录">群聊记录</FluentNavLink>
+        <FluentNavLink Href="aimessages" Icon="@(new Size20.Bot())" Tooltip="AI 记录">AI 记录</FluentNavLink>
+        <FluentNavLink Href="logs" Icon="@(new Size20.DocumentText())" Tooltip="运行日志">运行日志</FluentNavLink>
+    </FluentNavGroup>
 </FluentNavMenu>
 
 @code {
@@ -99,32 +35,6 @@
     private bool AiExpanded = true;
 
     private bool AuditExpanded = true;
-
-    private string Filter = string.Empty;
-
-    private bool IsFiltering => !string.IsNullOrWhiteSpace(Filter);
-
-    private bool Matches(string title)
-    {
-        if (!IsFiltering)
-        {
-            return true;
-        }
-        return title.Contains(Filter.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool ConfigVisible =>
-        Matches("配置管理") || Matches("配置中心") || Matches("高级配置") || Matches("群组管理");
-
-    private bool AiVisible =>
-        Matches("AI 服务") || Matches("模型配置") || Matches("技能管理") || Matches("记忆管理")
-        || Matches("提示词管理") || Matches("定时任务") || Matches("会话快照");
-
-    private bool AuditVisible =>
-        Matches("消息审计") || Matches("数据统计") || Matches("Token 用量") || Matches("群聊记录")
-        || Matches("AI 记录") || Matches("运行日志");
-
-    private bool AnyVisible => Matches("概览") || ConfigVisible || AiVisible || AuditVisible;
 
     protected override void OnInitialized()
     {
@@ -152,20 +62,6 @@
         else if (path is "statistics" or "tokenusage" or "groupmessages" or "aimessages" or "forwardedmessage" or "logs")
         {
             AuditExpanded = true;
-        }
-    }
-
-    private void OnFilterChanged()
-    {
-        if (IsFiltering)
-        {
-            ConfigExpanded = true;
-            AiExpanded = true;
-            AuditExpanded = true;
-        }
-        else
-        {
-            ExpandActiveGroup();
         }
     }
 

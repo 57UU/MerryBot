@@ -39,7 +39,7 @@
             </FluentGridItem>
 
             <FluentGridItem xs="12" md="9">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Stretch">
                     @foreach (var section in Snapshot.Sections)
                     {
                         <section id="@SectionElementId(section.Id)" @key="section.Id">

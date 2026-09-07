@@ -32,21 +32,6 @@ body {
     padding: 12px 8px;
 }
 
-/* 顶部筛选框：占满栏宽 */
-.nav-filter {
-    padding: 0 4px 8px;
-}
-.nav-filter fluent-search {
-    width: 100%;
-}
-
-/* 筛选无结果提示 */
-.nav-empty {
-    padding: 8px 12px;
-    color: var(--neutral-foreground-hint);
-    font-size: 0.85rem;
-}
-
 /* 左侧导航（FluentNavMenu）：扁平目录风——按钮行一律透明，只有选中项有底色。
    兜底规则：Fluent 把底色画在哪层不固定（item / group 包裹层 / 内层元素），
    把导航作用域内各层的底色和阴影一次性清掉。

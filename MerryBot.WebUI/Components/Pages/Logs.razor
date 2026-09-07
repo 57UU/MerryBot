@@ -56,23 +56,25 @@
         </FluentStack>
     </FluentCard>
 
-    @if (Data == null)
-    {
-        <FluentProgressRing />
-    }
-    else if (Data.Lines.Count == 0)
-    {
-        <FluentMessageBar Intent="MessageIntent.Info">暂无日志。</FluentMessageBar>
-    }
-    else
-    {
-        <div style="max-height:60vh;overflow:auto;font-family:monospace;font-size:.8rem;padding:8px">
-            @foreach (var line in Data.Lines)
-            {
-                <div style="@LogLineStyle(line)">@line</div>
-            }
-        </div>
-    }
+    <FluentCard>
+        @if (Data == null)
+        {
+            <FluentProgressRing />
+        }
+        else if (Data.Lines.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageIntent.Info">暂无日志。</FluentMessageBar>
+        }
+        else
+        {
+            <div style="max-height:60vh;overflow:auto;font-family:monospace;font-size:.8rem;padding:8px">
+                @foreach (var line in Data.Lines)
+                {
+                    <div style="@LogLineStyle(line)">@line</div>
+                }
+            </div>
+        }
+    </FluentCard>
 </FluentStack>
 
 @code {
