@@ -1,0 +1,193 @@
+@implements IDialogContentComponent<CatalogModelsDialogParams>
+@implements IDisposable
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentLabel Typo="Typography.PaneHeader">为 @Content.Provider.Name 添加模型</FluentLabel>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 12px;">@Error</FluentMessageBar>
+    }
+    @if (!string.IsNullOrWhiteSpace(SuccessMessage))
+    {
+        <FluentMessageBar Intent="MessageIntent.Success" Style="margin-bottom: 12px;">@SuccessMessage</FluentMessageBar>
+    }
+    <div style="margin-bottom: 12px;"><small><code>@Content.Provider.Id</code> · models.dev 收录 @Content.Provider.ModelCount 个模型</small></div>
+    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="12" Style="margin-bottom: 12px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+            <FluentSearch Immediate="true" Label="筛选模型（输入即过滤）" Placeholder="例如 gpt、deepseek、flash" Value="@CatalogModelQuery" ValueChanged="@(v => OnModelQueryChanged(new ChangeEventArgs { Value = v }))" />
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 8px;">
+                <FluentButton Appearance="Appearance.Neutral" Disabled="@IsLoading" OnClick="LoadModelsAsync">搜索此 Provider 的模型</FluentButton>
+            </FluentStack>
+        </FluentStack>
+        <FluentTextField Label="首次添加此 Provider 时使用的 API 地址" Placeholder="https://api.example.com/v1" @bind-Value="ImportBaseUrl" />
+        <FluentSelect TOption="string" Label="API 格式" @bind-Value="ImportApiFormat">
+            <FluentOption TOption="string" Value="openai-chat-completions">OpenAI Chat Completions（/chat/completions）</FluentOption>
+            <FluentOption TOption="string" Value="openai-responses">OpenAI Responses（/responses）</FluentOption>
+            <FluentOption TOption="string" Value="anthropic-messages">Anthropic Messages（/v1/messages）</FluentOption>
+        </FluentSelect>
+        <FluentTextField Label="添加模型时一并保存的 API Key（可留空，随后单独添加）" TextFieldType="TextFieldType.Password" AutoComplete="new-password" @bind-Value="ImportApiKey" />
+    </FluentStack>
+    <p><small>默认采用 models.dev 目录地址；已存在的 Provider 不会被此处覆盖。按 Provider 自动预设，可手动覆盖；已存在的 Provider 不会被覆盖。</small></p>
+    @if (HasSearchedModels && CatalogModels.Count == 0)
+    {
+        <p>这个 Provider 中没有匹配的模型。</p>
+    }
+    else if (CatalogModels.Count > 0)
+    {
+        <FluentDataGrid Items="@CatalogModels.AsQueryable()">
+            <TemplateColumn Title="模型" Context="catalogModel"><code>@catalogModel.ModelId</code><br /><small>@catalogModel.Name</small></TemplateColumn>
+            <TemplateColumn Title="上下文" Context="catalogModel">@FormatLimit(catalogModel.ContextLength)</TemplateColumn>
+            <TemplateColumn Title="输出" Context="catalogModel">@FormatLimit(catalogModel.MaxOutputTokens)</TemplateColumn>
+            <PropertyColumn Property="@(m => m.Capabilities)" Title="能力" />
+            <TemplateColumn Title="推理选项" Context="catalogModel"><small>@FormatReasoningOptions(catalogModel.ReasoningOptions)</small></TemplateColumn>
+            <TemplateColumn Title="操作" Context="catalogModel">
+                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                    @if (ImportedModelIds.Contains(catalogModel.ModelId))
+                    {
+                        <FluentButton Appearance="Appearance.Neutral" Disabled="true" Title="该模型已在此窗口中添加">已添加</FluentButton>
+                    }
+                    else
+                    {
+                        <FluentButton Appearance="Appearance.Accent" OnClick="() => ImportAsync(catalogModel)">添加模型</FluentButton>
+                    }
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="() => FillIntoFormAsync(catalogModel)">填入编辑表单</FluentButton>
+                </FluentStack>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Accent" OnClick="CloseAsync">完成</FluentButton>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="CloseAsync">关闭</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [Parameter]
+    public CatalogModelsDialogParams Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private List<LlmCatalogModelDto> CatalogModels { get; set; } = [];
+    private string CatalogModelQuery { get; set; } = string.Empty;
+    private string ImportApiKey { get; set; } = string.Empty;
+    private string ImportBaseUrl { get; set; } = string.Empty;
+    private string ImportApiFormat { get; set; } = "openai-chat-completions";
+    private string? Error;
+    private string? SuccessMessage;
+    private bool IsLoading;
+    private bool HasSearchedModels;
+
+    // 本窗口内已添加成功的模型：按钮置为“已添加”禁用态，避免重复导入
+    private readonly HashSet<string> ImportedModelIds = new(StringComparer.OrdinalIgnoreCase);
+
+    // 输入即过滤：防抖计时器 + 请求序号守卫，响应乱序时只应用最后一次查询
+    private CancellationTokenSource? _modelSearchCts;
+    private int _modelSearchSeq;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ImportBaseUrl = Content.Provider.SuggestedBaseUrl ?? string.Empty;
+        ImportApiFormat = Content.Provider.Id.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+            ? "anthropic-messages"
+            : "openai-chat-completions";
+        await LoadModelsAsync();
+    }
+
+    public void Dispose()
+    {
+        _modelSearchCts?.Cancel();
+        _modelSearchCts?.Dispose();
+    }
+
+    private async Task OnModelQueryChanged(ChangeEventArgs e)
+    {
+        CatalogModelQuery = e.Value?.ToString() ?? string.Empty;
+        _modelSearchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _modelSearchCts = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await LoadModelsAsync();
+    }
+
+    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
+        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
+
+    private async Task LoadModelsAsync()
+    {
+        int seq = ++_modelSearchSeq;
+        try
+        {
+            Error = null;
+            IsLoading = true;
+            string providerId = Uri.EscapeDataString(Content.Provider.Id);
+            string query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
+            var models = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            if (seq != _modelSearchSeq) return;
+            CatalogModels = models;
+            HasSearchedModels = true;
+        }
+        catch (Exception ex)
+        {
+            if (seq != _modelSearchSeq) return;
+            Error = DialogErrors.Shorten($"读取 Provider 模型失败：{ex.Message}");
+        }
+        finally
+        {
+            if (seq == _modelSearchSeq) IsLoading = false;
+        }
+    }
+
+    private async Task ImportAsync(LlmCatalogModelDto model)
+    {
+        try
+        {
+            Error = null;
+            SuccessMessage = null;
+            await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
+                new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
+                    string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
+                    ImportApiFormat, ImportApiKey, true));
+            ImportApiKey = string.Empty;
+            Content.Changed = true;
+            ImportedModelIds.Add(model.ModelId);
+            SuccessMessage = $"已添加模型 {model.ModelId}";
+        }
+        catch (Exception ex)
+        {
+            Error = DialogErrors.Shorten($"导入失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>填入编辑表单：把目录模型带回外层，由外层接着弹模型框，关闭前标记已变更以便页面重载。</summary>
+    private async Task FillIntoFormAsync(LlmCatalogModelDto model)
+    {
+        Content.FillIntoForm = model;
+        Content.Changed = true;
+        await Dialog.CloseAsync();
+    }
+
+    private async Task CloseAsync() => await Dialog.CloseAsync();
+
+    private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
+
+    private static string FormatReasoningOptions(IReadOnlyList<LlmReasoningOptionDto>? options)
+    {
+        if (options == null || options.Count == 0) return "—";
+        return string.Join(" · ", options.Select(o => o.Type == "toggle" ? "toggle" : $"effort: {string.Join(", ", o.Values ?? [])}"));
+    }
+}
