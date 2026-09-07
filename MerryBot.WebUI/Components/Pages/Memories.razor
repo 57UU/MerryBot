@@ -23,7 +23,7 @@
                             TitleIcon="@(new Size20.Chat())"
                             Items="Sessions"
                             GetKey="@(session => session.SessionKey)"
-                            SelectedKey="SelectedSessionKey"
+                            SelectedKey="@SelectedSessionKey"
                             OnSelected="SelectSessionAsync"
                             RowTitle="@(session => session.DisplayName)"
                             RowSub="@(session => session.UpdatedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm"))"

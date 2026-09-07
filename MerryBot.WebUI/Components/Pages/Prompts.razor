@@ -26,7 +26,7 @@
                             Title="群聊"
                             Items="Groups"
                             GetKey="@(group => group.SessionKey)"
-                            SelectedKey="SelectedSessionKey"
+                            SelectedKey="@SelectedSessionKey"
                             OnSelected="SelectSessionAsync"
                             RowTitle="@(group => group.DisplayName)"
                             LoadingText="加载群聊中…"

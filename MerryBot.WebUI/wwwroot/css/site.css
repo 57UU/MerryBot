@@ -24,7 +24,7 @@ body {
     align-self: flex-start;
     position: sticky;
     top: 0;
-    max-height: 100vh;
+    height: 100vh;
     overflow-y: auto;
     background-color: var(--neutral-layer-2);
     color: var(--neutral-foreground-rest);
@@ -99,15 +99,14 @@ body {
 .select-row:hover {
     background: rgba(127, 127, 127, 0.15);
 }
+/* 选中态与侧边导航同款：中性灰底 + 左侧主题色条（变量缺失时回退 #2b88d8） */
 .select-row.selected {
-    background: rgba(127, 127, 127, 0.22);
-    /* 主题 accent 浅底（不支持 color-mix 的旧浏览器回退上一行灰底） */
-    background: color-mix(in srgb, var(--accent-fill-rest) 16%, transparent);
-    border-left-color: var(--accent-fill-rest);
+    background-color: rgba(127, 127, 127, 0.28);
+    border-left-color: var(--accent-fill-rest, #2b88d8);
     font-weight: 600;
 }
 .select-row:focus-visible {
-    outline: 2px solid var(--accent-fill-rest);
+    outline: 2px solid var(--accent-fill-rest, #2b88d8);
     outline-offset: 1px;
 }
 .select-row-title {

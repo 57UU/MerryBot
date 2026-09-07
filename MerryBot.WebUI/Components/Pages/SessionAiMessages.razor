@@ -15,7 +15,7 @@
                         Title="Session 列表"
                         Items="Sessions"
                         GetKey="@(session => session.SessionKey)"
-                        SelectedKey="SelectedSessionKey"
+                        SelectedKey="@SelectedSessionKey"
                         OnSelected="SelectSessionAsync"
                         RowTitle="@(session => session.DisplayName)"
                         RowSub="@(session => $"{session.MessageCount} 条 · {session.UpdatedAtUtc.LocalDateTime:yyyy-MM-dd HH:mm}")"

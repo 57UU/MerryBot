@@ -33,7 +33,7 @@
                                 Title="任务"
                                 Items="FilteredTasks.ToList()"
                                 GetKey="@(task => task.Id.ToString())"
-                                SelectedKey="SelectedTask?.Id.ToString()"
+                                SelectedKey="@(SelectedTask?.Id.ToString())"
                                 OnSelected="SelectTaskByKeyAsync"
                                 RowTitle="@(task => task.CronExpression)"
                                 LoadingText="加载任务中…"
