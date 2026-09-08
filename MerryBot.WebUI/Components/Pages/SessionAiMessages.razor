@@ -2,6 +2,7 @@
 @using CommonLib
 @using DataService
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IContextSnapshotService SnapshotService
 @inject HistoryRecorder HistoryRecorder
 @inject IJSRuntime JSRuntime
@@ -30,13 +31,34 @@
     @* 右侧上下文展示 *@
     <div style="flex-grow: 1; min-width: 0;">
         <FluentCard Style="height: 100%;">
-            @if (!string.IsNullOrEmpty(SelectedSessionKey))
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                @if (!string.IsNullOrEmpty(SelectedSessionKey))
+                {
+                    <strong>@SelectedSessionKey 的当前上下文</strong>
+                }
+                else
+                {
+                    <strong>请选择一个 session</strong>
+                }
+                <FluentSpacer />
+                <FluentButton Appearance="Appearance.Outline"
+                              Disabled="@(string.IsNullOrEmpty(SelectedSessionKey) || SnapshotLoading || IsClearing || IsSessionBusy)"
+                              Title="@(IsSessionBusy ? "会话正在处理消息，稍后再试" : "清除当前会话（等价于在群里 @机器人 /new）")"
+                              OnClick="ClearSessionAsync">
+                    @(IsClearing ? "清除中…" : "清除会话")
+                </FluentButton>
+            </FluentStack>
+            @if (IsSessionBusy && !string.IsNullOrEmpty(SelectedSessionKey))
             {
-                <strong>@SelectedSessionKey 的当前上下文</strong>
+                <FluentMessageBar Intent="MessageIntent.Info" Style="margin-top: 8px;">会话正在处理消息，清除暂不可用。</FluentMessageBar>
             }
-            else
+            @if (ClearError != null)
             {
-                <strong>请选择一个 session</strong>
+                <FluentMessageBar Intent="MessageIntent.Error" Style="margin-top: 8px;">@ClearError</FluentMessageBar>
+            }
+            @if (ClearMessage != null)
+            {
+                <FluentMessageBar Intent="MessageIntent.Success" Style="margin-top: 8px;">@ClearMessage</FluentMessageBar>
             }
             <div style="max-height: 90vh; overflow: auto; margin-top: 8px;" id="snapshot-scroll">
                 @if (LoadError != null && Snapshot is null)
@@ -114,6 +136,12 @@
     private bool SnapshotLoading;
     private string? LoadError;
     private bool _scrollToBottomPending;
+    private bool IsSessionBusy;
+    private bool IsClearing;
+    private string? ClearError;
+    private string? ClearMessage;
+    private System.Threading.Timer? _busyTimer;
+    private bool _busyTimerStarted;
 
     protected override async Task OnInitializedAsync()
     {
@@ -140,6 +168,22 @@
                 // 忽略（预渲染阶段 JS 互操作不可用）
             }
         }
+        // 首个交互帧后启动忙闲轮询：预渲染阶段 JS 不可用，轮询回调内同样忽略 JS 异常
+        if (firstRender && !_busyTimerStarted)
+        {
+            _busyTimerStarted = true;
+            _busyTimer = new System.Threading.Timer(
+                async _ => await BusyTickAsync(),
+                null,
+                TimeSpan.FromSeconds(3),
+                TimeSpan.FromSeconds(3));
+        }
+    }
+
+    public void Dispose()
+    {
+        _busyTimer?.Dispose();
+        _busyTimer = null;
     }
 
     private async Task LoadSessionsAsync()
@@ -172,6 +216,8 @@
         if (SelectedSessionKey == sessionKey && Snapshot is not null) return;
         SelectedSessionKey = sessionKey;
         Snapshot = null;
+        ClearError = null;
+        ClearMessage = null;
         SnapshotLoading = true;
         try
         {
@@ -186,6 +232,85 @@
         finally
         {
             SnapshotLoading = false;
+        }
+        await RefreshBusyAsync();
+    }
+
+    /// <summary>查询当前选中会话是否正忙（正忙时清除按钮置灰）；服务端未注册会话控制时保持可用。</summary>
+    private async Task RefreshBusyAsync()
+    {
+        if (string.IsNullOrEmpty(SelectedSessionKey)) return;
+        try
+        {
+            var state = await JSRuntime.InvokeAsync<SessionBusyDto>(
+                "configApi.request", "GET", $"/api/context/session-busy?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}");
+            IsSessionBusy = state?.Busy ?? false;
+            StateHasChanged();
+        }
+        catch
+        {
+            // 预渲染/服务端未注册会话控制/电路断开时忽略，保持按钮可用（服务端清除时仍会二次校验忙闲）
+        }
+    }
+
+    /// <summary>忙闲轮询：会话生成回复期间把清除按钮置灰，结束恢复可用。</summary>
+    private async Task BusyTickAsync()
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                var before = IsSessionBusy;
+                await RefreshBusyAsync();
+                if (IsSessionBusy != before)
+                {
+                    StateHasChanged();
+                }
+            });
+        }
+        catch
+        {
+            // 电路已断开等场景，忽略
+        }
+    }
+
+    private async Task ClearSessionAsync()
+    {
+        if (string.IsNullOrEmpty(SelectedSessionKey) || IsClearing || IsSessionBusy) return;
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>(
+                "confirm", $"确定清除会话 [{SelectedSessionKey}] 的上下文吗？\n相当于在群里 @机器人 /new，操作不可恢复。");
+        }
+        catch { confirmed = false; }
+        if (!confirmed) return;
+
+        IsClearing = true;
+        ClearError = null;
+        ClearMessage = null;
+        try
+        {
+            await JSRuntime.InvokeAsync<object>(
+                "configApi.request", "POST", "/api/context/clear", new SessionClearRequest(SelectedSessionKey));
+            ClearMessage = "已清除会话。";
+            await LoadSessionsAsync();
+            SelectedSessionKey = string.Empty;
+            Snapshot = null;
+            IsSessionBusy = false;
+            if (Sessions is { Count: > 0 })
+            {
+                await SelectSessionAsync(Sessions[0].SessionKey);
+            }
+        }
+        catch (Exception exception)
+        {
+            ClearError = $"清除失败: {exception.Message}";
+            await RefreshBusyAsync();
+        }
+        finally
+        {
+            IsClearing = false;
         }
     }
 

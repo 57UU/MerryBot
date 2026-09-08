@@ -171,7 +171,13 @@ internal partial class Logic
         }
         else
         {
-            ContextSnapshotApiMapper.Map(webUiApplication, contextSnapshotManager, historyRecorder);
+            // 会话控制（忙闲查询/清除）由持有 AgentSessionManager 的 agent 插件提供；
+            // 未加载时快照页只读，清除按钮不可用
+            var sessionControl = plugins
+                .Select(static plugin => plugin.Instance)
+                .OfType<IAgentSessionControlService>()
+                .SingleOrDefault();
+            ContextSnapshotApiMapper.Map(webUiApplication, contextSnapshotManager, historyRecorder, sessionControl);
         }
 
         var promptOverrideManager = plugins

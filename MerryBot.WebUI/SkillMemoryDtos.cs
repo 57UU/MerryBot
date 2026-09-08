@@ -16,3 +16,9 @@ public sealed record ContextSessionDto(
     string DisplayName,
     int MessageCount,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record SessionBusyDto(bool Busy);
+
+public sealed record SessionClearRequest(string SessionKey);
+
+public sealed record SessionClearResult(bool Cleared);

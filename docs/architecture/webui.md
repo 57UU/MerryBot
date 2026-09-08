@@ -29,7 +29,7 @@ WebUI 是内嵌的 **Blazor 历史后台**（`MerryBot.WebUI/` 项目），用�
 | `LlmProviderApiMapper` | LLM Provider / 模型 / Key 维护 |
 | `SkillApiMapper` | 技能（Skills）管理 |
 | `MemoryApiMapper` | 记忆管理 |
-| `ContextSnapshotApiMapper` | 上下文快照 |
+| `ContextSnapshotApiMapper` | 上下文快照（查看/会话忙闲查询/清除会话，清除等价于群聊 `/new`，正忙时 409 拒绝） |
 | `ConfigRegistry` / `ModelsDevCatalogService` | 配置注册表与 models.dev 目录查询服务 |
 
 页面位于 `Components/Pages/`：群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、配置编辑、高级配置、日志、群管理、转发消息等。

@@ -27,8 +27,9 @@ public class AgentSession
     /// <summary>
     /// 是否正在处理消息（供 AgentSessionManager 空闲清理判断，会话不忙时才允许释放）。
     /// 即排空循环是否在运行：从首条消息入队启动排空，到最后一次判空退出期间为 true。
+    /// 公开给插件层与 WebUI 会话控制（如清除会话前判断忙闲）。
     /// </summary>
-    internal bool IsBusy => _draining;
+    public bool IsBusy => _draining;
 
     /// <summary>当前正在处理的消息对应的取消源（链接消息自带 token），供 /stop 取消本轮对话；null 表示空闲</summary>
     private CancellationTokenSource? _activeCts;

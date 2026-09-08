@@ -75,6 +75,34 @@ public class AgentSessionManager : IDisposable
         return await GetSessionAsync(sessionId);
     }
 
+    /// <summary>
+    /// 指定会话是否正在处理消息。会话不存在或尚未初始化完成时返回 false；
+    /// 查询不会创建会话（与 <see cref="GetSessionAsync"/> 不同）。
+    /// 供 WebUI 会话控制（清除前判断忙闲）与空闲清理之外的调用方使用。
+    /// </summary>
+    public bool IsSessionBusy(string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        return TryGetLiveSession(sessionId, out var session) && session is not null && session.IsBusy;
+    }
+
+    /// <summary>
+    /// 获取已存在的常驻会话（不创建）。会话不存在、初始化失败或尚未完成时返回 false。
+    /// </summary>
+    public bool TryGetLiveSession(string sessionId, out AgentSession? session)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        session = null;
+        if (!_agentSessions.TryGetValue(sessionId, out var lazy)
+            || !lazy.IsValueCreated
+            || !lazy.Value.IsCompletedSuccessfully)
+        {
+            return false;
+        }
+        session = lazy.Value.Result;
+        return true;
+    }
+
     /// <summary>后台监控循环：按 CleanupInterval 周期扫描空闲会话，Dispose 取消时静默退出。</summary>
     private async Task CleanupLoopAsync(CancellationToken cancellationToken)
     {
