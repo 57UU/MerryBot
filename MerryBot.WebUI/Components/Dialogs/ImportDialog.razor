@@ -1,5 +1,6 @@
 @implements IDialogContentComponent<ImportDialogParams>
 @implements IDisposable
+@using MerryBot.WebUI.Api
 
 <FluentDialogHeader ShowDismiss="true">
     <FluentLabel Typo="Typography.PaneHeader">从 models.dev 导入</FluentLabel>
@@ -58,10 +59,12 @@
     public FluentDialog Dialog { get; set; } = default!;
 
     [Inject]
-    private IJSRuntime JSRuntime { get; set; } = default!;
+    private WebUiServiceRegistry WebUiServices { get; set; } = default!;
 
     [Inject]
     private IDialogService DialogService { get; set; } = default!;
+
+    private LlmProviderService LlmService => new(WebUiServices);
 
     private List<LlmCatalogProviderDto> CatalogProviders { get; set; } = [];
     private LlmCatalogStatusDto? CatalogStatus { get; set; }
@@ -99,9 +102,6 @@
         await SearchProvidersAsync();
     }
 
-    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
-        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
-
     private async Task SearchProvidersAsync()
     {
         int seq = ++_providerSearchSeq;
@@ -109,11 +109,10 @@
         {
             Error = null;
             IsLoadingCatalog = true;
-            string query = Uri.EscapeDataString(CatalogProviderQuery ?? string.Empty);
-            var providers = (await RequestAsync<List<LlmCatalogProviderDto>>("GET", $"/api/plugins/llm-provider/catalog/providers?query={query}")) ?? [];
+            List<LlmCatalogProviderDto> providers = (await LlmService.GetCatalogProvidersAsync(CatalogProviderQuery)).ToList();
             if (seq != _providerSearchSeq) return;
             CatalogProviders = providers;
-            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("GET", "/api/plugins/llm-provider/catalog/status");
+            CatalogStatus = await LlmService.GetCatalogStatusAsync();
             if (seq != _providerSearchSeq) return;
             HasSearchedProviders = true;
         }
@@ -134,7 +133,7 @@
         {
             Error = null;
             IsLoadingCatalog = true;
-            CatalogStatus = await RequestAsync<LlmCatalogStatusDto>("POST", "/api/plugins/llm-provider/catalog/refresh");
+            CatalogStatus = await LlmService.RefreshCatalogAsync();
         }
         catch (Exception ex)
         {

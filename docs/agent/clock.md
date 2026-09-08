@@ -8,7 +8,7 @@ nav_order: 7
 
 `ClockService` 是宿主拥有的共享 cron 调度器，**按 `(pluginId, sessionId)` 双重所有权边界共享给所有插件**：插件经 `PluginInterop.Clock`（`ClockScope` 门面，构造时绑定本插件 Id）访问，只能看到和管理自己的任务。`Cron` 只是 Agent 会话上的工具门面。任务持久化在 core 的 `clock` scope；`ClockTask.Content` 为 `object?`（可为 null 或插件自定义模型）。WebUI 提供 `/clock` 管理页（跨插件查看/编辑/启停/删除 + 执行日志）。
 
-> 代码入口：`Agent.Session/ClockService.cs` 调度器，`Agent.Session/ClockScope.cs` 插件门面，`MerryBot/ClockStore.cs` LiteDB 持久化（弱类型读取 + v1→v2 迁移），`Agent.Session/Cron.cs` LLM 工具集，`MerryBot.WebUI/Api/ClockApiMapper.cs` + `Components/Pages/ClockTasks.razor` 管理端。
+> 代码入口：`Agent.Session/ClockService.cs` 调度器，`Agent.Session/ClockScope.cs` 插件门面，`MerryBot/ClockStore.cs` LiteDB 持久化（弱类型读取 + v1→v2 迁移），`Agent.Session/Cron.cs` LLM 工具集，`MerryBot.WebUI/Api/WebUiServiceRegistry.cs`（Clock 字段直连注册） + `Components/Pages/ClockTasks.razor` 管理端。
 
 ---
 
@@ -21,7 +21,7 @@ flowchart TD
         L[Logic 构造] --> CS[ClockService 实例]
         L --> ST[CoreClockStore<br/>plugin_data.db / core.clock scope]
         L --> DE[DelegatingClockExecutor<br/>（空转发器集合）]
-        L -->|ClockApiMapper| WUI[WebUI /clock 管理页]
+        L -->|WebUiServiceRegistry.Clock| WUI[WebUI /clock 管理页（Blazor 直连）]
     end
 
     subgraph Plugin["各插件（插件加载阶段）"]
@@ -98,8 +98,7 @@ flowchart TD
 // MerryBot/Logic.cs
 clockStore = new CoreClockStore(PluginStorageDatabase.CreateScope("clock", prefix: "core"));
 clockService = new ClockService(clockStore, new DelegatingClockExecutor());
-// 定时任务管理端 API（core 拥有调度器，跨插件列出/编辑；插件侧经 PluginInterop.Clock 隔离访问）
-ClockApiMapper.Map(webUiApplication, clockService);
+webUiServices.Clock = clockService; // 定时任务管理端直连（core 拥有调度器，跨插件列出/编辑；插件侧经 PluginInterop.Clock 隔离访问）
 _ = StartClockAsync();
 LoadPlugins();
 ```
@@ -114,7 +113,7 @@ LoadPlugins();
 | --- | --- | --- |
 | 构造 CoreClockStore | [Logic.cs L63](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L63) | 建集合句柄（强类型 + BsonDocument 双视图），尚未建索引/写 meta |
 | 构造 ClockService | [Logic.cs L64](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L64) | 仅赋依赖，不启动调度线程 |
-| 注册管理端 API | [Logic.cs L66](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L66) | `ClockApiMapper.Map(webUiApplication, clockService)`，`/api/clock/*` |
+| 注册管理端直连 | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs) | `webUiServices.Clock = clockService`，`/clock` 页经 `WebUiServiceRegistry` 直连 |
 | `EnsureInitializedAsync` | [Logic.cs StartClockAsync](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L135) 调 [CoreClockStore.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/ClockStore.cs#L49-L101) | 建索引；写 schema 版本 "2"；v1→v2 迁移（补 PluginId）；其他版本直接抛 |
 | `StartAsync` | [Logic.cs StartClockAsync](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L136) 调 [ClockService.cs](file:///e:/Projects/VSProj/MerryBot/Agent.Session/ClockService.cs#L42-L84) | 恢复中断运行记录；加载全部任务；处理 misfire；启动调度线程 |
 | 插件获得门面 | [Logic.Plugins.cs L65](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.Plugins.cs#L65) | `new ClockScope(clockService, attribute.Id)`——每个插件独立门面，注入 `PluginInterop.Clock` |
@@ -457,14 +456,15 @@ cron 的下一次计算始终是 `CronExpression.GetNextOccurrence(fromUtc, time
 
 ### 8.2 WebUI 管理端（/clock 页面）
 
-[ClockApiMapper.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot.WebUI/Api/ClockApiMapper.cs) + [ClockTasks.razor](file:///e:/Projects/VSProj/MerryBot/MerryBot.WebUI/Components/Pages/ClockTasks.razor)：
+[ClockTasks.razor](file:///e:/Projects/VSProj/MerryBot/MerryBot.WebUI/Components/Pages/ClockTasks.razor)
+经 `WebUiServiceRegistry.Clock` 直连调度器（跨插件列出/编辑/删除与日志查询，无 HTTP 中转）：
 
-| 路由 | 方法 | 说明 |
+| 操作 | 直连调用 | 说明 |
 | --- | --- | --- |
-| `/api/clock/tasks` | GET | `ListAllAsync()` 跨插件返回全部任务（按 PluginId、CreatedAtUtc 排序）。DTO 的 `ContentIsText` 标记内容是否为文本。 |
-| `/api/clock/tasks/update` | POST | 按 `(PluginId, SessionId, TaskId)` 更新。**Content 仅接受文本**：`ContentProvided=true` 且文本非空白时替换，否则不修改（`ClockUpdateRequest` 语义约定 null = 不修改，空文本无法表达"清空"）——避免管理端把插件 POCO 覆盖成错误类型。 |
-| `/api/clock/tasks/delete` | POST | 按 `(PluginId, SessionId, TaskId)` 删除；执行历史保留。 |
-| `/api/clock/logs` | GET | 按 pluginId/sessionId/taskId/status/时间范围查询执行日志。 |
+| 列出全部任务 | `ListAllAsync()` | 跨插件返回全部任务（按 PluginId、CreatedAtUtc 排序）。DTO 的 `ContentIsText` 标记内容是否为文本。 |
+| 更新任务 | `UpdateAsync` | 按 `(PluginId, SessionId, TaskId)` 更新。**Content 仅接受文本**：`ContentProvided=true` 且文本非空白时替换，否则不修改（`ClockUpdateRequest` 语义约定 null = 不修改，空文本无法表达"清空"）——避免管理端把插件 POCO 覆盖成错误类型。 |
+| 删除任务 | `DeleteAsync` | 按 `(PluginId, SessionId, TaskId)` 删除；执行历史保留。 |
+| 查询执行日志 | `QueryLogsAsync` | 按 pluginId/sessionId/taskId/status/时间范围查询执行日志。 |
 
 页面布局仿记忆管理：左侧任务列表（插件过滤下拉 + 启停徽标 + cron + 下次执行时间），右侧编辑表单。**Content 编辑按配置中心的类型分发方式**：`ContentIsText` 为 true 时渲染 textarea（null 显示空，留空保存则保持原内容不变）；对象型内容渲染只读 JSON（`<pre>`）并提示"插件自定义类型，请在插件侧修改"。下方为该任务的执行记录表格（计划时间/状态/耗时/结果，状态着色徽标）。**不提供新建**——任务的创建由插件/模型工具完成（保持 Trigger 等领域字段由插件解释）。
 

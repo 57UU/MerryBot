@@ -1,5 +1,10 @@
 @page "/memories"
 @rendermode InteractiveServer
+@using DataService
+@using MerryBot.Contracts
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
+@inject HistoryRecorder HistoryRecorder
 @inject IJSRuntime JSRuntime
 
 <PageTitle>记忆管理</PageTitle>
@@ -109,7 +114,25 @@
         try
         {
             Error = null;
-            Sessions = await JSRuntime.InvokeAsync<List<MemorySessionDto>>("configApi.request", "GET", "/api/memories/sessions");
+            // 直连进程内记忆管理服务 + 历史库群名映射（逻辑照抄 MemoryApiMapper）
+            var manager = WebUiServices.Memories;
+            if (manager is null)
+            {
+                Error = "记忆服务未加载。";
+                return;
+            }
+            var sessionsTask = manager.ListMemorySessionsAsync();
+            var namesTask = HistoryRecorder.GetAllGroupNamesAsync();
+            await Task.WhenAll(sessionsTask, namesTask);
+            var names = namesTask.Result
+                .GroupBy(static item => item.GroupId)
+                .ToDictionary(group => group.Key, static group => group.First().Name);
+            Sessions = sessionsTask.Result
+                .Select(session => new MemorySessionDto(
+                    session.SessionKey,
+                    GetDisplayName(session.SessionKey, names),
+                    session.UpdatedAtUtc))
+                .ToList();
         }
         catch (Exception exception) { Error = $"无法读取记忆会话: {exception.Message}"; }
     }
@@ -119,10 +142,15 @@
         try
         {
             Error = null;
+            var manager = WebUiServices.Memories;
+            if (manager is null)
+            {
+                Error = "记忆服务未加载。";
+                return;
+            }
             SelectedSessionKey = sessionKey;
-            var encoded = Uri.EscapeDataString(sessionKey);
-            var indexTask = JSRuntime.InvokeAsync<string>("configApi.request", "GET", $"/api/memories/index?sessionKey={encoded}").AsTask();
-            var memoriesTask = JSRuntime.InvokeAsync<List<ManagedMemory>>("configApi.request", "GET", $"/api/memories/entries?sessionKey={encoded}").AsTask();
+            var indexTask = manager.GetMemoryIndexAsync(sessionKey);
+            var memoriesTask = manager.ListMemoriesAsync(sessionKey);
             await Task.WhenAll(indexTask, memoriesTask);
             IndexContent = indexTask.Result;
             MemoryItems = memoriesTask.Result.Select(item => new MemoryEdit(item.Key, item.Content)).ToList();
@@ -133,48 +161,92 @@
     private async Task SaveIndexAsync()
     {
         if (SelectedSessionKey is null) return;
-        await SaveAsync("保存索引", "/api/memories/index", new MemoryIndexUpdateRequest(SelectedSessionKey, IndexContent), reload: false);
+        var manager = WebUiServices.Memories;
+        if (manager is null)
+        {
+            Error = "记忆服务未加载，保存失败。";
+            return;
+        }
+        string sessionKey = SelectedSessionKey;
+        string content = IndexContent;
+        await SaveAsync("保存索引", () => manager.SaveMemoryIndexAsync(sessionKey, content), reload: false);
     }
 
     private async Task SaveNewAsync()
     {
         if (SelectedSessionKey is null) return;
-        await SaveAsync("保存记忆", "/api/memories/entries", new MemoryEntryUpdateRequest(SelectedSessionKey, NewKey, NewContent), reload: true);
+        var manager = WebUiServices.Memories;
+        if (manager is null)
+        {
+            Error = "记忆服务未加载，保存失败。";
+            return;
+        }
+        string sessionKey = SelectedSessionKey;
+        string key = NewKey;
+        string content = NewContent;
+        await SaveAsync("保存记忆", () => manager.SaveMemoryAsync(sessionKey, key, content), reload: true);
         NewKey = string.Empty;
         NewContent = string.Empty;
     }
 
     private Task SaveExistingAsync(MemoryEdit memory)
-        => SelectedSessionKey is null
-            ? Task.CompletedTask
-            : SaveAsync("保存记忆", "/api/memories/entries", new MemoryEntryUpdateRequest(SelectedSessionKey, memory.Key, memory.Content), reload: true);
+    {
+        if (SelectedSessionKey is null) return Task.CompletedTask;
+        var manager = WebUiServices.Memories;
+        if (manager is null)
+        {
+            Error = "记忆服务未加载，保存失败。";
+            return Task.CompletedTask;
+        }
+        string sessionKey = SelectedSessionKey;
+        return SaveAsync("保存记忆", () => manager.SaveMemoryAsync(sessionKey, memory.Key, memory.Content), reload: true);
+    }
 
     private async Task DeleteMemoryAsync(MemoryEdit memory)
     {
         if (SelectedSessionKey is null || !await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除记忆 “{memory.Key}”吗？")) return;
+        var manager = WebUiServices.Memories;
+        if (manager is null)
+        {
+            Error = "记忆服务未加载，删除失败。";
+            return;
+        }
         IsSaving = true;
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/memories/entries/delete?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}&key={Uri.EscapeDataString(memory.Key)}");
-            await SelectSessionAsync(SelectedSessionKey);
+            string sessionKey = SelectedSessionKey;
+            await manager.DeleteMemoryAsync(sessionKey, memory.Key);
+            await SelectSessionAsync(sessionKey);
             await LoadSessionsAsync();
         }
         catch (Exception exception) { Error = $"删除记忆失败: {exception.Message}"; }
         finally { IsSaving = false; }
     }
 
-    private async Task SaveAsync(string action, string url, object payload, bool reload)
+    private async Task SaveAsync(string action, Func<Task> operation, bool reload)
     {
         IsSaving = true;
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", url, payload);
+            await operation();
             if (reload && SelectedSessionKey is not null) await SelectSessionAsync(SelectedSessionKey);
             await LoadSessionsAsync();
         }
         catch (Exception exception) { Error = $"{action}失败: {exception.Message}"; }
         finally { IsSaving = false; }
+    }
+
+    private static string GetDisplayName(string sessionKey, IReadOnlyDictionary<long, string> names)
+    {
+        var parts = sessionKey.Split('/', StringSplitOptions.None);
+        if (parts is ["qq", "group", var id] && long.TryParse(id, out var groupId))
+        {
+            return names.TryGetValue(groupId, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? $"{name} ({groupId})"
+                : $"群 {groupId}";
+        }
+        return sessionKey;
     }
 }

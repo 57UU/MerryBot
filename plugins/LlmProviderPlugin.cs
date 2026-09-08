@@ -279,8 +279,10 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
                 ProviderId = providerId,
                 CreatedAtUtc = now,
             };
+        // FindAllAsync 返回延迟枚举：先物化再逐条删，避免枚举中写造成同一异步流锁重入
         foreach (var stale in (await keys.FindAllAsync())
-            .Where(item => item.ProviderId == providerId && item.Id != record.Id))
+            .Where(item => item.ProviderId == providerId && item.Id != record.Id)
+            .ToList())
         {
             await keys.DeleteAsync(stale.Id);
         }

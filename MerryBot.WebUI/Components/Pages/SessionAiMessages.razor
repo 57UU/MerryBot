@@ -1,10 +1,12 @@
 @page "/sessionai"
 @using CommonLib
 @using DataService
+@using MerryBot.WebUI.Api
 @rendermode InteractiveServer
 @implements IDisposable
 @inject IContextSnapshotService SnapshotService
 @inject HistoryRecorder HistoryRecorder
+@inject WebUiServiceRegistry WebUiServices
 @inject IJSRuntime JSRuntime
 
 <PageTitle>会话快照</PageTitle>
@@ -168,7 +170,7 @@
                 // 忽略（预渲染阶段 JS 互操作不可用）
             }
         }
-        // 首个交互帧后启动忙闲轮询：预渲染阶段 JS 不可用，轮询回调内同样忽略 JS 异常
+        // 首个交互帧后启动忙闲轮询：预渲染阶段电路未建立，轮询回调内忽略异常
         if (firstRender && !_busyTimerStarted)
         {
             _busyTimerStarted = true;
@@ -236,20 +238,21 @@
         await RefreshBusyAsync();
     }
 
-    /// <summary>查询当前选中会话是否正忙（正忙时清除按钮置灰）；服务端未注册会话控制时保持可用。</summary>
+    /// <summary>查询当前选中会话是否正忙（正忙时清除按钮置灰）；会话控制服务未加载时保持可用。</summary>
     private async Task RefreshBusyAsync()
     {
         if (string.IsNullOrEmpty(SelectedSessionKey)) return;
         try
         {
-            var state = await JSRuntime.InvokeAsync<SessionBusyDto>(
-                "configApi.request", "GET", $"/api/context/session-busy?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}");
-            IsSessionBusy = state?.Busy ?? false;
+            // 直连进程内会话控制服务（对等原 session-busy 接口未注册时的语义：保持可用）
+            var sessionControl = WebUiServices.SessionControl;
+            if (sessionControl is null) return;
+            IsSessionBusy = await sessionControl.IsSessionBusyAsync(SelectedSessionKey);
             StateHasChanged();
         }
         catch
         {
-            // 预渲染/服务端未注册会话控制/电路断开时忽略，保持按钮可用（服务端清除时仍会二次校验忙闲）
+            // 服务端未注册会话控制/电路断开时忽略，保持按钮可用（清除时仍会二次校验忙闲）
         }
     }
 
@@ -291,8 +294,20 @@
         ClearMessage = null;
         try
         {
-            await JSRuntime.InvokeAsync<object>(
-                "configApi.request", "POST", "/api/context/clear", new SessionClearRequest(SelectedSessionKey));
+            // 直连进程内会话控制服务（对等原 clear 接口：正忙返回 false 时提示稍后再试）
+            var sessionControl = WebUiServices.SessionControl;
+            if (sessionControl is null)
+            {
+                ClearError = "会话控制服务未加载，无法清除会话。";
+                return;
+            }
+            var cleared = await sessionControl.TryClearSessionAsync(SelectedSessionKey);
+            if (!cleared)
+            {
+                ClearError = "会话正在处理消息，稍后再试。";
+                await RefreshBusyAsync();
+                return;
+            }
             ClearMessage = "已清除会话。";
             await LoadSessionsAsync();
             SelectedSessionKey = string.Empty;

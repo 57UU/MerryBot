@@ -122,17 +122,18 @@ internal partial class Logic
     }
     void RegisterWebUi()
     {
+        // 插件服务填入 WebUI 直连注册表，供 Blazor 页面直接调用；未加载时页面展示“服务不可用”
         var llmProviderManager = plugins
     .Select(static plugin => plugin.Instance)
     .OfType<ILlmProviderManagementService>()
     .SingleOrDefault();
         if (llmProviderManager == null)
         {
-            logger.Warn("LLM Provider 插件未加载，未注册 LLM Provider Web API。");
+            logger.Warn("LLM Provider 插件未加载，模型配置页不可用。");
         }
         else
         {
-            LlmProviderApiMapper.Map(webUiApplication, llmProviderManager, botClient.PathPrefix);
+            webUiServices.LlmProviders = llmProviderManager;
         }
 
         var skillManager = plugins
@@ -141,11 +142,11 @@ internal partial class Logic
             .SingleOrDefault();
         if (skillManager == null)
         {
-            logger.Warn("Agent Skill 管理服务未加载，未注册 Skill Web API。");
+            logger.Warn("Agent Skill 管理服务未加载，技能管理页不可用。");
         }
         else
         {
-            SkillApiMapper.Map(webUiApplication, skillManager);
+            webUiServices.Skills = skillManager;
         }
 
         var memoryManager = plugins
@@ -154,11 +155,11 @@ internal partial class Logic
             .SingleOrDefault();
         if (memoryManager == null)
         {
-            logger.Warn("Agent 记忆管理服务未加载，未注册记忆 Web API。");
+            logger.Warn("Agent 记忆管理服务未加载，记忆页不可用。");
         }
         else
         {
-            MemoryApiMapper.Map(webUiApplication, memoryManager, historyRecorder);
+            webUiServices.Memories = memoryManager;
         }
 
         var contextSnapshotManager = plugins
@@ -167,7 +168,7 @@ internal partial class Logic
             .SingleOrDefault();
         if (contextSnapshotManager == null)
         {
-            logger.Warn("Agent 上下文快照服务未加载，未注册上下文快照 Web API。");
+            logger.Warn("Agent 上下文快照服务未加载。");
         }
         else
         {
@@ -177,7 +178,10 @@ internal partial class Logic
                 .Select(static plugin => plugin.Instance)
                 .OfType<IAgentSessionControlService>()
                 .SingleOrDefault();
-            ContextSnapshotApiMapper.Map(webUiApplication, contextSnapshotManager, historyRecorder, sessionControl);
+            if (sessionControl != null)
+            {
+                webUiServices.SessionControl = sessionControl;
+            }
         }
 
         var promptOverrideManager = plugins
@@ -186,11 +190,11 @@ internal partial class Logic
             .SingleOrDefault();
         if (promptOverrideManager == null)
         {
-            logger.Warn("Agent 提示词复写服务未加载，未注册提示词复写 Web API。");
+            logger.Warn("Agent 提示词复写服务未加载，提示词页不可用。");
         }
         else
         {
-            PromptOverrideApiMapper.Map(webUiApplication, promptOverrideManager, historyRecorder);
+            webUiServices.PromptOverrides = promptOverrideManager;
         }
     }
 

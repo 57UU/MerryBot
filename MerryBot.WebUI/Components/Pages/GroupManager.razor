@@ -1,6 +1,9 @@
 @page "/groups"
 @rendermode InteractiveServer
-@inject IJSRuntime JSRuntime
+@using DataService
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
+@inject HistoryRecorder HistoryRecorder
 
 <PageTitle>群组管理</PageTitle>
 
@@ -74,23 +77,16 @@
 </FluentStack>
 
 @code {
-    private GroupListPayload? Data;
+    private GroupListDto? Data;
     private string? Error;
     private bool IsLoading;
     private bool IsMutating;
     private string NewGroupText = "";
 
-    private bool _initialized;
-
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // 无 JS 互操作依赖，初始化时直接加载
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadAsync();
-            StateHasChanged();
-        }
+        await LoadAsync();
     }
 
     private async Task LoadAsync()
@@ -99,7 +95,12 @@
         Error = null;
         try
         {
-            Data = await JSRuntime.InvokeAsync<GroupListPayload>("configApi.request", "GET", "/api/groups/");
+            if (WebUiServices.GroupManager == null)
+            {
+                Error = "群组服务未加载，不可用。";
+                return;
+            }
+            Data = await GroupBrowseService.GetGroupsAsync(WebUiServices.GroupManager, HistoryRecorder);
         }
         catch (Exception ex)
         {
@@ -113,16 +114,21 @@
 
     private async Task AddGroupAsync()
     {
-        if (!long.TryParse(NewGroupText.Trim(), out var groupId) || groupId <= 0)
+        if (!long.TryParse(NewGroupText.Trim(), out long groupId) || groupId <= 0)
         {
             Error = "请输入有效的 QQ 群号。";
+            return;
+        }
+        if (WebUiServices.GroupManager == null)
+        {
+            Error = "群组服务未加载，不可用。";
             return;
         }
         IsMutating = true;
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/groups/{groupId}");
+            await WebUiServices.GroupManager.AddGroupAsync(groupId);
             NewGroupText = "";
             await LoadAsync();
         }
@@ -138,12 +144,23 @@
 
     private async Task ToggleAsync(long groupId, bool enable)
     {
+        if (WebUiServices.GroupManager == null)
+        {
+            Error = "群组服务未加载，不可用。";
+            return;
+        }
         IsMutating = true;
         try
         {
             Error = null;
-            var url = enable ? $"/api/groups/{groupId}" : $"/api/groups/{groupId}/delete";
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", url);
+            if (enable)
+            {
+                await WebUiServices.GroupManager.AddGroupAsync(groupId);
+            }
+            else
+            {
+                await WebUiServices.GroupManager.RemoveGroupAsync(groupId);
+            }
             await LoadAsync();
         }
         catch (Exception ex)
@@ -154,20 +171,5 @@
         {
             IsMutating = false;
         }
-    }
-
-    private sealed class GroupListPayload
-    {
-        public List<GroupEntryPayload> Groups { get; set; } = new();
-    }
-
-    private sealed class GroupEntryPayload
-    {
-        public long GroupId { get; set; }
-        public string? Name { get; set; }
-        public int MemberCount { get; set; }
-        public int MessageCount { get; set; }
-        public int AiMessageCount { get; set; }
-        public bool Enabled { get; set; }
     }
 }

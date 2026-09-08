@@ -19,7 +19,8 @@ public sealed partial class LlmProviderPlugin
         else if (schema.Value == "1")
         {
             // 1 -> 2: 补 ReasoningOptions 空数组，LiteDB 缺字段读作 null，需显式回填
-            var all = await models.FindAllAsync();
+            // FindAllAsync 返回延迟枚举：先物化再逐条写，避免枚举中写造成同一异步流锁重入
+            var all = (await models.FindAllAsync()).ToList();
             foreach (var m in all)
             {
                 if (m.ReasoningOptions == null)
@@ -35,7 +36,7 @@ public sealed partial class LlmProviderPlugin
             // 2 -> 3: 历史上目录导入曾把 %2F 字面存进模型 ID，与解码后的引用对不上
             //（点“设为默认”时查不到模型 → KeyNotFoundException → 500）。统一重命名为解码形，
             // 并修正默认模型指针；两种形态并存时保留更新的那条。
-            var allModels = await models.FindAllAsync();
+            var allModels = (await models.FindAllAsync()).ToList();
             var renamed = 0;
             foreach (var m in allModels)
             {

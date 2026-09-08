@@ -26,6 +26,8 @@ internal partial class Logic
     private readonly WebApplication webUiApplication;
     private readonly IHostApplicationLifetime webUiLifetime;
     private readonly ConfigRegistry configRegistry;
+    /// <summary>WebUI 直连注册表：随 WebApp 注册空壳，core 与插件实例分别填充。</summary>
+    private readonly WebUiServiceRegistry webUiServices = new();
     /// <summary>core 拥有的进程生命周期服务（版本/更新/重启/重载/退出），插件与 WebUI 共用</summary>
     private readonly HostLifecycle hostLifecycle;
     /// <summary>core 拥有的定时任务调度器：Agent 插件只注册执行器，生命周期归宿主</summary>
@@ -44,38 +46,39 @@ internal partial class Logic
         // 上下文快照服务注册进 WebUI DI：组件直接注入读取（与 AgentServicePlugin 同 scope，只读无状态），
         // 避免页面经 JS 互操作 + HTTP 回调自己的 API——大快照 JSON 超过 SignalR 32KB 默认上限会导致断连/取消
         var contextSnapshotService = new ContextSnapshotService(PluginStorageDatabase.CreateScope("agent"));
+        // WebUI 直连注册表：空壳随 WebApp 注册，实例在下方各组件创建后逐个填入（插件提供的由 RegisterWebUi 填）。
         webUiApplication = MerryBot.WebUI.Program.CreateApp(historyRecorder, StartupConfig.WebAddress,
             services =>
             {
                 services.AddSingleton<IContextSnapshotService>(contextSnapshotService);
                 services.AddSingleton(PluginStorageDatabase);
+                services.AddSingleton(webUiServices);
             },
             disableProcessSignalHandling: true);
         // 在 WebUI 启动前缓存生命周期对象。WebUI 启动失败后其 IServiceProvider
         // 可能已释放，Shutdown 不能再通过 webUiApplication.Lifetime 反查服务。
         webUiLifetime = webUiApplication.Lifetime;
         configRegistry = new ConfigRegistry(webUiApplication.Logger);
-        ConfigApiMapper.Map(webUiApplication, configRegistry, Shutdown);
-        // 高级配置面板：原始 BSON 查看/删除插件数据库条目（排查残留数据用）
-        AdvancedConfigApiMapper.Map(webUiApplication, PluginStorageDatabase);
-        // hostLifecycle 先于 StatusApiMapper 创建：概览页需展示 git 版本信息
-        hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase);
-        StatusApiMapper.Map(webUiApplication, () => new BotStatusDto(
+        // core 侧直连填充（插件侧由 RegisterWebUi 填）：Blazor 页面经 WebUiServiceRegistry 直接调用进程内服务
+        webUiServices.Config = configRegistry;
+        webUiServices.BotStatusProvider = () => new BotStatusDto(
             botClient.State == AdapterState.Connected,
             botClient.SelfId?.ToString() ?? "-",
             botClient.Nickname ?? "-",
-            ConfigManager.Instance.NapcatServer), historyRecorder, hostLifecycle);
-        GroupApiMapper.Map(webUiApplication, this, historyRecorder);
-        LogApiMapper.Map(webUiApplication, Path.Combine(botClient.PathPrefix, "log"));
-        UpdateApiMapper.Map(webUiApplication, hostLifecycle);
+            ConfigManager.Instance.NapcatServer);
+        webUiServices.GroupManager = this;
+        webUiServices.LogFiles = new LogFileService(Path.Combine(botClient.PathPrefix, "log"));
+        webUiServices.BotPathPrefix = botClient.PathPrefix;
+        webUiServices.Shutdown = Shutdown;
+        webUiServices.Catalog = new ModelsDevCatalogService(
+            Path.Combine(botClient.PathPrefix, "models.dev-api.json"), webUiApplication.Logger);
+        hostLifecycle = new HostLifecycle(Shutdown, PluginStorageDatabase);
+        webUiServices.HostLifecycle = hostLifecycle;
         configRegistry.RegisterConfig("core", ConfigManager.Instance, ConfigManager.Save);
         // 调度器先于插件创建；存储用 core 自己的命名空间（prefix "core"），与插件数据隔离
         clockStore = new CoreClockStore(PluginStorageDatabase.CreateScope("clock", prefix: "core"));
         clockService = new ClockService(clockStore, new DelegatingClockExecutor());
-        // 定时任务管理端 API（core 拥有调度器，跨插件列出/编辑；插件侧经 PluginInterop.Clock 隔离访问）
-        ClockApiMapper.Map(webUiApplication, clockService);
-        // 数据库维护：查询大小 / 手动 Rebuild（碎片整理/压缩）
-        DatabaseApiMapper.Map(webUiApplication, PluginStorageDatabase, historyRecorder);
+        webUiServices.Clock = clockService;
         _ = StartClockAsync();
         LoadPlugins();
         _ = RunWebUiAsync();

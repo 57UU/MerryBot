@@ -1,5 +1,9 @@
 using System.Net;
+using BotPlugin;
+using DataProvider;
 using DataService;
+using MerryBot.Contracts;
+using MerryBot.WebUI.Api;
 using MerryBot.WebUI.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +20,23 @@ public class Program
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         var historyRecorder = new HistoryRecorder(Path.Combine(dataPath, "group_history.db"), Path.Combine(dataPath, "storage"));
-        var app = CreateApp(historyRecorder);
+        // 独立运行（无宿主插件）：同样打开插件库并填充直连注册表的 core 部分，
+        // 页面行为与宿主模式一致（插件服务显示“未加载”，其余可用）
+        var pluginDb = new PluginStorageDatabase(Path.Combine(dataPath, "plugin_data.db"));
+        await pluginDb.MigrateAsync();
+        var webUiServices = new WebUiServiceRegistry
+        {
+            LogFiles = new LogFileService(Path.Combine(dataPath, "log")),
+        };
+        var app = CreateApp(
+            historyRecorder,
+            configureServices: services =>
+            {
+                services.AddSingleton(pluginDb);
+                services.AddSingleton<IContextSnapshotService>(
+                    new ContextSnapshotService(pluginDb.CreateScope("agent")));
+                services.AddSingleton(webUiServices);
+            });
         await app.RunAsync();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000",
@@ -68,11 +88,10 @@ public class Program
 
         app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-        // /api 错误统一转 JSON：业务异常只返回原因短语 { "error": "原因" }；
-        // 空错误状态（404/405 等无 body）补一句中性原因，避免被重执行成整页 HTML。
+        // /api 错误统一转 JSON：图片/文件/资源二进制端点的空错误状态（404 等无 body）
+        // 补一句中性原因，避免被重执行成整页 HTML（<img>  broken 时浏览器控制台可读）。
         // 必须放在 UseStatusCodePages 之后：异常不受它影响（它只处理空响应，会直接透传），
         // 而空错误必须抢在它重执行之前先占住 body；UseExceptionHandler 包在最外层只收非 /api 的异常。
-        // 约定响应体见 wwwroot/js/configApi.js、llmProvider.js、skillApi.js 的 readError 解析。
         app.Use(async (context, next) =>
         {
             bool isApi = context.Request.Path.StartsWithSegments("/api");
@@ -104,7 +123,8 @@ public class Program
                 await context.Response.WriteAsJsonAsync(new { error = $"请求失败：HTTP {context.Response.StatusCode}" });
             }
         });
-        app.UseAntiforgery();
+        // 注：业务 POST API 已全部迁为 Blazor 直连（进程内调用，不走 HTTP），
+        // 剩余 /api 全是 GET 二进制端点，无需 UseAntiforgery（Blazor 表单自带保护）。
 
 
 #if DEBUG

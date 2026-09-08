@@ -1,7 +1,8 @@
 @page "/logs"
 @rendermode InteractiveServer
 @implements IDisposable
-@inject IJSRuntime JSRuntime
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
 @using System.Text.RegularExpressions
 
 <PageTitle>运行日志</PageTitle>
@@ -13,7 +14,7 @@
             <p>NLog 日志（按天分文件，最新在顶）；级别/关键词过滤在服务端执行，可浏览历史文件。</p>
         </div>
         <FluentSpacer />
-        <FluentButton Appearance="Appearance.Neutral" OnClick="LoadAsync" Disabled="@IsLoading" Loading="@IsLoading">
+        <FluentButton Appearance="Appearance.Neutral" OnClick="Load" Disabled="@IsLoading" Loading="@IsLoading">
             @(IsLoading ? "刷新中…" : "刷新")
         </FluentButton>
     </FluentStack>
@@ -28,7 +29,7 @@
             <span>当前日志：@(Data?.File ?? "—")</span>
             <FluentSelect TOption="string" TOption="string"
                 SelectedOption="@(SelectedFile ?? string.Empty)"
-                SelectedOptionChanged="@(async (string? v) => { SelectedFile = string.IsNullOrEmpty(v) ? null : v; await LoadAsync(); })"
+                SelectedOptionChanged="@((string? v) => { SelectedFile = string.IsNullOrEmpty(v) ? null : v; Load(); })"
                 Style="min-width:12rem">
                 <FluentOption TOption="string" Value="">当前日志</FluentOption>
                 @foreach (var f in Files)
@@ -38,7 +39,7 @@
             </FluentSelect>
             <FluentSelect TOption="string" TOption="string"
                 SelectedOption="@LineCount.ToString()"
-                SelectedOptionChanged="@(async (string? v) => { if (int.TryParse(v, out int n)) LineCount = n; await LoadAsync(); })"
+                SelectedOptionChanged="@((string? v) => { if (int.TryParse(v, out int n)) LineCount = n; Load(); })"
                 Style="min-width:7rem">
                 <FluentOption TOption="string" Value="200">200 行</FluentOption>
                 <FluentOption TOption="string" Value="500">500 行</FluentOption>
@@ -50,7 +51,7 @@
             }
             <FluentSearch Placeholder="搜索日志…" Immediate="true" ImmediateDelay="300"
                 Value="@SearchText"
-                ValueChanged="@(async (string? v) => { SearchText = v ?? string.Empty; await OnSearchInput(); })"
+                ValueChanged="@((string? v) => { SearchText = v ?? string.Empty; return OnSearchInput(); })"
                 Style="flex:1;min-width:10rem" />
             <FluentCheckbox Label="自动刷新" @bind-Value="AutoRefresh" @bind-Value:after="ToggleAutoRefresh" />
         </FluentStack>
@@ -81,8 +82,8 @@
     private static readonly string[] LevelFilters = { "全部", "DEBUG", "INFO", "WARN", "ERROR", "FATAL" };
     private static readonly Regex LevelRegex = new(@"\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b", RegexOptions.Compiled);
 
-    private LogContentPayload? Data;
-    private List<LogFileInfoPayload> Files = new();
+    private LogContentDto? Data;
+    private List<LogFileInfoDto> Files = new();
     private string? Error;
     private bool IsLoading;
     private int LineCount = 500;
@@ -93,48 +94,28 @@
 
     private System.Threading.Timer? _refreshTimer;
     private System.Threading.Timer? _searchDebounce;
-    private bool _initialized;
 
-    // 请求 URL 统一收敛：级别/关键词/文件过滤由服务端执行
-    private string BuildUrl()
+    // 直连进程内 LogFileService（经 WebUiServiceRegistry 注入），不再经 JS fetch 回调 HTTP API
+    // 同步读取即可（无 JS 互操作依赖）；AutoRefresh 默认勾选，初始化即启动定时器
+    protected override void OnInitialized()
     {
-        var url = $"/api/logs/current?lines={LineCount}";
-        if (Level != "全部")
-        {
-            url += $"&level={Uri.EscapeDataString(Level)}";
-        }
-        if (!string.IsNullOrWhiteSpace(SearchText))
-        {
-            url += $"&keyword={Uri.EscapeDataString(SearchText.Trim())}";
-        }
-        if (!string.IsNullOrEmpty(SelectedFile))
-        {
-            url += $"&file={Uri.EscapeDataString(SelectedFile)}";
-        }
-        return url;
+        LoadFiles();
+        Load();
+        ToggleAutoRefresh();
     }
 
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadFilesAsync();
-            await LoadAsync();
-            // AutoRefresh 默认勾选：首载后即启动定时器，否则复选框状态与实际行为不一致
-            ToggleAutoRefresh();
-            StateHasChanged();
-        }
-    }
-
-    private async Task LoadAsync()
+    private void Load()
     {
         IsLoading = true;
         Error = null;
         try
         {
-            Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", BuildUrl());
+            if (WebUiServices.LogFiles == null)
+            {
+                Error = "日志服务不可用。";
+                return;
+            }
+            Data = WebUiServices.LogFiles.ReadCurrent(LineCount, Level, SearchText, SelectedFile);
         }
         catch (Exception ex)
         {
@@ -146,36 +127,39 @@
         }
     }
 
-    private async Task LoadFilesAsync()
+    private void LoadFiles()
     {
         try
         {
-            var files = await JSRuntime.InvokeAsync<List<LogFileInfoPayload>>("configApi.request", "GET", "/api/logs/files");
-            Files = files ?? new List<LogFileInfoPayload>();
+            Files = WebUiServices.LogFiles?.ListFiles().ToList() ?? new List<LogFileInfoDto>();
         }
         catch
         {
             // 文件列表加载失败不阻塞日志查看
-            Files = new List<LogFileInfoPayload>();
+            Files = new List<LogFileInfoDto>();
         }
     }
 
-    private async Task SetLevel(string level)
+    private void SetLevel(string level)
     {
         Level = level;
-        await LoadAsync();
+        Load();
     }
 
-    /// <summary>搜索框输入防抖：停止输入 400ms 后触发服务端过滤请求。</summary>
-    private async Task OnSearchInput()
+    /// <summary>搜索框输入防抖：停止输入 400ms 后触发过滤重读。</summary>
+    private Task OnSearchInput()
     {
         _searchDebounce?.Dispose();
         _searchDebounce = new System.Threading.Timer(
-            async _ =>
+            _ =>
             {
                 try
                 {
-                    await InvokeAsync(LoadAsync);
+                    InvokeAsync(() =>
+                    {
+                        Load();
+                        StateHasChanged();
+                    });
                 }
                 catch
                 {
@@ -185,7 +169,7 @@
             null,
             TimeSpan.FromMilliseconds(400),
             Timeout.InfiniteTimeSpan);
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private void ToggleAutoRefresh()
@@ -201,27 +185,20 @@
         }
     }
 
-    private async Task RefreshTickAsync()
+    private Task RefreshTickAsync()
     {
         try
         {
-            await InvokeAsync(async () =>
+            return InvokeAsync(() =>
             {
-                Error = null;
-                try
-                {
-                    Data = await JSRuntime.InvokeAsync<LogContentPayload>("configApi.request", "GET", BuildUrl());
-                    StateHasChanged();
-                }
-                catch (Exception ex)
-                {
-                    Error = $"加载失败：{ex.Message}";
-                }
+                Load();
+                StateHasChanged();
             });
         }
         catch
         {
             // 电路已断开等场景，忽略
+            return Task.CompletedTask;
         }
     }
 
@@ -251,19 +228,5 @@
         _refreshTimer = null;
         _searchDebounce?.Dispose();
         _searchDebounce = null;
-    }
-
-    private sealed class LogContentPayload
-    {
-        public string? File { get; set; }
-        public List<string> Lines { get; set; } = new();
-    }
-
-    private sealed class LogFileInfoPayload
-    {
-        public string Name { get; set; } = "";
-        public DateTimeOffset LastWriteTimeUtc { get; set; }
-        public long SizeBytes { get; set; }
-        public bool IsCurrent { get; set; }
     }
 }

@@ -1,8 +1,10 @@
 @page "/clock"
 @rendermode InteractiveServer
-@inject IJSRuntime JSRuntime
+@using MerryBot.WebUI.Api
 @using System.Text.Json
 @using Agent.Session
+@inject WebUiServiceRegistry WebUiServices
+@inject IJSRuntime JSRuntime
 
 <PageTitle>定时任务</PageTitle>
 
@@ -177,7 +179,7 @@
     {
         get
         {
-            var content = SelectedTask?.Content;
+            object? content = SelectedTask?.Content;
             if (content is null)
             {
                 return string.Empty;
@@ -189,16 +191,23 @@
 
     protected override Task OnInitializedAsync() => LoadTasksAsync();
 
+    // 直连 core 拥有的 ClockService，不再经 JS fetch 回调 HTTP API
     private async Task LoadTasksAsync()
     {
         try
         {
             Error = null;
-            Tasks = await JSRuntime.InvokeAsync<List<ClockTaskDto>>("configApi.request", "GET", "/api/clock/tasks");
+            if (WebUiServices.Clock == null)
+            {
+                Error = "定时任务服务不可用。";
+                return;
+            }
+            IReadOnlyList<ClockTask> tasks = await WebUiServices.Clock.ListAllAsync();
+            Tasks = tasks.Select(ClockTaskDto.From).ToList();
             // 列表刷新后保持选中项（任务可能被外部修改）
             if (SelectedTask != null)
             {
-                var refreshed = Tasks.FirstOrDefault(t => t.Id == SelectedTask.Id);
+                ClockTaskDto? refreshed = Tasks.FirstOrDefault(t => t.Id == SelectedTask.Id);
                 if (refreshed is null)
                 {
                     SelectedTask = null;
@@ -236,13 +245,13 @@
         await LoadLogsAsync(task);
     }
 
+    // 直连后 Content 为原始 object?（string 即文本），不再是 HTTP 反序列化后的 JsonElement
     private static string ContentToText(object? content)
     {
         return content switch
         {
             null => string.Empty,
-            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? string.Empty,
-            JsonElement { ValueKind: JsonValueKind.Null } => string.Empty,
+            string text => text,
             _ => string.Empty,
         };
     }
@@ -251,11 +260,16 @@
     {
         try
         {
-            var encodedPlugin = Uri.EscapeDataString(task.PluginId);
-            var encodedSession = Uri.EscapeDataString(task.SessionId);
-            Logs = await JSRuntime.InvokeAsync<List<ClockLogDto>>(
-                "configApi.request", "GET",
-                $"/api/clock/logs?pluginId={encodedPlugin}&sessionId={encodedSession}&taskId={task.Id}&limit=20");
+            if (WebUiServices.Clock == null)
+            {
+                Error = "定时任务服务不可用。";
+                return;
+            }
+            IReadOnlyList<ClockRunLog> logs = await WebUiServices.Clock.QueryLogsAsync(
+                task.PluginId,
+                task.SessionId,
+                new ClockLogQuery { TaskId = task.Id, Limit = 20 });
+            Logs = logs.Select(ClockLogDto.From).ToList();
         }
         catch (Exception exception) { Error = $"无法读取执行记录: {exception.Message}"; }
     }
@@ -267,26 +281,29 @@
     private async Task SaveCoreAsync(bool enabled)
     {
         if (SelectedTask is null) return;
+        if (WebUiServices.Clock == null) { SaveError = "定时任务服务不可用。"; return; }
         IsSaving = true;
         SaveError = null;
         try
         {
-            var request = new ClockTaskUpdateRequest(
+            // 更新语义照抄 ClockApiMapper：ContentProvided=false 不改内容，true 且文本非空才替换
+            ClockTask updated = await WebUiServices.Clock.UpdateAsync(
                 SelectedTask.PluginId,
                 SelectedTask.SessionId,
                 SelectedTask.Id,
-                string.IsNullOrWhiteSpace(EditCron) ? null : EditCron.Trim(),
-                string.IsNullOrWhiteSpace(EditTimeZone) ? null : EditTimeZone.Trim(),
-                EditContent,
-                ContentProvided: SelectedTask.ContentIsText,
-                RunOnce: EditRunOnce,
-                TimeoutSeconds: int.TryParse(EditTimeout, out var timeout) ? timeout : null,
-                Enabled: enabled);
-            var updated = await JSRuntime.InvokeAsync<ClockTaskDto>("configApi.request", "POST", "/api/clock/tasks/update", request);
+                new ClockUpdateRequest
+                {
+                    CronExpression = string.IsNullOrWhiteSpace(EditCron) ? null : EditCron.Trim(),
+                    TimeZoneId = string.IsNullOrWhiteSpace(EditTimeZone) ? null : EditTimeZone.Trim(),
+                    Content = !string.IsNullOrWhiteSpace(EditContent) ? EditContent : null,
+                    RunOnce = EditRunOnce,
+                    TimeoutSeconds = int.TryParse(EditTimeout, out int timeout) ? timeout : null,
+                    Enabled = enabled,
+                });
             EditEnabled = enabled;
             await LoadTasksAsync();
             // 用刷新后的数据重新填充表单（NextRunAtUtc 等可能变化）
-            var refreshed = Tasks?.FirstOrDefault(t => t.Id == updated.Id);
+            ClockTaskDto? refreshed = Tasks?.FirstOrDefault(t => t.Id == updated.Id);
             if (refreshed != null)
             {
                 await SelectTaskAsync(refreshed);
@@ -310,12 +327,12 @@
         catch { confirmed = false; }
         if (!confirmed) return;
 
+        if (WebUiServices.Clock == null) { SaveError = "定时任务服务不可用。"; return; }
         IsSaving = true;
         SaveError = null;
         try
         {
-            var request = new ClockTaskDeleteRequest(SelectedTask.PluginId, SelectedTask.SessionId, SelectedTask.Id);
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/clock/tasks/delete", request);
+            await WebUiServices.Clock.DeleteAsync(SelectedTask.PluginId, SelectedTask.SessionId, SelectedTask.Id);
             SelectedTask = null;
             Logs = null;
             await LoadTasksAsync();

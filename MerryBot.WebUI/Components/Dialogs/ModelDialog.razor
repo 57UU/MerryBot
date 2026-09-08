@@ -1,4 +1,5 @@
 @implements IDialogContentComponent<ModelDialogParams>
+@using MerryBot.WebUI.Api
 
 <FluentDialogHeader ShowDismiss="true">
     <FluentLabel Typo="Typography.PaneHeader">@(Content.Existing is null ? "手动添加模型" : "编辑模型")</FluentLabel>
@@ -81,6 +82,11 @@
 
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = default!;
+
+    [Inject]
+    private WebUiServiceRegistry WebUiServices { get; set; } = default!;
+
+    private LlmProviderService LlmService => new(WebUiServices);
 
     [Inject]
     private IDialogService DialogService { get; set; } = default!;
@@ -188,15 +194,13 @@
         try
         {
             string modelId = MakeLocalModelId(ProviderId.Trim(), RemoteId.Trim());
-            await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST",
-                $"/api/plugins/llm-provider/models/{Uri.EscapeDataString(modelId)}",
+            await LlmService.SaveModelAsync(modelId,
                 new LlmSaveModelRequest(ProviderId, RemoteId.Trim(), ContextLength, MaxOutputTokens,
                     BuildCapabilities(), Enabled, ReasoningEffort, EnablePromptCache, BuildReasoningOptions()));
             if (!string.IsNullOrEmpty(EditingSourceId)
                 && !string.Equals(EditingSourceId, modelId, StringComparison.OrdinalIgnoreCase))
             {
-                await JSRuntime.InvokeAsync<object?>("llmProviderApi.request", "POST",
-                    $"/api/plugins/llm-provider/models/delete?id={Uri.EscapeDataString(EditingSourceId)}");
+                await LlmService.DeleteModelAsync(EditingSourceId);
             }
             Content.SavedModelId = modelId;
             await Dialog.CloseAsync();

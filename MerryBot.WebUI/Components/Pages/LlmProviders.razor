@@ -1,5 +1,7 @@
 @page "/llmproviders"
 @rendermode InteractiveServer
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
 @inject IJSRuntime JSRuntime
 @inject IDialogService DialogService
 
@@ -132,25 +134,17 @@
         set => error = DialogErrors.Shorten(value);
     }
 
-    private bool _initialized;
+    private LlmProviderService LlmService => new(WebUiServices);
 
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadConfigAsync();
-            StateHasChanged();
-        }
-    }
+    // 直连进程内服务，无 JS 互操作依赖，初始化时直接加载
+    protected override async Task OnInitializedAsync() => await LoadConfigAsync();
 
     private async Task LoadConfigAsync()
     {
         try
         {
             Error = null;
-            Config = await RequestAsync<LlmConfigSnapshot>("GET", "/api/plugins/llm-provider/config");
+            Config = await LlmService.GetConfigurationAsync();
         }
         catch (Exception ex)
         {
@@ -211,7 +205,7 @@
     {
         try
         {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/default/{Uri.EscapeDataString(modelId)}");
+            await LlmService.SetDefaultModelAsync(modelId);
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -225,7 +219,7 @@
         if (!await ConfirmAsync($"确定要删除模型 {modelId} 吗？")) return;
         try
         {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/models/delete?id={Uri.EscapeDataString(modelId)}");
+            await LlmService.DeleteModelAsync(modelId);
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -239,7 +233,7 @@
         if (!await ConfirmAsync($"确定要删除 Provider {providerId} 吗？其下所有模型和 Key 会一并删除。")) return;
         try
         {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/providers/{Uri.EscapeDataString(providerId)}/delete");
+            await LlmService.DeleteProviderAsync(providerId);
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -253,7 +247,7 @@
         if (!await ConfirmAsync("确定要删除这个 Key 吗？删除后该 Provider 将没有可用 Key，AI 调用会失败。")) return;
         try
         {
-            await RequestAsync<object>("POST", $"/api/plugins/llm-provider/keys/{Uri.EscapeDataString(keyId)}/delete");
+            await LlmService.DeleteKeyAsync(keyId);
             await LoadConfigAsync();
         }
         catch (Exception ex)
@@ -273,9 +267,6 @@
             return false;
         }
     }
-
-    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
-        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
 
     private static string FormatLimit(int value) => value > 0 ? value.ToString("N0") : "未知";
 
