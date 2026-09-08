@@ -10,6 +10,11 @@
 <h1>Token 用量</h1>
 <p>AI 会话 token 消耗统计，数据来自消息审计的 AI 消息。</p>
 
+@if (!string.IsNullOrEmpty(LoadError))
+{
+    <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+}
+
 <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
     @foreach (var range in Ranges)
     {
@@ -123,6 +128,7 @@ else
     private static readonly RangeKind[] Ranges = [RangeKind.Today, RangeKind.Last24h, RangeKind.Last7d, RangeKind.Last30d];
 
     private bool IsLoading { get; set; } = true;
+    private string? LoadError { get; set; }
     private RangeKind Selected { get; set; } = RangeKind.Today;
 
     private List<TokenUsageBucket> PaddedBuckets { get; set; } = [];
@@ -158,6 +164,7 @@ else
     private async Task LoadAsync()
     {
         IsLoading = true;
+        LoadError = null;
         try
         {
             var now = DateTimeOffset.Now;
@@ -192,6 +199,7 @@ else
             Logger.LogError(ex, "加载 Token 用量统计失败");
             PaddedBuckets = [];
             Sessions = [];
+            LoadError = $"加载 Token 用量统计失败：{ex.Message}";
         }
         finally
         {

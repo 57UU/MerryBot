@@ -15,6 +15,11 @@
 <h1>数据统计</h1>
 <p>历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
 
+@if (!string.IsNullOrEmpty(LoadError))
+{
+    <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+}
+
 <h2>消息统计</h2>
 <FluentGrid Spacing="3" Style="margin-bottom:12px;width:100%;">
     <FluentGridItem xs="12" sm="6" lg="4" xl="2">
@@ -160,6 +165,7 @@
     private string FileStorageSize { get; set; } = "加载中";
 
     private bool IsLoadingStats { get; set; } = true;
+    private string? LoadError { get; set; }
     private bool IsRebuilding { get; set; }
     private string? RebuildingTarget { get; set; }
     private string? RebuildMessage { get; set; }
@@ -186,6 +192,7 @@
             Logger.LogError(ex, "加载群聊列表失败");
             GroupIds = new List<long>();
             GroupCount = 0;
+            LoadError = $"加载群聊列表失败：{ex.Message}";
         }
     }
 
@@ -212,6 +219,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "加载统计数据失败");
+            LoadError = $"加载统计数据失败：{ex.Message}";
         }
         finally
         {
@@ -237,6 +245,7 @@
             PluginDbSize = "加载失败";
             ImageStorageSize = "加载失败";
             FileStorageSize = "加载失败";
+            LoadError = $"加载文件大小失败：{ex.Message}";
         }
     }
 
