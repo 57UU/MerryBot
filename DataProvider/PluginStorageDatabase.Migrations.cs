@@ -64,7 +64,8 @@ public partial class PluginStorageDatabase
     private static async Task MigrateCollectionPrefixAsync(LiteDatabaseAsync db, string collectionName, string prefix)
     {
         var collection = db.GetCollection(collectionName);
-        var docs = await collection.FindAllAsync();
+        // FindAllAsync 返回延迟枚举：先物化再逐条写，避免枚举中写造成同一异步流锁重入
+        var docs = (await collection.FindAllAsync()).ToList();
         foreach (var doc in docs)
         {
             string id = doc["_id"].AsString;

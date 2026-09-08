@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
+@using MerryBot.WebUI.Api
 @inject NavigationManager NavigationManager
+@inject WebUiServiceRegistry WebUiServices
 @inject IJSRuntime JSRuntime
 
 <FluentDesignTheme Mode="DesignThemeModes.System" />
@@ -122,6 +124,7 @@ else
 
 
 
+    // 直连进程内 IHostLifecycle；更新走后台触发（照抄 UpdateApiMapper）
     private async Task CheckUpdateAsync()
 
     {
@@ -134,7 +137,17 @@ else
 
         {
 
-            var result = await JSRuntime.InvokeAsync<UpdateCheckResult>("configApi.request", "POST", "/api/update/check");
+            if (WebUiServices.HostLifecycle == null)
+
+            {
+
+                await JSRuntime.InvokeVoidAsync("alert", "检测更新失败: 更新服务不可用。");
+
+                return;
+
+            }
+
+            UpdateCheckResult result = await WebUiServices.HostLifecycle.CheckUpdateAsync();
 
             if (result is not { HasUpdate: true })
 
@@ -160,7 +173,19 @@ else
 
             }
 
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/update");
+            // 照抄 UpdateApiMapper：延迟 500ms 后在后台执行更新，HTTP 语义的“先回包再重启”在直连下自然成立
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(500);
+                    await WebUiServices.HostLifecycle.RequestUpdateAsync(force: false);
+                }
+                catch
+                {
+                    // 后台更新失败无处回显，忽略（日志由宿主侧记录）
+                }
+            });
 
             await JSRuntime.InvokeVoidAsync("alert", "正在更新并重启，请稍后刷新页面…");
 
@@ -186,6 +211,7 @@ else
 
 
 
+    // 直连 Shutdown(Action<int>)：同步 void，直接调用（照抄 ConfigApiMapper 的延迟后台触发语义）
     private async Task RestartAsync()
 
     {
@@ -193,6 +219,16 @@ else
         if (Restarting) return;
 
         if (!await ConfirmAsync("确定要重新编译并重启 MerryBot 吗?未保存的配置修改会丢失。")) return;
+
+        if (WebUiServices.Shutdown == null)
+
+        {
+
+            await JSRuntime.InvokeVoidAsync("alert", "重启失败: 进程控制不可用。");
+
+            return;
+
+        }
 
 
 
@@ -202,7 +238,12 @@ else
 
         {
 
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/restart");
+            Action<int> shutdown = WebUiServices.Shutdown;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500);
+                shutdown(ExitCode.RESTART);
+            });
 
         }
 
@@ -230,6 +271,16 @@ else
 
         if (!await ConfirmAsync("确定要重载 MerryBot 吗?(不重新编译)未保存的配置修改会丢失。")) return;
 
+        if (WebUiServices.Shutdown == null)
+
+        {
+
+            await JSRuntime.InvokeVoidAsync("alert", "重载失败: 进程控制不可用。");
+
+            return;
+
+        }
+
 
 
         Reloading = true;
@@ -238,7 +289,12 @@ else
 
         {
 
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/config/reload");
+            Action<int> shutdown = WebUiServices.Shutdown;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500);
+                shutdown(ExitCode.RELOAD);
+            });
 
         }
 

@@ -1,6 +1,10 @@
 @page "/advanced"
 @rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject PluginStorageDatabase PluginDb
+@inject HistoryRecorder History
+@using DataProvider
+@using DataService
 @using MerryBot.WebUI.Api
 
 <PageTitle>高级配置</PageTitle>
@@ -119,23 +123,17 @@
     private List<RawEntryDto>? ConfigEntries;
     private string? Error;
     private bool IsLoading;
-    private bool _initialized;
     private string? DbSizesText;
     private string? RebuildResult;
     private string? RebuildError;
     private bool IsRebuilding;
     private string? RebuildingTarget;
 
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // 直连进程内数据库单例，无 JS 互操作依赖，初始化时直接加载
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadAsync();
-            await LoadDbSizesAsync();
-            StateHasChanged();
-        }
+        await LoadAsync();
+        await LoadDbSizesAsync();
     }
 
     private async Task LoadAsync()
@@ -144,8 +142,8 @@
         Error = null;
         try
         {
-            DataEntries = await JSRuntime.InvokeAsync<List<RawEntryDto>>("configApi.request", "GET", "/api/advanced/data");
-            ConfigEntries = await JSRuntime.InvokeAsync<List<RawEntryDto>>("configApi.request", "GET", "/api/advanced/config");
+            DataEntries = (await PluginDb.GetRawDataEntriesAsync()).Select(ToDto).ToList();
+            ConfigEntries = (await PluginDb.GetRawConfigEntriesAsync()).Select(ToDto).ToList();
         }
         catch (Exception ex)
         {
@@ -157,6 +155,10 @@
         }
     }
 
+    // 原始 BsonDocument 转 pretty JSON，与 AdvancedConfigApiMapper 同体（_type 指向不存在类型的残留数据也能展示）
+    private static RawEntryDto ToDto(LiteDB.BsonDocument doc)
+        => new(doc["_id"].AsString, LiteDB.JsonSerializer.Serialize(doc, true));
+
     private async Task DeleteEntryAsync(RawEntryDto entry, bool isConfig)
     {
         if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 [{entry.Id}] ？此操作不可恢复。"))
@@ -165,9 +167,15 @@
         }
         try
         {
-            string api = isConfig ? "/api/advanced/config/delete" : "/api/advanced/data/delete";
-            // id 含 "/"（如 plugin/agent），经 query 传递（服务端会正确解码）
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"{api}?id={Uri.EscapeDataString(entry.Id)}");
+            // 删除幂等：记录不存在视为已删除（与原来 API 统一 204 的语义一致）
+            if (isConfig)
+            {
+                await PluginDb.DeleteRawConfigEntryAsync(entry.Id);
+            }
+            else
+            {
+                await PluginDb.DeleteRawDataEntryAsync(entry.Id);
+            }
             await LoadAsync();
         }
         catch (Exception ex)
@@ -176,17 +184,18 @@
         }
     }
 
-    private async Task LoadDbSizesAsync()
+    private Task LoadDbSizesAsync()
     {
         try
         {
-            var sizes = await JSRuntime.InvokeAsync<DatabaseSizesPayload>("configApi.request", "GET", "/api/database/sizes");
+            DatabaseSizesDto sizes = DatabaseMaintenanceService.GetSizes(PluginDb, History);
             DbSizesText = $"插件库：{sizes.PluginDbSize}  ·  历史库：{sizes.HistoryDbSize}";
         }
         catch (Exception ex)
         {
             DbSizesText = $"大小加载失败：{ex.Message}";
         }
+        return Task.CompletedTask;
     }
 
     private async Task RebuildAsync(string target)
@@ -199,38 +208,21 @@
         RebuildError = null;
         try
         {
-            var results = await JSRuntime.InvokeAsync<List<RebuildResultPayload>>("configApi.request", "POST", "/api/database/rebuild", new { target });
-            if (results == null || results.Count == 0) RebuildResult = "整理完成，未返回结果。";
-            else RebuildResult = string.Join("； ", results.Select(r => $"{r.Target}: {r.BeforeSize} → {r.AfterSize}，{r.ReducedSize}"));
+            // 大小查询/锁/loop 提示收敛到 DatabaseMaintenanceService（与统计页共用），页面只拼展示文案
+            IReadOnlyList<RebuildResultDto> results = await DatabaseMaintenanceService.RebuildAsync(PluginDb, History, target);
+            RebuildResult = results.Count == 0
+                ? "整理完成，未返回结果。"
+                : string.Join("； ", results.Select(r => $"{r.Target}: {r.BeforeSize} → {r.AfterSize}，{r.ReducedSize}"));
             await LoadDbSizesAsync();
         }
         catch (Exception ex)
         {
-            RebuildError = $"整理失败：{ex.Message}";
+            RebuildError = ex.Message;
         }
         finally
         {
             IsRebuilding = false;
             RebuildingTarget = null;
         }
-    }
-
-    private sealed class DatabaseSizesPayload
-    {
-        public long PluginDbBytes { get; set; }
-        public string PluginDbSize { get; set; } = "";
-        public long HistoryDbBytes { get; set; }
-        public string HistoryDbSize { get; set; } = "";
-    }
-
-    private sealed class RebuildResultPayload
-    {
-        public string Target { get; set; } = "";
-        public long BeforeBytes { get; set; }
-        public string BeforeSize { get; set; } = "";
-        public long AfterBytes { get; set; }
-        public string AfterSize { get; set; } = "";
-        public long ReducedBytes { get; set; }
-        public string ReducedSize { get; set; } = "";
     }
 }

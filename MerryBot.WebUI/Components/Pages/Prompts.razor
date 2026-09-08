@@ -1,5 +1,11 @@
 @page "/prompts"
 @rendermode InteractiveServer
+@using System.Text.Json
+@using DataService
+@using MerryBot.Contracts
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
+@inject HistoryRecorder HistoryRecorder
 @inject IJSRuntime JSRuntime
 
 <PageTitle>提示词管理</PageTitle>
@@ -108,44 +114,10 @@
         public bool HasOverride { get; set; }
     }
 
-    private sealed class GroupListPayload
+    private sealed class GroupNameInfo(long groupId, string? name)
     {
-        public List<GroupEntryPayload> Groups { get; set; } = new();
-    }
-
-    private sealed class GroupEntryPayload
-    {
-        public long GroupId { get; set; }
-        public string? Name { get; set; }
-    }
-
-    private sealed class OverrideSessionPayload
-    {
-        public string SessionKey { get; set; } = string.Empty;
-    }
-
-    private sealed class OverrideDetailPayload
-    {
-        public string SessionKey { get; set; } = string.Empty;
-        public bool HasOverride { get; set; }
-        public string Prompt { get; set; } = string.Empty;
-    }
-
-    private sealed class ConfigPanelPayload
-    {
-        public List<ConfigSectionPayload> Sections { get; set; } = new();
-    }
-
-    private sealed class ConfigSectionPayload
-    {
-        public string Id { get; set; } = string.Empty;
-        public List<ConfigFieldPayload> Fields { get; set; } = new();
-    }
-
-    private sealed class ConfigFieldPayload
-    {
-        public string Key { get; set; } = string.Empty;
-        public System.Text.Json.JsonElement Value { get; set; }
+        public long GroupId { get; } = groupId;
+        public string? Name { get; } = name;
     }
 
     private List<GroupItem>? Groups;
@@ -157,18 +129,9 @@
     private string? Error;
     private string? Notice;
     private bool IsSaving;
-    private bool _initialized;
 
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadAsync();
-            StateHasChanged();
-        }
-    }
+    // 直连进程内服务，无 JS 互操作依赖，初始化时直接加载
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private static string ToSessionKey(long groupId) => $"qq/group/{groupId}";
 
@@ -177,13 +140,19 @@
         try
         {
             Error = null;
-            var groupsTask = JSRuntime.InvokeAsync<GroupListPayload>("configApi.request", "GET", "/api/groups/").AsTask();
-            var overridesTask = JSRuntime.InvokeAsync<List<OverrideSessionPayload>>("configApi.request", "GET", "/api/prompts/overrides").AsTask();
-            var configTask = JSRuntime.InvokeAsync<ConfigPanelPayload>("configApi.request", "GET", "/api/config").AsTask();
-            await Task.WhenAll(groupsTask, overridesTask, configTask);
+            // 提示词复写服务未加载时对等原 API 404 语义：整页报错
+            var promptService = WebUiServices.PromptOverrides;
+            if (promptService is null)
+            {
+                Error = "提示词复写服务未加载。";
+                return;
+            }
+            var overridesTask = promptService.ListOverridesAsync();
+            var groupsTask = LoadGroupsAsync();
+            await Task.WhenAll(overridesTask, groupsTask);
 
             var overrideKeys = overridesTask.Result.Select(item => item.SessionKey).ToHashSet(StringComparer.Ordinal);
-            var items = groupsTask.Result.Groups
+            var items = groupsTask.Result
                 .OrderBy(group => group.GroupId)
                 .Select(group => new GroupItem
                 {
@@ -195,27 +164,17 @@
                 })
                 .ToList();
             // 已复写但不在群列表中的会话（如已禁用历史群）追加展示，避免复写“消失”
+            var namesByGroupId = groupsTask.Result.ToDictionary(group => group.GroupId, group => group.Name);
             foreach (var key in overrideKeys)
             {
                 if (items.All(item => item.SessionKey != key))
                 {
-                    items.Add(new GroupItem { SessionKey = key, DisplayName = key, HasOverride = true });
+                    items.Add(new GroupItem { SessionKey = key, DisplayName = GetDisplayName(key, namesByGroupId), HasOverride = true });
                 }
             }
             Groups = items;
 
-            var agentSection = configTask.Result.Sections.FirstOrDefault(section => section.Id == "plugin:agent");
-            var promptField = agentSection?.Fields.FirstOrDefault(field => field.Key == "AiPrompt");
-            if (promptField is null || promptField.Value.ValueKind != System.Text.Json.JsonValueKind.String)
-            {
-                GlobalPrompt = null;
-                GlobalPromptError = "配置中心缺少 plugin:agent / AiPrompt。";
-            }
-            else
-            {
-                GlobalPrompt = promptField.Value.GetString();
-                GlobalPromptError = null;
-            }
+            LoadGlobalPrompt();
 
             // 刷新左侧徽标；若正选中某群，同步其复写状态
             if (SelectedSessionKey is not null)
@@ -226,18 +185,103 @@
         catch (Exception exception) { Error = $"无法读取提示词配置: {exception.Message}"; }
     }
 
+    /// <summary>群列表：历史记录群 + 已启用群并上群名；缺名群实时向 napcat 查询（3 秒超时）。逻辑照抄 GroupApiMapper（精简掉本页不用的消息计数）。</summary>
+    private async Task<List<GroupNameInfo>> LoadGroupsAsync()
+    {
+        var knownGroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
+        var enabledIds = WebUiServices.GroupManager?.GetEnabledGroupIds().OrderBy(static id => id).ToList()
+            ?? new List<long>();
+        var nameMap = (await HistoryRecorder.GetAllGroupNamesAsync())
+            .GroupBy(static item => item.GroupId)
+            .ToDictionary(group => group.Key, static group => group.First());
+        var allIds = knownGroupIds.Concat(enabledIds).Distinct().OrderBy(static id => id).ToList();
+
+        // 群管理服务未加载时跳过实时查询，仅用历史缓存群名
+        var groupManager = WebUiServices.GroupManager;
+        if (groupManager is not null)
+        {
+            var missingNameIds = allIds.Where(id => !nameMap.ContainsKey(id)).ToList();
+            if (missingNameIds.Count > 0)
+            {
+                var resolved = await Task.WhenAll(missingNameIds.Select(ResolveWithTimeoutAsync));
+                foreach (var info in resolved)
+                {
+                    if (info is not null)
+                    {
+                        nameMap[info.GroupId] = new GroupNameEntry
+                        {
+                            GroupId = info.GroupId,
+                            Name = info.Name,
+                            MemberCount = info.MemberCount,
+                            MaxMemberCount = info.MaxMemberCount,
+                            UpdatedTime = DateTime.Now,
+                        };
+                    }
+                }
+            }
+        }
+
+        return allIds
+            .Select(id => new GroupNameInfo(id, nameMap.TryGetValue(id, out var entry) ? entry.Name : null))
+            .ToList();
+
+        // 单次查询最多等 3 秒：napcat 未响应时快速返回，避免列表被拖住
+        async Task<GroupNameInfoDto?> ResolveWithTimeoutAsync(long groupId)
+        {
+            var lookup = groupManager!.ResolveGroupNameAsync(groupId);
+            var completed = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(3)));
+            return completed == lookup ? await lookup : null;
+        }
+    }
+
+    /// <summary>全局默认提示词：从配置中心读 plugin:agent / AiPrompt（对等原 config 快照取值）。</summary>
+    private void LoadGlobalPrompt()
+    {
+        var registry = WebUiServices.Config;
+        if (registry is null)
+        {
+            GlobalPrompt = null;
+            GlobalPromptError = "配置中心不可用。";
+            return;
+        }
+        var promptField = registry.GetSnapshot()
+            .FirstOrDefault(section => section.Id == "plugin:agent")
+            ?.Fields.FirstOrDefault(field => field.Key == "AiPrompt");
+        string? promptText = promptField?.Value switch
+        {
+            string text => text,
+            JsonElement element when element.ValueKind == JsonValueKind.String => element.GetString(),
+            _ => null,
+        };
+        if (promptField is null || (promptText is null && promptField.Value is not null))
+        {
+            GlobalPrompt = null;
+            GlobalPromptError = "配置中心缺少 plugin:agent / AiPrompt。";
+        }
+        else
+        {
+            GlobalPrompt = promptText;
+            GlobalPromptError = null;
+        }
+    }
+
     private async Task SelectSessionAsync(string sessionKey)
     {
+        var promptService = WebUiServices.PromptOverrides;
+        if (promptService is null)
+        {
+            Error = "提示词复写服务未加载。";
+            return;
+        }
         try
         {
             Error = null;
             Notice = null;
             SelectedSessionKey = sessionKey;
-            var encoded = Uri.EscapeDataString(sessionKey);
-            var detail = await JSRuntime.InvokeAsync<OverrideDetailPayload>("configApi.request", "GET", $"/api/prompts/override?sessionKey={encoded}");
-            HasOverride = detail.HasOverride;
+            var entry = await promptService.GetOverrideAsync(sessionKey);
+            HasOverride = entry is not null;
             // 未复写时以全局值预填编辑框，方便微调后直接保存
-            EditText = detail.HasOverride ? detail.Prompt : (GlobalPrompt ?? string.Empty);
+            EditText = entry is not null ? entry.Prompt : (GlobalPrompt ?? string.Empty);
         }
         catch (Exception exception) { Error = $"无法读取提示词复写: {exception.Message}"; }
     }
@@ -261,12 +305,26 @@
             Error = $"提示词过长（最多 {IPromptOverrideService.MaxPromptLength} 字符）。";
             return;
         }
+        var promptService = WebUiServices.PromptOverrides;
+        if (promptService is null)
+        {
+            Error = "提示词复写服务未加载，保存失败。";
+            return;
+        }
         IsSaving = true;
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/prompts/override",
-                new PromptOverrideSaveRequest(SelectedSessionKey, EditText));
+            string sessionKey = SelectedSessionKey;
+            // 空白视为回退全局：与删除语义一致，避免存入空提示词导致空 system prompt
+            if (string.IsNullOrWhiteSpace(EditText))
+            {
+                await promptService.DeleteOverrideAsync(sessionKey);
+            }
+            else
+            {
+                await promptService.SaveOverrideAsync(sessionKey, EditText);
+            }
             var isDelete = string.IsNullOrWhiteSpace(EditText);
             Notice = isDelete ? "已回退全局。" : "已保存复写，对该群下次 /new 后生效。";
             if (isDelete) EditText = GlobalPrompt ?? string.Empty;
@@ -280,16 +338,35 @@
     {
         if (SelectedSessionKey is null) return;
         if (!await JSRuntime.InvokeAsync<bool>("confirm", "确定回退为全局提示词吗？该群的复写将被删除。")) return;
+        var promptService = WebUiServices.PromptOverrides;
+        if (promptService is null)
+        {
+            Error = "提示词复写服务未加载，回退失败。";
+            return;
+        }
         IsSaving = true;
         try
         {
             Error = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/prompts/override/delete?sessionKey={Uri.EscapeDataString(SelectedSessionKey)}");
+            string sessionKey = SelectedSessionKey;
+            await promptService.DeleteOverrideAsync(sessionKey);
             Notice = "已回退全局。";
             EditText = GlobalPrompt ?? string.Empty;
             await LoadAsync();
         }
         catch (Exception exception) { Error = $"回退失败: {exception.Message}"; }
         finally { IsSaving = false; }
+    }
+
+    private static string GetDisplayName(string sessionKey, IReadOnlyDictionary<long, string?> names)
+    {
+        var parts = sessionKey.Split('/', StringSplitOptions.None);
+        if (parts is ["qq", "group", var id] && long.TryParse(id, out var groupId))
+        {
+            return names.TryGetValue(groupId, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? $"{name} ({groupId})"
+                : $"群 {groupId}";
+        }
+        return sessionKey;
     }
 }

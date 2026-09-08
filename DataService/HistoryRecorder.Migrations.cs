@@ -68,7 +68,8 @@ public partial class HistoryRecorder
         foreach (var colName in new[] { "messages", "forward_messages" })
         {
             var col = database.GetCollection(colName);
-            var docs = await col.FindAllAsync();
+            // FindAllAsync 返回延迟枚举：先物化再逐条写，避免枚举中写造成同一异步流锁重入
+            var docs = (await col.FindAllAsync()).ToList();
             foreach (var doc in docs)
             {
                 if (MigrateForwardDataContentRecursive(doc))
@@ -127,7 +128,7 @@ public partial class HistoryRecorder
     private async Task MigrateAiMessageSessionKeysV3Async()
     {
         var collection = database.GetCollection("ai_messages");
-        var documents = await collection.FindAllAsync();
+        var documents = (await collection.FindAllAsync()).ToList();
         foreach (var document in documents)
         {
             if (document.TryGetValue("SessionKey", out var sessionKey) && sessionKey.IsString && !string.IsNullOrEmpty(sessionKey.AsString))
@@ -153,7 +154,7 @@ public partial class HistoryRecorder
         try { await database.GetCollection("messages").DropIndexAsync("GroupId_MessageId_Time"); } catch { }
 
         var collection = database.GetCollection("messages");
-        var documents = await collection.FindAllAsync();
+        var documents = (await collection.FindAllAsync()).ToList();
         foreach (var document in documents)
         {
             bool changed = false;

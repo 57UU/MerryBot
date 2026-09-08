@@ -1,8 +1,10 @@
 @page "/config"
 @rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject WebUiServiceRegistry WebUiServices
 @using System.Globalization
 @using System.Text.Json
+@using MerryBot.WebUI.Api
 
 <PageTitle>配置中心</PageTitle>
 
@@ -170,12 +172,16 @@
         try
         {
             Error = null;
-            var configTask = JSRuntime.InvokeAsync<ConfigPanelDto>("configApi.request", "GET", "/api/config").AsTask();
-            var llmModelsTask = JSRuntime.InvokeAsync<LlmConfigSnapshot>("configApi.request", "GET", "/api/plugins/llm-provider/config").AsTask();
-            Snapshot = await configTask;
+            if (WebUiServices.Config is null)
+            {
+                Error = "配置服务不可用。";
+                return;
+            }
+            Snapshot = new ConfigPanelDto(WebUiServices.Config.GetSnapshot());
             try
             {
-                var llmConfiguration = await llmModelsTask;
+                // llm-provider 插件未加载时模型下拉为空，字段仍允许手工输入
+                LlmConfigSnapshot llmConfiguration = await new LlmProviderService(WebUiServices).GetConfigurationAsync();
                 LlmModelIds = llmConfiguration.Providers
                     .SelectMany(provider => provider.Models)
                     .Select(model => model.Id)
@@ -185,7 +191,7 @@
             }
             catch
             {
-                // LLM Provider 插件未加载或请求失败时，模型字段仍允许手工编辑。
+                // LLM 配置读取失败时，模型字段仍允许手工编辑。
                 LlmModelIds = [];
             }
             Edits.Clear();
@@ -330,12 +336,28 @@
             SavingSectionId = section.Id;
             SaveErrors.Remove(section.Id);
             SaveStatus.Remove(section.Id);
-            await JSRuntime.InvokeAsync<object>(
-                "configApi.request",
-                "POST",
-                $"/api/config/{Uri.EscapeDataString(section.Id)}",
-                new ConfigUpdateDto(Edits[section.Id]));
+            if (WebUiServices.Config is null)
+            {
+                SaveErrors[section.Id] = "配置服务不可用。";
+                return;
+            }
+            // Edits 存的是编辑态 object（数字为文本、list 为原文、stringlist 为 List<string>），
+            // 逐字段转回 JsonElement 后直调注册表（对等原来 POST body 经 JSON 反序列化的形态）
+            Dictionary<string, JsonElement> fields = new(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, object?> field in Edits[section.Id])
+            {
+                fields[field.Key] = JsonSerializer.SerializeToElement(field.Value);
+            }
+            await WebUiServices.Config.SaveAsync(section.Id, fields);
             SaveStatus[section.Id] = "已保存。";
+        }
+        catch (KeyNotFoundException)
+        {
+            SaveErrors[section.Id] = "该配置不存在，可能已被移除。";
+        }
+        catch (ArgumentException ex)
+        {
+            SaveErrors[section.Id] = ex.Message;
         }
         catch (Exception ex)
         {

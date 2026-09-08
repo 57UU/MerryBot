@@ -2,8 +2,11 @@
 @rendermode InteractiveServer
 @using DataService
 @using BotPlugin
+@using DataProvider
+@using MerryBot.WebUI.Api
 @using Microsoft.Extensions.Logging
 @inject HistoryRecorder HistoryRecorder
+@inject PluginStorageDatabase PluginDatabase
 @inject ILogger<Statistics> Logger
 @inject IJSRuntime JSRuntime
 
@@ -11,6 +14,11 @@
 
 <h1>数据统计</h1>
 <p>历史消息与存储占用统计，统计逐群计数，加载可能需要一些时间。</p>
+
+@if (!string.IsNullOrEmpty(LoadError))
+{
+    <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+}
 
 <h2>消息统计</h2>
 <FluentGrid Spacing="3" Style="margin-bottom:12px;width:100%;">
@@ -157,6 +165,7 @@
     private string FileStorageSize { get; set; } = "加载中";
 
     private bool IsLoadingStats { get; set; } = true;
+    private string? LoadError { get; set; }
     private bool IsRebuilding { get; set; }
     private string? RebuildingTarget { get; set; }
     private string? RebuildMessage { get; set; }
@@ -183,6 +192,7 @@
             Logger.LogError(ex, "加载群聊列表失败");
             GroupIds = new List<long>();
             GroupCount = 0;
+            LoadError = $"加载群聊列表失败：{ex.Message}";
         }
     }
 
@@ -209,6 +219,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "加载统计数据失败");
+            LoadError = $"加载统计数据失败：{ex.Message}";
         }
         finally
         {
@@ -220,18 +231,10 @@
     {
         try
         {
-            // 优先走 API（可同时拿到 plugin 库大小），失败则回退到直接读取 history 库
-            try
-            {
-                var sizes = await JSRuntime.InvokeAsync<DatabaseSizesPayload>("configApi.request", "GET", "/api/database/sizes");
-                GroupHistoryDbSize = sizes.HistoryDbSize;
-                PluginDbSize = sizes.PluginDbSize;
-            }
-            catch
-            {
-                GroupHistoryDbSize = HistoryRecorder.GetDatabaseSize();
-                PluginDbSize = "未知";
-            }
+            // 直连进程内数据库查大小，不再经 JS fetch 回调 HTTP API
+            DatabaseSizesDto sizes = DatabaseMaintenanceService.GetSizes(PluginDatabase, HistoryRecorder);
+            GroupHistoryDbSize = sizes.HistoryDbSize;
+            PluginDbSize = sizes.PluginDbSize;
             ImageStorageSize = await HistoryRecorder.GetImageStorageSizeAsync();
             FileStorageSize = await HistoryRecorder.GetFileStorageSizeAsync();
         }
@@ -242,6 +245,7 @@
             PluginDbSize = "加载失败";
             ImageStorageSize = "加载失败";
             FileStorageSize = "加载失败";
+            LoadError = $"加载文件大小失败：{ex.Message}";
         }
     }
 
@@ -265,8 +269,8 @@
         RebuildError = null;
         try
         {
-            var results = await JSRuntime.InvokeAsync<List<RebuildResultPayload>>("configApi.request", "POST", "/api/database/rebuild", new { target });
-            if (results == null || results.Count == 0)
+            IReadOnlyList<RebuildResultDto> results = await DatabaseMaintenanceService.RebuildAsync(PluginDatabase, HistoryRecorder, target);
+            if (results.Count == 0)
             {
                 RebuildMessage = "整理完成，未返回结果。";
             }
@@ -286,24 +290,5 @@
             IsRebuilding = false;
             RebuildingTarget = null;
         }
-    }
-
-    private sealed class DatabaseSizesPayload
-    {
-        public long PluginDbBytes { get; set; }
-        public string PluginDbSize { get; set; } = "";
-        public long HistoryDbBytes { get; set; }
-        public string HistoryDbSize { get; set; } = "";
-    }
-
-    private sealed class RebuildResultPayload
-    {
-        public string Target { get; set; } = "";
-        public long BeforeBytes { get; set; }
-        public string BeforeSize { get; set; } = "";
-        public long AfterBytes { get; set; }
-        public string AfterSize { get; set; } = "";
-        public long ReducedBytes { get; set; }
-        public string ReducedSize { get; set; } = "";
     }
 }

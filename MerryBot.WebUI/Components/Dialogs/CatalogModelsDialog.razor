@@ -1,5 +1,6 @@
 @implements IDialogContentComponent<CatalogModelsDialogParams>
 @implements IDisposable
+@using MerryBot.WebUI.Api
 
 <FluentDialogHeader ShowDismiss="true">
     <FluentLabel Typo="Typography.PaneHeader">为 @Content.Provider.Name 添加模型</FluentLabel>
@@ -73,7 +74,9 @@
     public FluentDialog Dialog { get; set; } = default!;
 
     [Inject]
-    private IJSRuntime JSRuntime { get; set; } = default!;
+    private WebUiServiceRegistry WebUiServices { get; set; } = default!;
+
+    private LlmProviderService LlmService => new(WebUiServices);
 
     private List<LlmCatalogModelDto> CatalogModels { get; set; } = [];
     private string CatalogModelQuery { get; set; } = string.Empty;
@@ -124,9 +127,6 @@
         await LoadModelsAsync();
     }
 
-    private async Task<T?> RequestAsync<T>(string method, string url, object? body = null)
-        => await JSRuntime.InvokeAsync<T?>("llmProviderApi.request", method, url, body);
-
     private async Task LoadModelsAsync()
     {
         int seq = ++_modelSearchSeq;
@@ -134,9 +134,7 @@
         {
             Error = null;
             IsLoading = true;
-            string providerId = Uri.EscapeDataString(Content.Provider.Id);
-            string query = Uri.EscapeDataString(CatalogModelQuery ?? string.Empty);
-            var models = (await RequestAsync<List<LlmCatalogModelDto>>("GET", $"/api/plugins/llm-provider/catalog?providerId={providerId}&query={query}")) ?? [];
+            List<LlmCatalogModelDto> models = (await LlmService.GetCatalogModelsAsync(CatalogModelQuery, Content.Provider.Id)).ToList();
             if (seq != _modelSearchSeq) return;
             CatalogModels = models;
             HasSearchedModels = true;
@@ -158,7 +156,7 @@
         {
             Error = null;
             SuccessMessage = null;
-            await RequestAsync<LlmConfigSnapshot>("POST", "/api/plugins/llm-provider/import",
+            await LlmService.ImportCatalogModelAsync(
                 new LlmCatalogImportRequest(model.ProviderId, model.ModelId,
                     string.IsNullOrWhiteSpace(ImportBaseUrl) ? model.SuggestedBaseUrl : ImportBaseUrl,
                     ImportApiFormat, ImportApiKey, true));

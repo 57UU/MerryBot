@@ -1,6 +1,11 @@
 @page "/"
 @rendermode InteractiveServer
-@inject IJSRuntime JSRuntime
+@using DataService
+@using System.Diagnostics
+@using System.Runtime.InteropServices
+@using MerryBot.WebUI.Api
+@inject WebUiServiceRegistry WebUiServices
+@inject HistoryRecorder HistoryRecorder
 
 <PageTitle>概览</PageTitle>
 
@@ -155,24 +160,20 @@
 </FluentStack>
 
 @code {
-    private StatusPayload? Status;
+    private SystemStatusDto? Status;
     private int? SkillCount;
     private string? Error;
     private bool IsLoading;
 
     private bool? Connected => Status?.Bot.Connected;
 
-    private bool _initialized;
+    private static readonly DateTime ProcessStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
 
-    // 预渲染阶段无法调用 JS 互操作，首次渲染（交互连接建立）后再加载
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // 直连进程内服务拼 SystemStatusDto（逻辑与 StatusApiMapper 同体），不再经 JS fetch 回调 HTTP API；
+    // 无 JS 互操作依赖，初始化时直接加载
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender && !_initialized)
-        {
-            _initialized = true;
-            await LoadAsync();
-            StateHasChanged();
-        }
+        await LoadAsync();
     }
 
     private async Task LoadAsync()
@@ -181,22 +182,55 @@
         Error = null;
         try
         {
-            Status = await JSRuntime.InvokeAsync<StatusPayload>("configApi.request", "GET", "/api/status");
+            if (WebUiServices.BotStatusProvider == null || WebUiServices.HostLifecycle == null)
+            {
+                Error = "状态服务不可用。";
+                return;
+            }
+            List<long> groups = await HistoryRecorder.GetAllGroupIdsAsync();
+            // git 信息获取失败不应影响整体状态展示，失败时返回空串
+            string gitInfo;
+            try
+            {
+                gitInfo = await WebUiServices.HostLifecycle.GetVersionInfoAsync();
+            }
+            catch
+            {
+                gitInfo = string.Empty;
+            }
+            Status = new SystemStatusDto(
+                WebUiServices.BotStatusProvider(),
+                groups.Count,
+                Environment.OSVersion.ToString(),
+                RuntimeInformation.FrameworkDescription,
+                Environment.MachineName,
+                Environment.ProcessId,
+                (DateTime.UtcNow - ProcessStartUtc).TotalSeconds,
+                Environment.WorkingSet,
+                GC.GetTotalMemory(forceFullCollection: false),
+                gitInfo);
         }
         catch (Exception ex)
         {
             Error = ex.Message;
         }
 
-        // Skill 接口依赖插件加载情况，失败时仅 Skill 数显示「—」，不影响其余状态
-        try
-        {
-            var skills = await JSRuntime.InvokeAsync<List<ManagedSkill>>("configApi.request", "GET", "/api/skills/");
-            SkillCount = skills?.Count ?? 0;
-        }
-        catch
+        // Skill 服务未加载（对等原来 API 404）时仅 Skill 数显示「—」，不影响其余状态
+        if (WebUiServices.Skills == null)
         {
             SkillCount = null;
+        }
+        else
+        {
+            try
+            {
+                IReadOnlyList<ManagedSkill> skills = await WebUiServices.Skills.ListSkillsAsync();
+                SkillCount = skills.Count;
+            }
+            catch
+            {
+                SkillCount = null;
+            }
         }
 
         IsLoading = false;
@@ -219,26 +253,4 @@
         < 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024d:F1} MB",
         _ => $"{bytes / 1024d / 1024d / 1024d:F2} GB",
     };
-
-    private sealed class StatusPayload
-    {
-        public BotPayload Bot { get; set; } = new();
-        public int GroupCount { get; set; }
-        public string OsVersion { get; set; } = "";
-        public string Framework { get; set; } = "";
-        public string MachineName { get; set; } = "";
-        public int ProcessId { get; set; }
-        public double UptimeSeconds { get; set; }
-        public long WorkingSetBytes { get; set; }
-        public long GcMemoryBytes { get; set; }
-        public string GitInfo { get; set; } = "";
-    }
-
-    private sealed class BotPayload
-    {
-        public bool Connected { get; set; }
-        public string SelfId { get; set; } = "";
-        public string Nickname { get; set; } = "";
-        public string NapcatAddress { get; set; } = "";
-    }
 }

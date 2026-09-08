@@ -1,5 +1,8 @@
 @page "/skills"
 @rendermode InteractiveServer
+@using MerryBot.WebUI.Api
+@using Microsoft.AspNetCore.Components.Forms
+@inject WebUiServiceRegistry WebUiServices
 @inject IJSRuntime JSRuntime
 
 <PageTitle>技能管理</PageTitle>
@@ -23,9 +26,13 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
             <strong>上传 Skill</strong>
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
-                <input id="skill-upload-file" type="file" accept=".md,.zip" />
+                <InputFile accept=".md,.zip" OnChange="OnInputFileChanged" />
                 <FluentButton Appearance="Appearance.Accent" OnClick="UploadAsync" Disabled="@IsUploading" Loading="@IsUploading">@(IsUploading ? "上传中…" : "上传")</FluentButton>
             </FluentStack>
+            @if (SelectedFile != null)
+            {
+                <small>已选择：@SelectedFile.Name（@FormatSize(SelectedFile.Size)）</small>
+            }
         </FluentStack>
     </FluentCard>
 
@@ -89,6 +96,8 @@
 </FluentStack>
 
 @code {
+    private const long MaxUploadBytes = 20 * 1024 * 1024;
+
     private IReadOnlyList<ManagedSkill>? SkillItems;
     private string? Error;
     private string? Success;
@@ -97,26 +106,45 @@
     private bool IsMutating;
     private string GitUrl = string.Empty;
     private string GitName = string.Empty;
+    private IBrowserFile? SelectedFile;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
+    // 直连进程内 Skill 管理服务（agent-service 插件），不再经 JS fetch 回调 HTTP API
     private async Task LoadAsync()
     {
         try
         {
             Error = null;
-            SkillItems = await JSRuntime.InvokeAsync<List<ManagedSkill>>("configApi.request", "GET", "/api/skills/");
+            if (WebUiServices.Skills == null)
+            {
+                Error = "技能服务未加载或不可用。";
+                return;
+            }
+            SkillItems = await WebUiServices.Skills.ListSkillsAsync();
         }
         catch (Exception exception) { Error = $"无法读取 Skill: {exception.Message}"; }
     }
 
+    private void OnInputFileChanged(InputFileChangeEventArgs args)
+    {
+        SelectedFile = args.FileCount > 0 ? args.File : null;
+    }
+
     private async Task UploadAsync()
     {
+        if (SelectedFile == null) { Error = "请先选择要上传的 Skill 文件（.md 或 .zip）。"; return; }
+        if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
+        if (SelectedFile.Size > MaxUploadBytes) { Error = "Skill 上传文件不能超过 20 MB。"; return; }
         IsUploading = true;
         try
         {
             Error = null; Success = null;
-            await JSRuntime.InvokeVoidAsync("skillApi.upload", "skill-upload-file", "/api/skills/upload");
+            await using Stream source = SelectedFile.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+            using MemoryStream buffer = new();
+            await source.CopyToAsync(buffer);
+            await WebUiServices.Skills.UploadSkillAsync(new SkillUpload(SelectedFile.Name, buffer.ToArray()));
+            SelectedFile = null;
             await LoadAsync();
             Success = "上传成功。";
         }
@@ -127,12 +155,13 @@
     private async Task CloneGitAsync()
     {
         if (string.IsNullOrWhiteSpace(GitUrl)) { Error = "请填写 Git 地址。"; return; }
+        if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsCloning = true;
         try
         {
             Error = null; Success = null;
-            var payload = new { gitUrl = GitUrl.Trim(), name = string.IsNullOrWhiteSpace(GitName) ? null : GitName.Trim() };
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/skills/clone", payload);
+            string? name = string.IsNullOrWhiteSpace(GitName) ? null : GitName.Trim();
+            await WebUiServices.Skills.CloneGitSkillAsync(GitUrl.Trim(), name);
             GitUrl = string.Empty; GitName = string.Empty;
             await LoadAsync();
             Success = "Git 克隆成功。";
@@ -143,11 +172,12 @@
 
     private async Task UpdateGitAsync(ManagedSkill skill)
     {
+        if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
         {
             Error = null; Success = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/skills/update?name={Uri.EscapeDataString(skill.Name)}");
+            await WebUiServices.Skills.UpdateGitSkillAsync(skill.Name);
             await LoadAsync();
             Success = $"已更新 Git Skill “{skill.Name}”。";
         }
@@ -157,11 +187,12 @@
 
     private async Task ToggleAsync(ManagedSkill skill)
     {
+        if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
         {
             Error = null; Success = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", "/api/skills/enabled", new SkillEnabledRequest(skill.Name, !skill.Enabled));
+            await WebUiServices.Skills.SetSkillEnabledAsync(skill.Name, !skill.Enabled);
             await LoadAsync();
         }
         catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
@@ -171,11 +202,12 @@
     private async Task DeleteAsync(ManagedSkill skill)
     {
         if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 Skill “{skill.Name}”吗？")) return;
+        if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
         {
             Error = null; Success = null;
-            await JSRuntime.InvokeAsync<object>("configApi.request", "POST", $"/api/skills/delete?name={Uri.EscapeDataString(skill.Name)}");
+            await WebUiServices.Skills.DeleteSkillAsync(skill.Name);
             await LoadAsync();
         }
         catch (Exception exception) { Error = $"删除失败: {exception.Message}"; }
@@ -188,4 +220,7 @@
         SkillLayout.Directory => "目录",
         _ => "Markdown",
     };
+
+    private static string FormatSize(long bytes) =>
+        bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MB" : $"{bytes / 1024.0:F1} KB";
 }

@@ -43,7 +43,7 @@ MerryBot 是一个基于 **NapCat** 上游的 QQ 机器人框架，使用 **C#�
 - **`DataProvider/`** — 插件存储数据库 `PluginStorageDatabase`（LiteDB 封装，`plugin_data.db`；`PluginStorageDatabase.Migrations.cs` 提供 schema 迁移，当前版本 1，启动时 `MigrateAsync()` 执行）与 `PluginDatabaseScope`（按插件 Id 隔离的集合视图）
 - **`DataService/`** — 历史记录 `HistoryRecorder`（`group_history.db` + `storage/` 对象存储：群消息/图片床/文件床/群事件等）+ `AiMessageStore`（ai_messages 集合与 token 用量聚合；与 HistoryRecorder 共享同一数据库，由其构造组合、统一负责迁移与生命周期）、`ObjectStorage`/`FileSystemObjectStorage`、`HistoryModel`、`TokenUsageAggregator`（ai_messages token 用量分桶/按会话聚合的 internal 纯函数）、`IdGenConfig`
 - **`plugins/`** — 内置插件（`RootNamespace` 为 `BotPlugin`）。包含插件基础设施（`_pluginBase.cs` 的 `Plugin` 抽象类、`_interface.cs` 的 `PluginInterop`/`PluginTag`/`PluginStorage`、`_common.cs` 的 `MessageContext`/`SessionKey`、`_interface.event.cs` 的事件注册）与具体插件（见下文"内置插件"）
-- **`MerryBot.WebUI/`** — Blazor 历史后台。`Program.CreateApp(historyRecorder, webAddress)` 由宿主在进程内调用（也支持独立 `Main` 运行）；`Api/` 下为各功能区的 Minimal API mapper（`ConfigApiMapper`、`AdvancedConfigApiMapper`、`StatusApiMapper`、`GroupApiMapper`、`LogApiMapper`、`UpdateApiMapper`、`LlmProviderApiMapper`、`SkillApiMapper`、`MemoryApiMapper`、`ContextSnapshotApiMapper`、`ConfigRegistry`、`ModelsDevCatalogService`）；`Components/Pages/` 为页面（群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、Token 用量、配置编辑、高级配置、日志、群管理、转发消息等）
+- **`MerryBot.WebUI/`** — Blazor 历史后台。`Program.CreateApp(historyRecorder, webAddress)` 由宿主在进程内调用（也支持独立 `Main` 运行）；`Api/` 下为直连服务（`WebUiServiceRegistry` 注册表、`ConfigRegistry`、`LogFileService`、`GroupBrowseService`、`DatabaseMaintenanceService`、`LlmProviderService`、`ModelsDevCatalogService`），页面经 DI 直接调用进程内服务；仅图片/文件/资源二进制下载保留 `/api/image、/api/file、/api/resource` GET 端点；`Components/Pages/` 为页面（群消息、AI 消息、会话 AI 消息、LLM 配置、记忆、技能、统计、Token 用量、配置编辑、高级配置、日志、群管理、转发消息等）
 
 ### Agent 组
 
@@ -137,8 +137,8 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 ### WebUI
 
 - Blazor InteractiveServer，与主程序同进程运行，监听启动配置 `setting.toml` 的 `web-address`（默认 `http://localhost:5000`）
-- 提供 `/api/...` Minimal API：状态、群组管理、日志、配置编辑、高级配置、LLM Provider/模型/Key 管理、Skill 上传/禁用、记忆管理、上下文快照、更新检测、定时任务（`ClockApiMapper`，跨插件列出/编辑/删除与日志查询）
-- 图片/文件经 `/api/image/{id}`、`/api/file/{id}`、`/api/resource` 由本地存储提供，消息链中的媒体均为 `merrybot://` 本地引用，前端不直连远端 URL
+- 页面经 DI 拿 `WebUiServiceRegistry` 直接调用进程内服务（不经 HTTP）：状态、群组管理、日志、配置编辑、高级配置、LLM Provider/模型/Key 管理、Skill 管理（含 `InputFile` 上传）、记忆管理、上下文快照、更新检测、定时任务（`ClockService` 跨插件列出/编辑/删除与日志查询）。`WebApp` 建好时插件实例还不存在，故注册表先空壳占位，宿主 `RegisterWebUi` 再填充；未加载的插件对应字段为 null，页面显示“服务不可用”
+- 图片/文件经 `/api/image/{id}`、`/api/file/{id}`、`/api/resource` 由本地存储提供（仅剩的 HTTP 端点：`<img>/<video>/<a download>` 必须用 URL），消息链中的媒体均为 `merrybot://` 本地引用，前端不直连远端 URL
 - **设计决策（by design）**：WebUI **不做内置鉴权**，默认仅绑定 `localhost` —— 这是有意为之，目的是保持配置/管理入口的简洁性，避免引入账号体系与登录复杂度。**远程访问的推荐方式是 SSH 端口转发**（如 `ssh -L 5000:localhost:5000 user@host`），由 SSH 承担认证与加密，WebUI 自身不需要也不应暴露到公网。若用户自行将 `setting.toml` 的 `web-address` 改为 `0.0.0.0`，则须自行经受控内网或 HTTPS 反向代理保护，风险自担。监听地址不在 WebUI 中提供修改入口（引导问题：WebUI 挂了就改不回来），只能改 `setting.toml` 后重启
 
 ## 数据与存储
@@ -160,7 +160,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 - **全局门面**：`CommonLib.SimpleLog.Default`，宿主 `Entry.cs` 在 NLog 配置后替换为 `new NLogAdapter("CommonLib")`。库代码规范：实例类用可选构造参数 `ISimpleLogger? logger = null`（体内 `_logger ??= SimpleLog.Default`），静态方法/无注入点用 `SimpleLog.Default`。**禁止再直连 `ConsoleLogger.Instance` 或裸 `Console.WriteLine/Error` 记业务日志**（Tui 终端诊断除外）。
 - **NLog 桥**（宿主 `MerryBot` 内）：`NLogAdapter`（logger 名参数化，默认 `NapcatClient`，给 BotClient/WebSocketAdapter/Actions/BotMessageChannel）；`PluginLoggerAdapter` 的 `PluginLogger(tag)`（logger 名 `plugin:<tag>`，给插件）。NLog 级别规则 Debug~Fatal（Trace 丢弃，供高频诊断如模型增量）。
 - **Agent 引擎事件**：Agent 组（Agent/LlmClient/LlmBackend）不依赖 CommonLib；`AgentOptions.OnLog` 回调由 `plugins/Agent.LogBridge.cs` 桥接到插件 Logger（`Agent.Create.cs` 已接线），会话/工具调用/压缩/流式重置等事件按级别映射，高频增量落 Trace。
-- **WebUI 日志页**：`LogApiMapper` 的 `/api/logs/current` 支持 `lines/level/keyword/file` 后端过滤（向后多扫），`/api/logs/files` 列历史文件；`Logs.razor`（`/logs`）3 秒轮询、文件下拉切换、搜索防抖。WebUI 内部 ASP.NET ILogger（M.E.L.）通道保留，但与 NLog 文件不互通。
+- **WebUI 日志页**：`LogFileService` 从文件末尾向前扫描（向后多扫，级别/关键词在服务端过滤，避免漏掉更早的匹配行），`Logs.razor`（`/logs`）经注册表直连调用，3 秒轮询、文件下拉切换、搜索防抖。WebUI 内部 ASP.NET ILogger（M.E.L.）通道保留，但与 NLog 文件不互通。
 
 ## 配置
 
@@ -180,7 +180,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 # 构建整个解决方案（已验证通过：0 警告 0 错误）
 dotnet build MerryBot.sln -c Debug
 
-# 运行单元测试（已验证：MerryBot.Test 74 通过；ModelsDev.Sdk.Test 61 通过）
+# 运行单元测试（已验证：MerryBot.Test 200 通过；ModelsDev.Sdk.Test 61 通过）
 dotnet test MerryBot.Test/MerryBot.Test.csproj -c Debug
 dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 ```
@@ -202,7 +202,7 @@ dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 - 宿主日志用 NLog；库与插件用 `CommonLib.ISimpleLogger`（`Logger`）
 - 插件间依赖通过构造函数注入（`PluginInitializer` 拓扑排序），不要手工 new 其他插件
 - 新增插件必须：放在 `plugins` 项目、继承 `Plugin`、标注 `[PluginTag]`、唯一构造函数含 `PluginInterop`
-- 新增 WebUI 页面/API：在 `MerryBot.WebUI/Api/` 加 mapper，由 `Logic`（`Logic.Plugins.cs` 的 `RegisterWebUi`）注册；管理类接口（如 `ILlmProviderManagementService`）不应依赖 ASP.NET 类型
+- 新增 WebUI 页面/功能：页面直接经 `WebUiServiceRegistry`（或 `HistoryRecorder`/`PluginStorageDatabase` 等 DI 服务）调用；需要新服务时在 `MerryBot.WebUI/Api/` 加服务类，core 侧在 `Logic` 构造填充、插件侧在 `Logic.Plugins.cs` 的 `RegisterWebUi` 填充；管理类接口（如 `ILlmProviderManagementService`）不应依赖 ASP.NET 类型。仅二进制下载类需求才加 HTTP 端点（`<img>/<video>/<a download>` 必须用 URL）
 
 ## 测试约定
 

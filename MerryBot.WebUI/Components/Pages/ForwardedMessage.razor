@@ -38,7 +38,7 @@
         else if (ForwardEntry == null)
         {
             <p style="text-align: center; margin-top: 48px;">
-                未找到转发消息
+                @(LoadError ?? "未找到转发消息")
             </p>
         }
         else
@@ -79,6 +79,7 @@
 
     private bool IsEmbed => Embed == "1";
     private ForwardMessageEntry? ForwardEntry { get; set; }
+    private string? LoadError { get; set; }
     private IReadOnlyList<GroupMessage> SortedMessages { get; set; } = Array.Empty<GroupMessage>();
     private bool IsLoading { get; set; } = true;
 
@@ -90,6 +91,7 @@
     private async Task LoadForwardMessage()
     {
         IsLoading = true;
+        LoadError = null;
 
         try
         {
@@ -105,6 +107,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "加载转发消息失败: id={Id}", Id);
+            LoadError = $"加载转发消息失败：{ex.Message}";
         }
         finally
         {
