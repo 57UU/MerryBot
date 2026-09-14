@@ -10,8 +10,9 @@ namespace MerryBot.WebUI.Api;
 /// <summary>
 /// WebUI 对 models.dev 目录的查询、刷新和本地缓存。
 /// 缓存沿用机器人数据目录中的 models.dev-api.json，避免升级后重新下载。
+/// 公开以便经 WebUiServiceRegistry 注入 Blazor 页面直接调用。
 /// </summary>
-internal sealed class ModelsDevCatalogService
+public sealed class ModelsDevCatalogService
 {
     private readonly string cachePath;
     private readonly ILogger logger;

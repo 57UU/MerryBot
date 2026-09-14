@@ -10,6 +10,11 @@
 <h1>Token 用量</h1>
 <p>AI 会话 token 消耗统计，数据来自消息审计的 AI 消息。</p>
 
+@if (!string.IsNullOrEmpty(LoadError))
+{
+    <FluentMessageBar Intent="MessageIntent.Error">@LoadError</FluentMessageBar>
+}
+
 <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
     @foreach (var range in Ranges)
     {
@@ -123,7 +128,11 @@ else
     private static readonly RangeKind[] Ranges = [RangeKind.Today, RangeKind.Last24h, RangeKind.Last7d, RangeKind.Last30d];
 
     private bool IsLoading { get; set; } = true;
+    private string? LoadError { get; set; }
     private RangeKind Selected { get; set; } = RangeKind.Today;
+
+    // 区间切换序号守卫：并发 Load 谁新谁赢，旧响应直接丢弃（照抄 CatalogModelsDialog 的 _modelSearchSeq 模式）
+    private int _loadSeq;
 
     private List<TokenUsageBucket> PaddedBuckets { get; set; } = [];
     private List<TokenSessionSummary> Sessions { get; set; } = [];
@@ -145,19 +154,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        await LoadAsync(++_loadSeq);
     }
 
     private async Task SelectRangeAsync(RangeKind kind)
     {
         if (Selected == kind) return;
         Selected = kind;
-        await LoadAsync();
+        await LoadAsync(++_loadSeq);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(int seq)
     {
         IsLoading = true;
+        LoadError = null;
         try
         {
             var now = DateTimeOffset.Now;
@@ -173,6 +183,7 @@ else
             var bucketsTask = HistoryRecorder.AiMessages.GetTokenUsageBucketsAsync(SinceUnixSec, UntilUnixSec, BucketSeconds, LocalOffsetSeconds);
             var sessionsTask = HistoryRecorder.AiMessages.GetTokenUsageBySessionAsync(SinceUnixSec, UntilUnixSec);
             await Task.WhenAll(bucketsTask, sessionsTask);
+            if (seq != _loadSeq) return;
 
             // 补齐空桶，保持时间轴连续
             var found = bucketsTask.Result.ToDictionary(bucket => bucket.BucketStart);
@@ -189,13 +200,15 @@ else
         }
         catch (Exception ex)
         {
+            if (seq != _loadSeq) return;
             Logger.LogError(ex, "加载 Token 用量统计失败");
             PaddedBuckets = [];
             Sessions = [];
+            LoadError = $"加载 Token 用量统计失败：{ex.Message}";
         }
         finally
         {
-            IsLoading = false;
+            if (seq == _loadSeq) IsLoading = false;
         }
     }
 

@@ -1,5 +1,9 @@
 using System.Net;
+using BotPlugin;
+using DataProvider;
 using DataService;
+using MerryBot.Contracts;
+using MerryBot.WebUI.Api;
 using MerryBot.WebUI.Components;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +20,26 @@ public class Program
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         var historyRecorder = new HistoryRecorder(Path.Combine(dataPath, "group_history.db"), Path.Combine(dataPath, "storage"));
-        var app = CreateApp(historyRecorder);
+        // 独立运行（无宿主插件）：同样打开插件库并填充直连注册表的 core 部分。
+        // 仅日志/历史浏览/统计/模型目录类页面可用，插件管理类（配置/群组/时钟/LLM/Skill/记忆等）显示“服务不可用”。
+        var pluginDb = new PluginStorageDatabase(Path.Combine(dataPath, "plugin_data.db"));
+        await pluginDb.MigrateAsync();
+        var webUiServices = new WebUiServiceRegistry
+        {
+            LogFiles = new LogFileService(Path.Combine(dataPath, "log")),
+        };
+        var app = CreateApp(
+            historyRecorder,
+            configureServices: services =>
+            {
+                services.AddSingleton(pluginDb);
+                services.AddSingleton<IContextSnapshotService>(
+                    new ContextSnapshotService(pluginDb.CreateScope("agent")));
+                services.AddSingleton(webUiServices);
+            });
+        // 模型目录服务只需缓存路径 + Logger，与插件无关，独立模式同样可用
+        webUiServices.Catalog = new ModelsDevCatalogService(
+            Path.Combine(dataPath, "models.dev-api.json"), app.Logger);
         await app.RunAsync();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000",
@@ -36,8 +59,6 @@ public class Program
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
-        // Blazor Server 场景下先注册默认 HttpClient，再注册 Fluent UI 组件服务
-        builder.Services.AddHttpClient();
         builder.Services.AddFluentUIComponents();
         // data
         builder.Services.AddSingleton(historyRecorder);
@@ -68,11 +89,10 @@ public class Program
 
         app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-        // /api 错误统一转 JSON：业务异常只返回原因短语 { "error": "原因" }；
-        // 空错误状态（404/405 等无 body）补一句中性原因，避免被重执行成整页 HTML。
+        // /api 错误统一转 JSON：图片/文件/资源二进制端点的空错误状态（404 等无 body）
+        // 补一句中性原因，避免被重执行成整页 HTML（<img>  broken 时浏览器控制台可读）。
         // 必须放在 UseStatusCodePages 之后：异常不受它影响（它只处理空响应，会直接透传），
         // 而空错误必须抢在它重执行之前先占住 body；UseExceptionHandler 包在最外层只收非 /api 的异常。
-        // 约定响应体见 wwwroot/js/configApi.js、llmProvider.js、skillApi.js 的 readError 解析。
         app.Use(async (context, next) =>
         {
             bool isApi = context.Request.Path.StartsWithSegments("/api");
@@ -104,7 +124,8 @@ public class Program
                 await context.Response.WriteAsJsonAsync(new { error = $"请求失败：HTTP {context.Response.StatusCode}" });
             }
         });
-        app.UseAntiforgery();
+        // 注：业务 POST API 已全部迁为 Blazor 直连（进程内调用，不走 HTTP），剩余 /api 全是 GET 二进制端点；
+        // 但 Razor 端点自带 antiforgery 元数据，缺少 UseAntiforgery 中间件会直接 500，下行必须保留。
 
 
 #if DEBUG
@@ -113,6 +134,7 @@ public class Program
         app.UseStaticFiles();
 #endif
         StaticWebAssetsLoader.UseStaticWebAssets(app.Environment, app.Configuration);
+        app.UseAntiforgery();
 
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();

@@ -1,6 +1,6 @@
 namespace MerryBot.WebUI;
 
-/// <summary>与 /api/config 对应的动态配置面板数据。</summary>
+/// <summary>配置中心动态配置面板数据（ConfigEditor 页直连 ConfigRegistry 拼装）。</summary>
 public sealed record ConfigPanelDto(IReadOnlyList<ConfigSectionDto> Sections);
 public sealed record ConfigSectionDto(
     string Id,

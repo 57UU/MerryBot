@@ -322,6 +322,17 @@ public class Actions
         var data = result.Data;
         return BotUtils.Deserialize<GroupInfo>(data)!;
     }
+    /// <summary>批量获取群列表（OneBot get_group_list），一次返回全部群；用于批量补群名，避免逐群 get_group_info。</summary>
+    public async Task<List<GroupInfo>> GetGroupListAsync()
+    {
+        Act act = new(
+            action: "get_group_list",
+            parameters: new { no_cache = false }
+            );
+        var result = await _SendAction(act, "group_list");
+        var data = result.Data;
+        return BotUtils.Deserialize<List<GroupInfo>>(data)!;
+    }
     public async Task<GroupMemberListData> GetGroupMemberListData(string groupId)
     {
         Act act = new(

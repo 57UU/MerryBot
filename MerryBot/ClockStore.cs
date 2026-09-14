@@ -82,7 +82,10 @@ internal sealed class CoreClockStore : IClockStore
     /// </summary>
     private async Task MigrateV1ToV2Async()
     {
-        foreach (var doc in await taskDocs.FindAllAsync())
+        // LiteDB.Async 的 FindAllAsync 返回延迟枚举（查询发生在调用方枚举时）：
+        // 必须先 ToList 物化、释放读游标，再逐条 Update，否则枚举中写会在同一异步流上造成锁重入
+        // （LockRecursionException，高并行下稳定复现，单独跑测试时恰好不触发）。
+        foreach (var doc in (await taskDocs.FindAllAsync()).ToList())
         {
             if (!TryGetString(doc, "PluginId", out var pluginId) || string.IsNullOrWhiteSpace(pluginId))
             {
@@ -90,7 +93,7 @@ internal sealed class CoreClockStore : IClockStore
                 await taskDocs.UpdateAsync(doc);
             }
         }
-        foreach (var doc in await runLogDocs.FindAllAsync())
+        foreach (var doc in (await runLogDocs.FindAllAsync()).ToList())
         {
             if (!TryGetString(doc, "PluginId", out var pluginId) || string.IsNullOrWhiteSpace(pluginId))
             {

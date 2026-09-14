@@ -68,14 +68,13 @@ public partial class HistoryRecorder
         foreach (var colName in new[] { "messages", "forward_messages" })
         {
             var col = database.GetCollection(colName);
-            var docs = await col.FindAllAsync();
-            foreach (var doc in docs)
+            await ForEachBatchAsync(col, async doc =>
             {
                 if (MigrateForwardDataContentRecursive(doc))
                 {
                     await col.UpdateAsync(doc);
                 }
-            }
+            });
         }
     }
 
@@ -127,21 +126,20 @@ public partial class HistoryRecorder
     private async Task MigrateAiMessageSessionKeysV3Async()
     {
         var collection = database.GetCollection("ai_messages");
-        var documents = await collection.FindAllAsync();
-        foreach (var document in documents)
+        await ForEachBatchAsync(collection, async document =>
         {
             if (document.TryGetValue("SessionKey", out var sessionKey) && sessionKey.IsString && !string.IsNullOrEmpty(sessionKey.AsString))
             {
-                continue;
+                return;
             }
             if (!document.TryGetValue("GroupId", out var groupId) || !groupId.IsInt64)
             {
-                continue;
+                return;
             }
             document["SessionKey"] = $"qq/group/{groupId.AsInt64}";
             document.Remove("GroupId");
             await collection.UpdateAsync(document);
-        }
+        });
     }
 
     /// <summary>迁移 v3 → v4：移除 MessageKey/DedupKey 字段，统一使用 ObjectId Id。</summary>
@@ -153,8 +151,7 @@ public partial class HistoryRecorder
         try { await database.GetCollection("messages").DropIndexAsync("GroupId_MessageId_Time"); } catch { }
 
         var collection = database.GetCollection("messages");
-        var documents = await collection.FindAllAsync();
-        foreach (var document in documents)
+        await ForEachBatchAsync(collection, async document =>
         {
             bool changed = false;
             if (document.ContainsKey("MessageKey"))
@@ -168,6 +165,38 @@ public partial class HistoryRecorder
                 changed = true;
             }
             if (changed) await collection.UpdateAsync(document);
+        });
+    }
+
+    /// <summary>
+    /// 分批遍历集合：每批读完物化、逐条处理、释放后再读下一批。
+    /// 整表 ToList 会把 messages/ai_messages 这类大表一次性载入内存（长期运行可达几十万行），
+    /// 升级迁移那次重启可能 OOM；分批把内存上限定在一批（MigrationBatchSize）。
+    /// 更新均为同 _id 原地写、不增删文档，skip/limit 分页稳定。
+    /// 读写不交错在同一延迟枚举内：整批先读完物化再逐条写，同样避开 FindAllAsync 枚举中写的锁重入。
+    /// </summary>
+    private const int MigrationBatchSize = 1000;
+
+    private static async Task ForEachBatchAsync(
+        ILiteCollectionAsync<BsonDocument> collection, Func<BsonDocument, Task> action)
+    {
+        int skip = 0;
+        while (true)
+        {
+            List<BsonDocument> batch = (await collection.FindAsync(Query.All(), skip, MigrationBatchSize)).ToList();
+            if (batch.Count == 0)
+            {
+                break;
+            }
+            foreach (BsonDocument doc in batch)
+            {
+                await action(doc);
+            }
+            if (batch.Count < MigrationBatchSize)
+            {
+                break;
+            }
+            skip += batch.Count;
         }
     }
 }
