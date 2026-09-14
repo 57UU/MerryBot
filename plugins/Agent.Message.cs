@@ -46,9 +46,9 @@ public class MessageTool : ToolSet
         var builder = new ToolSetBridge.Builder();
         builder.AddFunction<MessageArgs>(
             "get_message",
-            "获取消息的完整内容（推荐传入 messageKey）",
-            args => GetMessageAsync(args.messageKey ?? args.messageUrl));
-        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按 Time 倒序，最新在前；首次传空取最新，翻更早时传入上一页返回的 lastMessageKey 或 lastMessageId）", args => GetGroupContextAsync(args));
+            "获取消息的完整内容（传消息 key 或 merrybot:// 内部引用）",
+            args => GetMessageAsync(args.messageKey));
+        builder.AddFunction<GetGroupContextArgs>("get_group_context", "分页获取当前历史消息上下文（按 Time 倒序，最新在前；首次传空取最新，翻更早时传入上一页返回的 lastMessageKey）", args => GetGroupContextAsync(args));
         // 主模型与辅助视觉模型均不可用时没有图片查看能力，不注册 load_image
         if (visionRouter.MainHasVision || visionRouter.HasVisionFallback)
         {
@@ -61,11 +61,8 @@ public class MessageTool : ToolSet
     /// <summary>工具参数：消息引用（优先 ObjectId）。</summary>
     private sealed class MessageArgs
     {
-        [Description("消息Id，24位 ObjectId（推荐，从历史上下文 key 复制）；也兼容 merrybot://message/... 或 merrybot://forward/...")]
-        public string messageUrl { get; set; } = string.Empty;
-
-        [Description("同 messageUrl，推荐用 ObjectId，与 messageUrl 二选一")]
-        public string? messageKey { get; set; }
+        [Description("消息 key，24位 ObjectId（推荐，从历史上下文 [key=...] 复制）；也兼容 merrybot://message/... 或 merrybot://forward/...")]
+        public string messageKey { get; set; } = string.Empty;
     }
 
     private sealed class GetMessageImageArgs
@@ -74,13 +71,10 @@ public class MessageTool : ToolSet
         public string image { get; set; } = string.Empty;
     }
 
-    /// <summary>群聊上下文游标分页参数：按 Time 倒序，最新在前；优先用 ObjectId 翻页。</summary>
+    /// <summary>群聊上下文游标分页参数：按 Time 倒序，最新在前，用 ObjectId 翻页。</summary>
     private sealed class GetGroupContextArgs
     {
-        [Description("锚点消息ID（兼容旧调用），传上一页返回的 lastMessageId 来获取更早的消息；首次获取传空或0取最新")]
-        public long? beforeMessageId { get; set; }
-
-        [Description("锚点 Id（推荐，24位 ObjectId），传上一页返回的 lastMessageKey 来获取更早的消息；与 beforeMessageId 二选一，优先使用本字段")]
+        [Description("锚点 key（24位 ObjectId），传上一页返回的 lastMessageKey 来获取更早的消息；首次获取传空取最新")]
         public string? beforeMessageKey { get; set; }
 
         [Description("每页消息条数，默认 20，范围 1-50")]
@@ -101,9 +95,9 @@ public class MessageTool : ToolSet
     /// <summary>
     /// 通过 ObjectId 或本地消息引用读取普通消息或合并转发消息的完整内容。
     /// </summary>
-    private async Task<string> GetMessageAsync(string messageId)
+    private async Task<string> GetMessageAsync(string messageKey)
     {
-        var reference = messageId?.Trim() ?? string.Empty;
+        var reference = messageKey?.Trim() ?? string.Empty;
         if (TryParseObjectId(reference, out _))
         {
             var byKey = await messageService.GetMessageByObjectIdAsync(reference);
@@ -116,8 +110,8 @@ public class MessageTool : ToolSet
         if (!isMessage && !isForward)
         {
             throw new ArgumentException(
-                $"消息引用格式错误：必须填写消息 Id（24位 ObjectId）或 merrybot://message/... / merrybot://forward/... 内部引用，不能使用裸 ID 或外部 URL。收到：{reference}",
-                nameof(messageId));
+                $"消息引用格式错误：必须填写消息 key（24位 ObjectId）或 merrybot://message/... / merrybot://forward/... 内部引用，不能使用裸 ID 或外部 URL。收到：{reference}",
+                nameof(messageKey));
         }
 
         if (isMessage)
@@ -139,25 +133,14 @@ public class MessageTool : ToolSet
     }
 
     /// <summary>
-    /// 游标分页获取群聊历史：按 Time 倒序，最新在前；优先用 messageKey 翻页。
-    /// 返回体末尾附带 lastMessageKey / lastMessageId，供下次翻页使用。
+    /// 游标分页获取群聊历史：按 Time 倒序，最新在前；beforeMessageKey 为空取最新一页。
+    /// 返回体末尾附带 lastMessageKey（24位 ObjectId）供下次翻页使用，不返回数字 MessageId。
     /// </summary>
     private async Task<string> GetGroupContextAsync(GetGroupContextArgs args)
     {
         var pageSize = Math.Clamp(args.pageSize, 1, 50);
-        IReadOnlyList<ProcessedMessage> messages;
-        string anchorInfo;
-        if (!string.IsNullOrWhiteSpace(args.beforeMessageKey) && TryParseObjectId(args.beforeMessageKey, out _))
-        {
-            messages = await messageService.GetGroupMessagesBeforeKeyAsync(groupId, args.beforeMessageKey, pageSize);
-            anchorInfo = $"beforeMessageKey={args.beforeMessageKey}";
-        }
-        else
-        {
-            var before = args.beforeMessageId.HasValue && args.beforeMessageId.Value != 0 ? args.beforeMessageId.Value : (long?)null;
-            messages = await messageService.GetGroupMessagesBeforeAsync(groupId, before, pageSize);
-            anchorInfo = before.HasValue ? $"beforeMessageId={before.Value}" : "beforeMessageId=null(最新)";
-        }
+        var messages = await messageService.GetGroupMessagesBeforeKeyAsync(groupId, args.beforeMessageKey, pageSize);
+        var anchorInfo = string.IsNullOrWhiteSpace(args.beforeMessageKey) ? "最新" : $"beforeMessageKey={args.beforeMessageKey}";
         var total = await messageService.GetGroupMessageCountAsync(groupId);
         if (messages.Count == 0)
         {
@@ -167,10 +150,8 @@ public class MessageTool : ToolSet
         }
 
         var body = string.Join("\n", messages.Select(FormatMessage));
-        var lastMessageId = messages[^1].MessageId;
         var lastMessageKey = messages[^1].Id.ToString();
-        var anchor = anchorInfo;
-        return Cap($"群聊历史消息（共 {total} 条，本页 {messages.Count} 条，{anchor}，lastMessageId={lastMessageId}，lastMessageKey={lastMessageKey}）：\n{body}\n\n[翻页提示] 下次取更早消息请传 beforeMessageKey={lastMessageKey}（或 beforeMessageId={lastMessageId} 兼容）");
+        return Cap($"群聊历史消息（共 {total} 条，本页 {messages.Count} 条，{anchorInfo}，lastMessageKey={lastMessageKey}）：\n{body}\n\n[翻页提示] 下次取更早消息请传 beforeMessageKey={lastMessageKey}");
     }
 
     /// <summary>按图片引用加载并查看图片：主模型有视觉能力时通过调用级回调把图片注入对话，</summary>

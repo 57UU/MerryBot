@@ -225,6 +225,7 @@ public partial class HistoryRecorder : IDisposable
     /// <summary>
     /// 游标分页：按 Time 倒序，锚点为 messageId（随机）时先查其 Time 再按 Time 翻页，保证时间顺序。
     /// beforeMessageId == null 返回最新；否则返回同群且 Time 更早（同秒则 MessageId 更小，避免丢同秒消息）的前一页。O(limit)。
+    /// 供 WebUI 直连使用（前端以数字 MessageId 为锚点）；Agent 工具面走 GetMessagesByGroupIdBeforeKeyAsync。
     /// </summary>
     public async Task<List<GroupMessage>> GetMessagesByGroupIdBeforeAsync(long groupId, long? beforeMessageId, int limit = 50)
     {

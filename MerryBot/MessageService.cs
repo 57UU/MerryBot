@@ -58,28 +58,6 @@ internal sealed class MessageService : IMessageService
         => history.AiMessages.RecordAiMessageAsync(sessionKey, messageType, content,
             usage.promptUsage, usage.completionUsage, usage.cachedUsage);
 
-    /// <summary>游标分页查询（按 MessageId 倒序）。before==null 取最新；否则取 MessageId &lt; anchor 的更早一页。已撤回消息保留，由调用方按 IsDeleted 标记展示。</summary>
-    public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
-    {
-        pageSize = Math.Clamp(pageSize, 1, 50);
-        var result = new List<ProcessedMessage>(pageSize);
-        var cursor = beforeMessageId;
-        while (result.Count < pageSize)
-        {
-            var need = pageSize - result.Count;
-            var stored = await history.GetMessagesByGroupIdBeforeAsync(groupId, cursor, need);
-            if (stored.Count == 0) break;
-            foreach (var m in stored)
-            {
-                result.Add(FromStoredMessage(m));
-                if (result.Count == pageSize) break;
-            }
-            cursor = stored[^1].MessageId;
-            if (stored.Count < need) break;
-        }
-        return result;
-    }
-
     /// <summary>游标分页查询（按 ObjectId 倒序）。已撤回消息保留，由调用方按 IsDeleted 标记展示。</summary>
     public async Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default)
     {

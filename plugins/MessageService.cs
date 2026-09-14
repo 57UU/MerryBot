@@ -43,8 +43,6 @@ public interface IMessageService
     Task<ProcessedForwardMessage?> GetForwardAsync(string forwardIdOrReference, long sourceGroupId, CancellationToken cancellationToken = default);
     Task<LocalMessageResource?> GetResourceAsync(string localUri, CancellationToken cancellationToken = default);
 
-    /// <summary>游标分页查询（按 Time 倒序，beforeMessageId 为锚点 messageId）。beforeMessageId==null 取最新；否则取 Time 更早的前一页。</summary>
-    Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default);
     /// <summary>群聊历史消息总数（含撤回消息）。</summary>
     Task<int> GetGroupMessageCountAsync(long groupId, CancellationToken cancellationToken = default);

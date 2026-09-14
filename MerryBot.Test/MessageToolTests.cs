@@ -28,7 +28,7 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, messageId);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageKey\":\"{reference}\"}}");
 
         Assert.Contains("价格 10 元", result);
         Assert.Equal(groupId, messageService.MessageGroupId);
@@ -59,7 +59,7 @@ public sealed class MessageToolTests
         };
         MessageTool tool = CreateTool(messageService, groupId);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageKey\":\"{reference}\"}}");
 
         Assert.Contains("报价 20 元", result);
         Assert.Equal(groupId, messageService.ForwardGroupId);
@@ -73,7 +73,7 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, 123);
 
         ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
-            () => InvokeAsync(tool, "get_message", "{\"messageUrl\":\"456\"}"));
+            () => InvokeAsync(tool, "get_message", "{\"messageKey\":\"456\"}"));
 
         Assert.Contains("merrybot://message/...", exception.Message);
         Assert.Contains("不能使用裸 ID 或外部 URL", exception.Message);
@@ -112,7 +112,7 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, 456);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageKey\":\"{reference}\"}}");
 
         Assert.EndsWith($": {expectedContent}", result);
     }
@@ -137,7 +137,7 @@ public sealed class MessageToolTests
         MessageTool tool = CreateTool(messageService, groupId);
         string reference = LocalMessageReference.Message(groupId, messageId);
 
-        string result = await InvokeAsync(tool, "get_message", $"{{\"messageUrl\":\"{reference}\"}}");
+        string result = await InvokeAsync(tool, "get_message", $"{{\"messageKey\":\"{reference}\"}}");
 
         Assert.Contains("（已撤回）", result);
         Assert.Contains("已撤回的内容", result);
@@ -169,6 +169,35 @@ public sealed class MessageToolTests
 
         Assert.Contains("（已撤回）", result);
         Assert.Contains("撤回的消息", result);
+    }
+
+    [Fact]
+    public async Task GetGroupContext_HeaderUsesKeyWithoutMessageId()
+    {
+        const long groupId = 123;
+        ProcessedMessage message = new(
+            LiteDB.ObjectId.NewObjectId(),
+            groupId,
+            456,
+            789,
+            "昵称",
+            string.Empty,
+            string.Empty,
+            [TextData.FromText("正文")],
+            DateTime.UtcNow,
+            false);
+        StubMessageService messageService = new()
+        {
+            GroupMessages = [message],
+            GroupCount = 1,
+        };
+        MessageTool tool = CreateTool(messageService, groupId);
+
+        string result = await InvokeAsync(tool, "get_group_context", "{\"pageSize\":20}");
+
+        Assert.Contains("lastMessageKey=", result);
+        Assert.DoesNotContain("lastMessageId=", result);
+        Assert.Contains("[翻页提示] 下次取更早消息请传 beforeMessageKey=", result);
     }
 
     [Fact]
@@ -269,9 +298,6 @@ public sealed class MessageToolTests
 
         public Task<LocalMessageResource?> GetResourceAsync(string localUri, CancellationToken cancellationToken = default)
             => Task.FromResult<LocalMessageResource?>(null);
-
-        public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeAsync(long groupId, long? beforeMessageId, int pageSize, CancellationToken cancellationToken = default)
-            => Task.FromResult(GroupMessages ?? (IReadOnlyList<ProcessedMessage>)Array.Empty<ProcessedMessage>());
 
         public Task<IReadOnlyList<ProcessedMessage>> GetGroupMessagesBeforeKeyAsync(long groupId, string? beforeMessageKey, int pageSize, CancellationToken cancellationToken = default)
             => Task.FromResult(GroupMessages ?? (IReadOnlyList<ProcessedMessage>)Array.Empty<ProcessedMessage>());
