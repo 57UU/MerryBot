@@ -4,8 +4,8 @@ using LlmBackend;
 namespace MerryBot.WebUI.Api;
 
 /// <summary>
-/// LLM Provider 管理的进程内门面：Blazor 组件经 WebUiServiceRegistry 拿到它后直接调用，
-/// 不再经 JS fetch 回调 /api/plugins/llm-provider。DTO 映射照抄 LlmProviderApiMapper，
+/// LLM Provider 管理的进程内门面：Blazor 组件经 WebUiServiceRegistry 拿到它后直接调用。
+/// DTO 映射照抄原 LlmProviderApiMapper，
 /// 插件/目录服务为 null 时抛 InvalidOperationException（对等原来 API 404 的语义），由页面展示。
 /// 无状态（只持有 registry 引用），组件可按需 new，不注册 DI（独立运行无插件时 registry 本就没有注册）。
 /// </summary>
@@ -48,10 +48,10 @@ public sealed class LlmProviderService
     public Task DeleteModelAsync(string id, CancellationToken cancellationToken = default)
         => RequireManager().DeleteModelAsync(id, cancellationToken);
 
-    public Task SaveKeyAsync(LlmSaveKeyRequest request, CancellationToken cancellationToken = default)
-        => RequireManager().SaveKeyAsync(
+    public async Task<LlmKeyDto> SaveKeyAsync(LlmSaveKeyRequest request, CancellationToken cancellationToken = default)
+        => ToDto(await RequireManager().SaveKeyAsync(
             new LlmProviderKeySaveCommand(request.ProviderId, request.Secret, request.Enabled),
-            cancellationToken);
+            cancellationToken));
 
     public Task DeleteKeyAsync(string id, CancellationToken cancellationToken = default)
         => RequireManager().DeleteKeyAsync(id, cancellationToken);

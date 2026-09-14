@@ -119,6 +119,7 @@
         catch (Exception ex)
         {
             if (seq != _providerSearchSeq) return;
+            SimpleLog.Default.Warn(ex, "Provider 目录搜索失败");
             Error = DialogErrors.Shorten($"读取本地 models.dev 目录失败：{ex.Message}");
         }
         finally
@@ -137,6 +138,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型目录刷新失败");
             Error = DialogErrors.Shorten($"刷新 models.dev 失败：{ex.Message}");
         }
         finally

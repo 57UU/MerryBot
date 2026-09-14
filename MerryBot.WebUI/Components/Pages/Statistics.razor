@@ -245,7 +245,7 @@
             PluginDbSize = "加载失败";
             ImageStorageSize = "加载失败";
             FileStorageSize = "加载失败";
-            LoadError = $"加载文件大小失败：{ex.Message}";
+            LoadError ??= $"加载文件大小失败：{ex.Message}";
         }
     }
 

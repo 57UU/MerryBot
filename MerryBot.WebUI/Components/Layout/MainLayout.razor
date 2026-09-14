@@ -88,9 +88,11 @@ else
 
         }
 
-        catch
+        catch (Exception ex)
 
         {
+
+            SimpleLog.Default.Warn(ex, "确认对话框调用失败");
 
             return false;
 
@@ -124,6 +126,32 @@ else
 
 
 
+    // alert 的吞异常版本：JS 不可用（如电路断开）时忽略，失败信息由日志/页面错误条承载
+
+    private async Task AlertAsync(string message)
+
+    {
+
+        try
+
+        {
+
+            await JSRuntime.InvokeVoidAsync("alert", message);
+
+        }
+
+        catch
+
+        {
+
+            // JS 不可用时忽略
+
+        }
+
+    }
+
+
+
     // 直连进程内 IHostLifecycle；更新走后台触发（照抄 UpdateApiMapper）
     private async Task CheckUpdateAsync()
 
@@ -141,7 +169,7 @@ else
 
             {
 
-                await JSRuntime.InvokeVoidAsync("alert", "检测更新失败: 更新服务不可用。");
+                await AlertAsync("检测更新失败: 更新服务不可用。");
 
                 return;
 
@@ -153,7 +181,7 @@ else
 
             {
 
-                await JSRuntime.InvokeVoidAsync("alert", $"已是最新版本\n\n{result?.VersionInfo}");
+                await AlertAsync($"已是最新版本\n\n{result?.VersionInfo}");
 
                 return;
 
@@ -161,9 +189,7 @@ else
 
 
 
-            var confirmed = await JSRuntime.InvokeAsync<bool>(
-
-            "confirm", $"检测到新版本：\n\n{result.CommitMessages}\n\n立即更新并重启？");
+            bool confirmed = await ConfirmAsync($"检测到新版本：\n\n{result.CommitMessages}\n\n立即更新并重启？");
 
             if (!confirmed)
 
@@ -187,7 +213,7 @@ else
                 }
             });
 
-            await JSRuntime.InvokeVoidAsync("alert", "正在更新并重启，请稍后刷新页面…");
+            await AlertAsync("正在更新并重启，请稍后刷新页面…");
 
         }
 
@@ -195,7 +221,9 @@ else
 
         {
 
-            await JSRuntime.InvokeVoidAsync("alert", $"检测更新失败: {ex.Message}");
+            SimpleLog.Default.Warn(ex, "检测更新失败");
+
+            await AlertAsync($"检测更新失败: {ex.Message}");
 
         }
 
@@ -224,7 +252,7 @@ else
 
         {
 
-            await JSRuntime.InvokeVoidAsync("alert", "重启失败: 进程控制不可用。");
+            await AlertAsync("重启失败: 进程控制不可用。");
 
             return;
 
@@ -275,7 +303,7 @@ else
 
         {
 
-            await JSRuntime.InvokeVoidAsync("alert", "重载失败: 进程控制不可用。");
+            await AlertAsync("重载失败: 进程控制不可用。");
 
             return;
 

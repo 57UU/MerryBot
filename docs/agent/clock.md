@@ -111,12 +111,12 @@ LoadPlugins();
 
 | 阶段 | 代码位置 | 职责 |
 | --- | --- | --- |
-| 构造 CoreClockStore | [Logic.cs L63](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L63) | 建集合句柄（强类型 + BsonDocument 双视图），尚未建索引/写 meta |
-| 构造 ClockService | [Logic.cs L64](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L64) | 仅赋依赖，不启动调度线程 |
+| 构造 CoreClockStore | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs)（`new CoreClockStore(...)` 处） | 建集合句柄（强类型 + BsonDocument 双视图），尚未建索引/写 meta |
+| 构造 ClockService | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs)（`new ClockService(...)` 处） | 仅赋依赖，不启动调度线程 |
 | 注册管理端直连 | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs) | `webUiServices.Clock = clockService`，`/clock` 页经 `WebUiServiceRegistry` 直连 |
-| `EnsureInitializedAsync` | [Logic.cs StartClockAsync](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L135) 调 [CoreClockStore.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/ClockStore.cs#L49-L101) | 建索引；写 schema 版本 "2"；v1→v2 迁移（补 PluginId）；其他版本直接抛 |
-| `StartAsync` | [Logic.cs StartClockAsync](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs#L136) 调 [ClockService.cs](file:///e:/Projects/VSProj/MerryBot/Agent.Session/ClockService.cs#L42-L84) | 恢复中断运行记录；加载全部任务；处理 misfire；启动调度线程 |
-| 插件获得门面 | [Logic.Plugins.cs L65](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.Plugins.cs#L65) | `new ClockScope(clockService, attribute.Id)`——每个插件独立门面，注入 `PluginInterop.Clock` |
+| `EnsureInitializedAsync` | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs)（`StartClockAsync`）调 [CoreClockStore.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/ClockStore.cs#L49-L101) | 建索引；写 schema 版本 "2"；v1→v2 迁移（补 PluginId）；其他版本直接抛 |
+| `StartAsync` | [Logic.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.cs)（`StartClockAsync`）调 [ClockService.cs](file:///e:/Projects/VSProj/MerryBot/Agent.Session/ClockService.cs#L42-L84) | 恢复中断运行记录；加载全部任务；处理 misfire；启动调度线程 |
+| 插件获得门面 | [Logic.Plugins.cs](file:///e:/Projects/VSProj/MerryBot/MerryBot/Logic.Plugins.cs)（`new ClockScope(...)` 处） | `new ClockScope(clockService, attribute.Id)`——每个插件独立门面，注入 `PluginInterop.Clock` |
 | 插件注册执行器 | [Agent.cs L60](file:///e:/Projects/VSProj/MerryBot/plugins/Agent.cs#L60) | `Interop.Clock.RegisterExecutor(new AgentSessionClockExecutor(sessionManager));` |
 | 插件注入 Cron 工具 | [Agent.Create.cs L63](file:///e:/Projects/VSProj/MerryBot/plugins/Agent.Create.cs#L63) | `new Cron(sessionId, Interop.Clock)`，每个会话独立实例 |
 

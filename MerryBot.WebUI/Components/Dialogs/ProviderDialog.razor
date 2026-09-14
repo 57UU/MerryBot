@@ -96,6 +96,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "Provider 保存失败");
             Error = DialogErrors.Shorten($"保存 Provider 失败：{ex.Message}");
         }
         finally

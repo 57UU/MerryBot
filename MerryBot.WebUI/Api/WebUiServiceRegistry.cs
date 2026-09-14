@@ -29,7 +29,8 @@ public sealed record SystemStatusDto(
 /// 不再经 JS fetch + HTTP Minimal API 回调自己。
 /// 宿主按两步填充：CreateApp 时注册空壳（configureServices），LoadPlugins 后填实例。
 /// 插件未加载 / 独立运行（Program.Main 无插件）时对应字段为 null，页面应展示“服务不可用”。
-/// 字段只写一次、此后只读，volatile 保证跨线程可见性。
+/// 单写者模型：所有字段只在启动线程（Logic 构造 / RegisterWebUi，RunWebUiAsync 之前）写入一次、
+/// 此后只读，volatile 保证跨线程可见性；启动完成后不要再覆盖。
 /// </summary>
 public sealed class WebUiServiceRegistry
 {
@@ -40,7 +41,6 @@ public sealed class WebUiServiceRegistry
     private volatile ClockService? clock;
     private volatile LogFileService? logFiles;
     private volatile ModelsDevCatalogService? catalog;
-    private volatile string? botPathPrefix;
     private volatile Action<int>? shutdown;
     private volatile ILlmProviderManagementService? llmProviders;
     private volatile ISkillManagementService? skills;
@@ -95,13 +95,6 @@ public sealed class WebUiServiceRegistry
     {
         get => catalog;
         set => catalog = value;
-    }
-
-    /// <summary>机器人数据目录（catalog 缓存等按此定位，正常应与 Catalog 一起设置）。</summary>
-    public string? BotPathPrefix
-    {
-        get => botPathPrefix;
-        set => botPathPrefix = value;
     }
 
     /// <summary>进程退出入口（Logic.Shutdown，退出码语义见 ExitCode）。</summary>

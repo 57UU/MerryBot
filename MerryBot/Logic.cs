@@ -68,7 +68,6 @@ internal partial class Logic
             ConfigManager.Instance.NapcatServer);
         webUiServices.GroupManager = this;
         webUiServices.LogFiles = new LogFileService(Path.Combine(botClient.PathPrefix, "log"));
-        webUiServices.BotPathPrefix = botClient.PathPrefix;
         webUiServices.Shutdown = Shutdown;
         webUiServices.Catalog = new ModelsDevCatalogService(
             Path.Combine(botClient.PathPrefix, "models.dev-api.json"), webUiApplication.Logger);

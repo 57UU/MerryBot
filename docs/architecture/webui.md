@@ -12,12 +12,13 @@ WebUI 是内嵌的 **Blazor 历史后台**（`MerryBot.WebUI/` 项目），用�
 
 - **渲染模式**：ASP.NET Core Blazor **InteractiveServer**，页面 C# 跑在 server，与宿主同进程
 - **交互方式**：页面经 DI 拿 `WebUiServiceRegistry`（`Api/`）直接调用进程内服务，不经 HTTP；
-  仅图片/文件/资源二进制下载保留 GET 端点（`Program.cs` 的 `/api/image/{id}`、`/api/file/{id}`、` /api/resource`，
+  仅图片/文件/资源二进制下载保留 GET 端点（`Program.cs` 的 `/api/image/{id}`、`/api/file/{id}`、`/api/resource`，
   `<img>/<video>/<a download>` 必须用 URL），Skill 上传用 Blazor 内建 `InputFile` 直调服务
 - **宿主方式**：`Program.CreateApp(historyRecorder, webAddress, ...)` 由主进程调用，注册空 `WebUiServiceRegistry`；
   宿主建完 core 服务后填充，`LoadPlugins` 后由 `RegisterWebUi` 填充插件服务（未加载为 null，页面显示“服务不可用”）；
   `webAddress` 来自 `setting.toml` 的启动配置（见[配置说明](../configuration/startup.html)）。
-  独立启动（`Program.Main`）同样打开插件库并填充注册表的 core 部分（`LogFiles`、`PluginStorageDatabase`、`IContextSnapshotService`）
+  独立启动（`Program.Main`）同样打开插件库并填充注册表的 core 部分（`LogFiles`、`PluginStorageDatabase`、
+  `IContextSnapshotService`、`ModelsDevCatalogService`）；插件管理类页面显示“服务不可用”
 - **服务注册**：`HistoryRecorder`、`PluginStorageDatabase`、`IContextSnapshotService` 直接进 WebUI DI；
   其余经 `WebUiServiceRegistry`（解决“WebApp 建好时插件实例还不存在”的加载顺序问题）。
   大 JSON 经 SignalR 传输受 `MaximumReceiveMessageSize`（2MB）约束

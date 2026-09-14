@@ -15,7 +15,7 @@
         <p>MerryBot 运行状态、系统信息与资源一览。</p>
     </FluentStack>
     <FluentSpacer />
-    <FluentButton Appearance="Appearance.Neutral" Loading="@IsLoading" OnClick="LoadAsync">
+    <FluentButton Appearance="Appearance.Neutral" Loading="@IsLoading" Disabled="@IsLoading" OnClick="LoadAsync">
         @(IsLoading ? "刷新中…" : "刷新")
     </FluentButton>
 </FluentStack>
@@ -83,11 +83,11 @@
     <FluentGridItem xs="12" lg="6">
         <FluentCard Style="height:100%;">
             <h3>Bot 信息</h3>
-            @if (Status == null)
+            @if (Status == null && Error == null)
             {
                 <FluentProgressRing />
             }
-            else
+            else if (Status != null)
             {
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                     <FluentStack Orientation="Orientation.Horizontal">
@@ -109,11 +109,11 @@
     <FluentGridItem xs="12" lg="6">
         <FluentCard Style="height:100%;">
             <h3>系统信息</h3>
-            @if (Status == null)
+            @if (Status == null && Error == null)
             {
                 <FluentProgressRing />
             }
-            else
+            else if (Status != null)
             {
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                     <FluentStack Orientation="Orientation.Horizontal">
@@ -182,7 +182,9 @@
         Error = null;
         try
         {
-            if (WebUiServices.BotStatusProvider == null || WebUiServices.HostLifecycle == null)
+            Func<BotStatusDto>? statusProvider = WebUiServices.BotStatusProvider;
+            IHostLifecycle? lifecycle = WebUiServices.HostLifecycle;
+            if (statusProvider == null || lifecycle == null)
             {
                 Error = "状态服务不可用。";
                 return;
@@ -192,14 +194,14 @@
             string gitInfo;
             try
             {
-                gitInfo = await WebUiServices.HostLifecycle.GetVersionInfoAsync();
+                gitInfo = await lifecycle.GetVersionInfoAsync();
             }
             catch
             {
                 gitInfo = string.Empty;
             }
             Status = new SystemStatusDto(
-                WebUiServices.BotStatusProvider(),
+                statusProvider(),
                 groups.Count,
                 Environment.OSVersion.ToString(),
                 RuntimeInformation.FrameworkDescription,
@@ -212,11 +214,17 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "概览加载失败");
             Error = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
         }
 
         // Skill 服务未加载（对等原来 API 404）时仅 Skill 数显示「—」，不影响其余状态
-        if (WebUiServices.Skills == null)
+        ISkillManagementService? skills = WebUiServices.Skills;
+        if (skills == null)
         {
             SkillCount = null;
         }
@@ -224,16 +232,14 @@
         {
             try
             {
-                IReadOnlyList<ManagedSkill> skills = await WebUiServices.Skills.ListSkillsAsync();
-                SkillCount = skills.Count;
+                IReadOnlyList<ManagedSkill> skillList = await skills.ListSkillsAsync();
+                SkillCount = skillList.Count;
             }
             catch
             {
                 SkillCount = null;
             }
         }
-
-        IsLoading = false;
     }
 
     private static string FormatUptime(double seconds)

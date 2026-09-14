@@ -215,7 +215,12 @@
                 }
             }
         }
-        catch (Exception exception) { Error = $"无法读取定时任务: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "定时任务加载失败");
+            Tasks = [];
+            Error = $"无法读取定时任务: {exception.Message}";
+        }
     }
 
     private async Task OnPluginFilterChangedAsync(string? pluginId)
@@ -271,7 +276,12 @@
                 new ClockLogQuery { TaskId = task.Id, Limit = 20 });
             Logs = logs.Select(ClockLogDto.From).ToList();
         }
-        catch (Exception exception) { Error = $"无法读取执行记录: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "定时任务执行记录加载失败");
+            Logs = [];
+            Error = $"无法读取执行记录: {exception.Message}";
+        }
     }
 
     private Task SaveAsync() => SaveCoreAsync(EditEnabled);
@@ -311,6 +321,7 @@
         }
         catch (Exception exception)
         {
+            SimpleLog.Default.Warn(exception, "定时任务保存失败");
             SaveError = $"保存失败: {exception.Message}";
         }
         finally
@@ -339,6 +350,7 @@
         }
         catch (Exception exception)
         {
+            SimpleLog.Default.Warn(exception, "定时任务删除失败");
             SaveError = $"删除失败: {exception.Message}";
         }
         finally

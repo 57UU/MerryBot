@@ -299,4 +299,58 @@ public sealed class LogFileServiceTests
             Directory.Delete(directory, true);
         }
     }
+
+    [Fact]
+    public void Multibyte_Lines_Survive_Chunk_Boundaries()
+    {
+        string directory = CreateDir();
+        try
+        {
+            // 300 行 × 约 110 字节 > 3 个 8KB 扫描块：中文行必被块边界切开，
+            // 跨块字节累积 + 合并后一次解码应保证行完整、关键词可命中
+            string[] lines = Enumerable.Range(0, 300)
+                .Select(i => LogLine("INFO", $"中文行{i:D3}：群 12345 收到消息内容填充一二三四五"))
+                .ToArray();
+            WriteLog(directory, "bot.log", lines);
+            LogFileService service = new(directory);
+
+            LogContentDto content = service.ReadCurrent(300, null, null, null);
+
+            Assert.Equal(300, content.Lines.Count);
+            Assert.Contains("中文行299", content.Lines[0]);
+            Assert.Contains("中文行000", content.Lines[299]);
+
+            // 中间行的关键词过滤：块边界截断会导致解码乱码从而漏匹配
+            LogContentDto filtered = service.ReadCurrent(300, null, "中文行150", null);
+            string hit = Assert.Single(filtered.Lines);
+            Assert.Contains("中文行150：群 12345 收到消息内容填充一二三四五", hit);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void Requested_Lines_Are_Clamped_To_Max()
+    {
+        string directory = CreateDir();
+        try
+        {
+            string[] lines = Enumerable.Range(0, 2100).Select(i => LogLine("INFO", $"line-{i:D4}")).ToArray();
+            WriteLog(directory, "bot.log", lines);
+            LogFileService service = new(directory);
+
+            // 请求 10000 行：钳制到上限 2000，返回末尾 2000 行
+            LogContentDto content = service.ReadCurrent(10000, null, null, null);
+
+            Assert.Equal(2000, content.Lines.Count);
+            Assert.Contains("line-2099", content.Lines[0]);
+            Assert.Contains("line-0100", content.Lines[1999]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
 }

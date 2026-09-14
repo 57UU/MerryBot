@@ -119,6 +119,9 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "运行日志加载失败");
+            // 模板以 Data == null 显示转圈：失败时给空行结果，只显示错误条，不与转圈并存
+            Data = new LogContentDto(Data?.File, Array.Empty<string>());
             Error = $"加载失败：{ex.Message}";
         }
         finally

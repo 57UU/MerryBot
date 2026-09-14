@@ -178,7 +178,14 @@
         await Task.Delay(50);
         // fluent-select 在选项动态追加时可能不同步显示值，直接以 DOM 为准对齐一次；
         // Blazor 侧状态本来就是对的，后续渲染不会再打架
-        await JSRuntime.InvokeVoidAsync("llmProviderApi.setSelectValue", "model-dialog-provider-select", savedId);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("llmProviderApi.setSelectValue", "model-dialog-provider-select", savedId);
+        }
+        catch
+        {
+            // 下拉显示对齐失败不阻塞新增流程
+        }
     }
 
     private async Task SaveAsync()
@@ -207,6 +214,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型保存失败");
             Error = DialogErrors.Shorten($"保存模型失败：{ex.Message}");
         }
         finally

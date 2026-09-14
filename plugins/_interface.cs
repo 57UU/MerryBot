@@ -190,7 +190,7 @@ public static class MessageUtils
             DiceData diceData => $"[骰子: {diceData.Result}点]",
             RpsData rpsData => $"[猜拳: {rpsData.Result switch { "1" => "石头", "2" => "剪刀", _ => "布" }}]",
             PokeData => "[戳一戳]",
-            ImageData imageData => $"[图片: {imageData.Summary ?? imageData.File}]",
+            ImageData imageData => $"[图片: {imageData.File}]",
             RecordData => "[语音]",
             VideoData videoData => $"[视频: {videoData.File}]",
             FileData fileData => $"[文件: {fileData.File}]",

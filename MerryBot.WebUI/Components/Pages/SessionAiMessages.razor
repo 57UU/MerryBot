@@ -209,6 +209,7 @@
         }
         catch (Exception exception)
         {
+            SimpleLog.Default.Warn(exception, "会话快照加载 session 列表失败");
             LoadError = $"加载 session 列表失败: {exception.Message}";
         }
     }
@@ -229,6 +230,7 @@
         }
         catch (Exception exception)
         {
+            SimpleLog.Default.Warn(exception, "会话快照加载上下文失败");
             LoadError = $"加载上下文失败: {exception.Message}";
         }
         finally
@@ -286,7 +288,11 @@
             confirmed = await JSRuntime.InvokeAsync<bool>(
                 "confirm", $"确定清除会话 [{SelectedSessionKey}] 的上下文吗？\n相当于在群里 @机器人 /new，操作不可恢复。");
         }
-        catch { confirmed = false; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "会话快照清除确认失败");
+            confirmed = false;
+        }
         if (!confirmed) return;
 
         IsClearing = true;
@@ -320,6 +326,7 @@
         }
         catch (Exception exception)
         {
+            SimpleLog.Default.Warn(exception, "会话快照清除会话失败");
             ClearError = $"清除失败: {exception.Message}";
             await RefreshBusyAsync();
         }

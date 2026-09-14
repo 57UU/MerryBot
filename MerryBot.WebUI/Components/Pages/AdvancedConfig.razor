@@ -147,6 +147,9 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "高级配置加载失败");
+            DataEntries = [];
+            ConfigEntries = [];
             Error = $"加载失败：{ex.Message}";
         }
         finally
@@ -161,7 +164,16 @@
 
     private async Task DeleteEntryAsync(RawEntryDto entry, bool isConfig)
     {
-        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 [{entry.Id}] ？此操作不可恢复。"))
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 [{entry.Id}] ？此操作不可恢复。");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed)
         {
             return;
         }
@@ -180,6 +192,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "高级配置删除失败");
             Error = $"删除失败：{ex.Message}";
         }
     }
@@ -193,6 +206,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "高级配置数据库大小加载失败");
             DbSizesText = $"大小加载失败：{ex.Message}";
         }
         return Task.CompletedTask;
@@ -201,7 +215,16 @@
     private async Task RebuildAsync(string target)
     {
         string label = target == "plugin" ? "插件库 (plugin_data.db)" : target == "history" ? "历史库 (group_history.db)" : "全部数据库";
-        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定要整理 {label} 吗？\n整理期间数据库会被独占，操作可能耗时数秒。")) return;
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定要整理 {label} 吗？\n整理期间数据库会被独占，操作可能耗时数秒。");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed) return;
         IsRebuilding = true;
         RebuildingTarget = target;
         RebuildResult = null;
@@ -217,6 +240,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "高级配置数据库整理失败");
             RebuildError = ex.Message;
         }
         finally

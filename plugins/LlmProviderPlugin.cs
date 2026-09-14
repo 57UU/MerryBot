@@ -268,8 +268,10 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
         }
         var secret = RequireText(command.Secret, nameof(command.Secret));
         var now = DateTimeOffset.UtcNow;
-        // 一个 Provider 只保留一个 Key：有旧 Key 直接复用其行并覆盖，其余同 Provider 的 Key 清理掉
-        var record = (await keys.FindAllAsync())
+        // 一个 Provider 只保留一个 Key：有旧 Key 直接复用其行并覆盖，其余同 Provider 的 Key 清理掉。
+        // keys 表极小，一次物化复用，避免两次全表扫描。
+        List<KeyRecord> allKeys = (await keys.FindAllAsync()).ToList();
+        var record = allKeys
             .Where(item => item.ProviderId == providerId)
             .OrderBy(item => item.CreatedAtUtc)
             .FirstOrDefault()
@@ -280,7 +282,7 @@ public sealed partial class LlmProviderPlugin : Plugin, ILlmProviderRegistry, IL
                 CreatedAtUtc = now,
             };
         // FindAllAsync 返回延迟枚举：先物化再逐条删，避免枚举中写造成同一异步流锁重入
-        foreach (var stale in (await keys.FindAllAsync())
+        foreach (var stale in allKeys
             .Where(item => item.ProviderId == providerId && item.Id != record.Id)
             .ToList())
         {

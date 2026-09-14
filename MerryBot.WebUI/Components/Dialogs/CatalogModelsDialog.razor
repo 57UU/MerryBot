@@ -142,6 +142,7 @@
         catch (Exception ex)
         {
             if (seq != _modelSearchSeq) return;
+            SimpleLog.Default.Warn(ex, "模型目录加载失败");
             Error = DialogErrors.Shorten($"读取 Provider 模型失败：{ex.Message}");
         }
         finally
@@ -167,6 +168,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型目录导入模型失败");
             Error = DialogErrors.Shorten($"导入失败：{ex.Message}");
         }
     }

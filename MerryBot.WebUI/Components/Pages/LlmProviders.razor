@@ -148,6 +148,8 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型配置加载失败");
+            Config = new LlmConfigSnapshot(null, []);
             Error = $"无法加载 LLM 配置：{ex.Message}";
         }
     }
@@ -210,6 +212,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型配置设置默认模型失败");
             Error = $"设置默认模型失败：{ex.Message}";
         }
     }
@@ -224,6 +227,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型配置删除模型失败");
             Error = $"删除模型失败：{ex.Message}";
         }
     }
@@ -238,6 +242,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型配置删除 Provider 失败");
             Error = $"删除 Provider 失败：{ex.Message}";
         }
     }
@@ -252,6 +257,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "模型配置删除 Key 失败");
             Error = $"删除 Key 失败：{ex.Message}";
         }
     }

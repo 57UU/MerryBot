@@ -104,6 +104,8 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "群组管理加载失败");
+            Data = new GroupListDto([]);
             Error = $"加载失败：{ex.Message}";
         }
         finally
@@ -134,6 +136,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "群组管理启用群失败");
             Error = $"启用失败：{ex.Message}";
         }
         finally
@@ -165,6 +168,7 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "群组管理操作失败");
             Error = $"操作失败：{ex.Message}";
         }
         finally

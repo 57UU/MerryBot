@@ -17,6 +17,12 @@ public sealed class LlmProviderServiceTests
         public LlmModelSaveCommand? CapturedSaveModel { get; private set; }
         public string? CapturedSaveModelId { get; private set; }
         public string? CapturedDefaultModelId { get; private set; }
+        public string? CapturedSaveProviderId { get; private set; }
+        public LlmProviderSaveCommand? CapturedSaveProvider { get; private set; }
+        public string? CapturedDeleteProviderId { get; private set; }
+        public string? CapturedDeleteModelId { get; private set; }
+        public LlmProviderKeySaveCommand? CapturedSaveKey { get; private set; }
+        public string? CapturedDeleteKeyId { get; private set; }
 
         public Task<LlmProviderConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(ConfigurationToReturn ?? throw new InvalidOperationException("no configuration"));
@@ -26,10 +32,17 @@ public sealed class LlmProviderServiceTests
             => throw new NotImplementedException();
 
         public Task SaveProviderAsync(string id, LlmProviderSaveCommand command, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        {
+            CapturedSaveProviderId = id;
+            CapturedSaveProvider = command;
+            return Task.CompletedTask;
+        }
 
         public Task DeleteProviderAsync(string id, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        {
+            CapturedDeleteProviderId = id;
+            return Task.CompletedTask;
+        }
 
         public Task SaveModelAsync(string id, LlmModelSaveCommand command, CancellationToken cancellationToken = default)
         {
@@ -39,14 +52,23 @@ public sealed class LlmProviderServiceTests
         }
 
         public Task DeleteModelAsync(string id, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        {
+            CapturedDeleteModelId = id;
+            return Task.CompletedTask;
+        }
 
         public Task<LlmProviderConfigurationKey> SaveKeyAsync(
             LlmProviderKeySaveCommand command, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        {
+            CapturedSaveKey = command;
+            return Task.FromResult(new LlmProviderConfigurationKey("k9", "fp-末四位", command.Enabled, DateTimeOffset.UtcNow));
+        }
 
         public Task DeleteKeyAsync(string id, CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
+        {
+            CapturedDeleteKeyId = id;
+            return Task.CompletedTask;
+        }
 
         public Task SetDefaultModelAsync(string modelId, CancellationToken cancellationToken = default)
         {
@@ -174,5 +196,65 @@ public sealed class LlmProviderServiceTests
         await service.SetDefaultModelAsync("p1/m1");
 
         Assert.Equal("p1/m1", manager.CapturedDefaultModelId);
+    }
+
+    [Fact]
+    public async Task Missing_Manager_Key_Methods_Throw_InvalidOperation()
+    {
+        LlmProviderService service = new(new WebUiServiceRegistry());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SaveKeyAsync(new LlmSaveKeyRequest("p1", "sk-xxx", true)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteKeyAsync("k1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteProviderAsync("p1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteModelAsync("p1/m1"));
+    }
+
+    [Fact]
+    public async Task SaveKey_Returns_Key_Dto_Without_Secret()
+    {
+        FakeManager manager = new() { ConfigurationToReturn = SampleConfiguration() };
+        LlmProviderService service = new(new WebUiServiceRegistry { LlmProviders = manager });
+
+        LlmKeyDto key = await service.SaveKeyAsync(new LlmSaveKeyRequest("p1", "sk-xxx", true));
+
+        // 新建 Key 的指纹直接返回，调用方无需整页 reload；类型上就没有明文字段
+        Assert.Equal("k9", key.Id);
+        Assert.Equal("fp-末四位", key.Fingerprint);
+        Assert.True(key.Enabled);
+        Assert.NotNull(manager.CapturedSaveKey);
+        Assert.Equal("p1", manager.CapturedSaveKey.ProviderId);
+        Assert.Equal("sk-xxx", manager.CapturedSaveKey.Secret);
+    }
+
+    [Fact]
+    public async Task SaveProvider_Passes_Command_Through()
+    {
+        FakeManager manager = new() { ConfigurationToReturn = SampleConfiguration() };
+        LlmProviderService service = new(new WebUiServiceRegistry { LlmProviders = manager });
+
+        await service.SaveProviderAsync("p1", new LlmSaveProviderRequest("改名", "https://api.example.com/v1", "openai-responses", false));
+
+        Assert.Equal("p1", manager.CapturedSaveProviderId);
+        Assert.NotNull(manager.CapturedSaveProvider);
+        Assert.Equal("改名", manager.CapturedSaveProvider.Name);
+        Assert.Equal("https://api.example.com/v1", manager.CapturedSaveProvider.BaseUrl);
+        Assert.Equal("openai-responses", manager.CapturedSaveProvider.ApiFormat);
+        Assert.False(manager.CapturedSaveProvider.Enabled);
+    }
+
+    [Fact]
+    public async Task Delete_Methods_Pass_Id_Through()
+    {
+        FakeManager manager = new() { ConfigurationToReturn = SampleConfiguration() };
+        LlmProviderService service = new(new WebUiServiceRegistry { LlmProviders = manager });
+
+        await service.DeleteProviderAsync("p1");
+        await service.DeleteModelAsync("p1/m1");
+        await service.DeleteKeyAsync("k1");
+
+        Assert.Equal("p1", manager.CapturedDeleteProviderId);
+        Assert.Equal("p1/m1", manager.CapturedDeleteModelId);
+        Assert.Equal("k1", manager.CapturedDeleteKeyId);
     }
 }

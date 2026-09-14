@@ -172,6 +172,8 @@ internal partial class Logic
         }
         else
         {
+            // 有意不替换 DI 里 core 预注册的 ContextSnapshotService：两者是同一 agent scope 的
+            // 只读等价实现（见 AgentServicePlugin 纯转发），页面经 DI 拿到的实例行为一致。
             // 会话控制（忙闲查询/清除）由持有 AgentSessionManager 的 agent 插件提供；
             // 未加载时快照页只读，清除按钮不可用
             var sessionControl = plugins

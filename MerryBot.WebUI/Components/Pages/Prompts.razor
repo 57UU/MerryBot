@@ -182,7 +182,12 @@
                 HasOverride = overrideKeys.Contains(SelectedSessionKey);
             }
         }
-        catch (Exception exception) { Error = $"无法读取提示词配置: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "提示词配置读取失败");
+            Groups = [];
+            Error = $"无法读取提示词配置: {exception.Message}";
+        }
     }
 
     /// <summary>群列表：历史记录群 + 已启用群并上群名；缺名群实时向 napcat 查询（3 秒超时）。逻辑照抄 GroupApiMapper（精简掉本页不用的消息计数）。</summary>
@@ -283,7 +288,11 @@
             // 未复写时以全局值预填编辑框，方便微调后直接保存
             EditText = entry is not null ? entry.Prompt : (GlobalPrompt ?? string.Empty);
         }
-        catch (Exception exception) { Error = $"无法读取提示词复写: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "提示词复写读取失败");
+            Error = $"无法读取提示词复写: {exception.Message}";
+        }
     }
 
     private void CopyFromGlobal()
@@ -299,6 +308,7 @@
 
     private async Task SaveAsync()
     {
+        if (IsSaving) return;
         if (SelectedSessionKey is null) return;
         if (EditText.Length > IPromptOverrideService.MaxPromptLength)
         {
@@ -330,14 +340,28 @@
             if (isDelete) EditText = GlobalPrompt ?? string.Empty;
             await LoadAsync();
         }
-        catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "提示词复写保存失败");
+            Error = $"保存失败: {exception.Message}";
+        }
         finally { IsSaving = false; }
     }
 
     private async Task DeleteAsync()
     {
+        if (IsSaving) return;
         if (SelectedSessionKey is null) return;
-        if (!await JSRuntime.InvokeAsync<bool>("confirm", "确定回退为全局提示词吗？该群的复写将被删除。")) return;
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "确定回退为全局提示词吗？该群的复写将被删除。");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed) return;
         var promptService = WebUiServices.PromptOverrides;
         if (promptService is null)
         {
@@ -354,7 +378,11 @@
             EditText = GlobalPrompt ?? string.Empty;
             await LoadAsync();
         }
-        catch (Exception exception) { Error = $"回退失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "提示词复写回退失败");
+            Error = $"回退失败: {exception.Message}";
+        }
         finally { IsSaving = false; }
     }
 

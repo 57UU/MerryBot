@@ -180,7 +180,7 @@ NapCat WebSocket → BotClient.WebSocket_OnMessage
 # 构建整个解决方案（已验证通过：0 警告 0 错误）
 dotnet build MerryBot.sln -c Debug
 
-# 运行单元测试（已验证：MerryBot.Test 200 通过；ModelsDev.Sdk.Test 61 通过）
+# 运行单元测试（已验证：MerryBot.Test 211 通过；ModelsDev.Sdk.Test 61 通过）
 dotnet test MerryBot.Test/MerryBot.Test.csproj -c Debug
 dotnet test ModelsDev.Sdk.Test/ModelsDev.Sdk.Test.csproj -c Debug
 ```

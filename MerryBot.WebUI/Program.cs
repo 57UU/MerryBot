@@ -20,8 +20,8 @@ public class Program
     {
         string dataPath = Environment.GetEnvironmentVariable("MERRY_BOT") ?? "data";
         var historyRecorder = new HistoryRecorder(Path.Combine(dataPath, "group_history.db"), Path.Combine(dataPath, "storage"));
-        // 独立运行（无宿主插件）：同样打开插件库并填充直连注册表的 core 部分，
-        // 页面行为与宿主模式一致（插件服务显示“未加载”，其余可用）
+        // 独立运行（无宿主插件）：同样打开插件库并填充直连注册表的 core 部分。
+        // 仅日志/历史浏览/统计/模型目录类页面可用，插件管理类（配置/群组/时钟/LLM/Skill/记忆等）显示“服务不可用”。
         var pluginDb = new PluginStorageDatabase(Path.Combine(dataPath, "plugin_data.db"));
         await pluginDb.MigrateAsync();
         var webUiServices = new WebUiServiceRegistry
@@ -37,6 +37,9 @@ public class Program
                     new ContextSnapshotService(pluginDb.CreateScope("agent")));
                 services.AddSingleton(webUiServices);
             });
+        // 模型目录服务只需缓存路径 + Logger，与插件无关，独立模式同样可用
+        webUiServices.Catalog = new ModelsDevCatalogService(
+            Path.Combine(dataPath, "models.dev-api.json"), app.Logger);
         await app.RunAsync();
     }
     public static WebApplication CreateApp(HistoryRecorder historyRecorder, string webAddress="http://localhost:5000",
@@ -56,8 +59,6 @@ public class Program
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
-        // Blazor Server 场景下先注册默认 HttpClient，再注册 Fluent UI 组件服务
-        builder.Services.AddHttpClient();
         builder.Services.AddFluentUIComponents();
         // data
         builder.Services.AddSingleton(historyRecorder);
@@ -123,8 +124,8 @@ public class Program
                 await context.Response.WriteAsJsonAsync(new { error = $"请求失败：HTTP {context.Response.StatusCode}" });
             }
         });
-        // 注：业务 POST API 已全部迁为 Blazor 直连（进程内调用，不走 HTTP），
-        // 剩余 /api 全是 GET 二进制端点，无需 UseAntiforgery（Blazor 表单自带保护）。
+        // 注：业务 POST API 已全部迁为 Blazor 直连（进程内调用，不走 HTTP），剩余 /api 全是 GET 二进制端点；
+        // 但 Razor 端点自带 antiforgery 元数据，缺少 UseAntiforgery 中间件会直接 500，下行必须保留。
 
 
 #if DEBUG
@@ -133,6 +134,7 @@ public class Program
         app.UseStaticFiles();
 #endif
         StaticWebAssetsLoader.UseStaticWebAssets(app.Environment, app.Configuration);
+        app.UseAntiforgery();
 
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();

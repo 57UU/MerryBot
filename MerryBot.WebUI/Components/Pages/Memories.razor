@@ -134,7 +134,12 @@
                     session.UpdatedAtUtc))
                 .ToList();
         }
-        catch (Exception exception) { Error = $"无法读取记忆会话: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "记忆会话列表读取失败");
+            Sessions = [];
+            Error = $"无法读取记忆会话: {exception.Message}";
+        }
     }
 
     private async Task SelectSessionAsync(string sessionKey)
@@ -155,11 +160,17 @@
             IndexContent = indexTask.Result;
             MemoryItems = memoriesTask.Result.Select(item => new MemoryEdit(item.Key, item.Content)).ToList();
         }
-        catch (Exception exception) { Error = $"无法读取记忆: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "记忆读取失败");
+            MemoryItems = [];
+            Error = $"无法读取记忆: {exception.Message}";
+        }
     }
 
     private async Task SaveIndexAsync()
     {
+        if (IsSaving) return;
         if (SelectedSessionKey is null) return;
         var manager = WebUiServices.Memories;
         if (manager is null)
@@ -174,6 +185,7 @@
 
     private async Task SaveNewAsync()
     {
+        if (IsSaving) return;
         if (SelectedSessionKey is null) return;
         var manager = WebUiServices.Memories;
         if (manager is null)
@@ -191,6 +203,7 @@
 
     private Task SaveExistingAsync(MemoryEdit memory)
     {
+        if (IsSaving) return Task.CompletedTask;
         if (SelectedSessionKey is null) return Task.CompletedTask;
         var manager = WebUiServices.Memories;
         if (manager is null)
@@ -204,7 +217,18 @@
 
     private async Task DeleteMemoryAsync(MemoryEdit memory)
     {
-        if (SelectedSessionKey is null || !await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除记忆 “{memory.Key}”吗？")) return;
+        if (IsSaving) return;
+        if (SelectedSessionKey is null) return;
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除记忆 “{memory.Key}”吗？");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed) return;
         var manager = WebUiServices.Memories;
         if (manager is null)
         {
@@ -220,12 +244,17 @@
             await SelectSessionAsync(sessionKey);
             await LoadSessionsAsync();
         }
-        catch (Exception exception) { Error = $"删除记忆失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "记忆删除失败");
+            Error = $"删除记忆失败: {exception.Message}";
+        }
         finally { IsSaving = false; }
     }
 
     private async Task SaveAsync(string action, Func<Task> operation, bool reload)
     {
+        if (IsSaving) return;
         IsSaving = true;
         try
         {
@@ -234,7 +263,11 @@
             if (reload && SelectedSessionKey is not null) await SelectSessionAsync(SelectedSessionKey);
             await LoadSessionsAsync();
         }
-        catch (Exception exception) { Error = $"{action}失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, $"记忆{action}失败");
+            Error = $"{action}失败: {exception.Message}";
+        }
         finally { IsSaving = false; }
     }
 

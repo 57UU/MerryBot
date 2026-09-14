@@ -205,6 +205,8 @@
         }
         catch (Exception ex)
         {
+            SimpleLog.Default.Warn(ex, "配置中心加载失败");
+            Snapshot = new ConfigPanelDto([]);
             Error = $"无法加载配置: {ex.Message}";
         }
     }
@@ -327,7 +329,15 @@
             && field.Key.Contains("Prompt", StringComparison.OrdinalIgnoreCase);
 
     private async Task ScrollToAsync(string sectionId)
-        => await JSRuntime.InvokeVoidAsync("configApi.scrollTo", SectionElementId(sectionId));
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("configApi.scrollTo", SectionElementId(sectionId));
+        }
+        catch
+        {
+        }
+    }
 
     private async Task SaveAsync(ConfigSectionDto section)
     {
@@ -357,11 +367,13 @@
         }
         catch (ArgumentException ex)
         {
+            SimpleLog.Default.Warn(ex, "配置中心保存参数校验失败");
             SaveErrors[section.Id] = ex.Message;
         }
         catch (Exception ex)
         {
-            SaveErrors[section.Id] = $"保存失败: {ex.Message}";
+            SimpleLog.Default.Warn(ex, "配置中心保存失败");
+            SaveErrors[section.Id] = "保存失败。";
         }
         finally
         {

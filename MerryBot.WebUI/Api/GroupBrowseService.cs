@@ -1,4 +1,5 @@
 using BotPlugin;
+using CommonLib;
 using DataService;
 
 namespace MerryBot.WebUI.Api;
@@ -89,11 +90,32 @@ public static class GroupBrowseService
         return new GroupListDto(entries);
     }
 
-    // 单次查询最多等 3 秒：napcat 未响应时快速返回，避免列表加载被拖住
+    // 单次查询最多等 3 秒：napcat 未响应时快速返回，避免列表加载被拖住。
+    // 查询抛错同样降级为 Name=null（群照常展示），不拖垮整个列表；
+    // 超时后丢弃的 lookup 若随后 fault，用 continuation 吃掉异常，避免 UnobservedTaskException 噪音。
     private static async Task<GroupNameInfoDto?> ResolveWithTimeoutAsync(IGroupManager manager, long groupId)
     {
-        Task<GroupNameInfoDto?> lookup = manager.ResolveGroupNameAsync(groupId);
-        Task completed = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(3)));
-        return completed == lookup ? await lookup : null;
+        // 调用本身也包进来：门面实现若同步抛错（连 Task 都没返回），同样降级
+        Task<GroupNameInfoDto?>? lookup = null;
+        try
+        {
+            lookup = manager.ResolveGroupNameAsync(groupId);
+            Task completed = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(3)));
+            if (completed == lookup)
+            {
+                return await lookup;
+            }
+        }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, $"查询群 {groupId} 名称失败，降级展示");
+        }
+        if (lookup != null)
+        {
+            _ = lookup.ContinueWith(
+                static task => _ = task.Exception,
+                TaskContinuationOptions.OnlyOnFaulted);
+        }
+        return null;
     }
 }

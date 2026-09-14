@@ -26,8 +26,9 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
             <strong>上传 Skill</strong>
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
-                <InputFile accept=".md,.zip" OnChange="OnInputFileChanged" />
-                <FluentButton Appearance="Appearance.Accent" OnClick="UploadAsync" Disabled="@IsUploading" Loading="@IsUploading">@(IsUploading ? "上传中…" : "上传")</FluentButton>
+                <InputFile @key="InputFileKey" accept=".md,.zip" OnChange="OnInputFileChanged" />
+                <FluentButton Appearance="Appearance.Accent" OnClick="UploadAsync" Disabled="@IsUploading" Loading="@IsUploading">@(IsUploading ? $"上传中 {(UploadProgress * 100):F0}%…" : "上传")</FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" OnClick="CancelUpload" Disabled="@(!IsUploading)">取消</FluentButton>
             </FluentStack>
             @if (SelectedFile != null)
             {
@@ -107,6 +108,9 @@
     private string GitUrl = string.Empty;
     private string GitName = string.Empty;
     private IBrowserFile? SelectedFile;
+    private int InputFileKey;
+    private double UploadProgress;
+    private CancellationTokenSource? UploadCts;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -123,37 +127,97 @@
             }
             SkillItems = await WebUiServices.Skills.ListSkillsAsync();
         }
-        catch (Exception exception) { Error = $"无法读取 Skill: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill读取失败");
+            SkillItems = [];
+            Error = $"无法读取 Skill: {exception.Message}";
+        }
     }
 
     private void OnInputFileChanged(InputFileChangeEventArgs args)
     {
-        SelectedFile = args.FileCount > 0 ? args.File : null;
+        Error = null;
+        IBrowserFile? file = args.FileCount > 0 ? args.File : null;
+        if (file is null)
+        {
+            SelectedFile = null;
+            return;
+        }
+        string extension = Path.GetExtension(file.Name);
+        if (!extension.Equals(".md", StringComparison.OrdinalIgnoreCase)
+            && !extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedFile = null;
+            Error = "仅支持上传 .md 或 .zip 文件。";
+            return;
+        }
+        if (file.Size == 0)
+        {
+            SelectedFile = null;
+            Error = "文件为空，请重新选择。";
+            return;
+        }
+        if (file.Size > MaxUploadBytes)
+        {
+            SelectedFile = null;
+            Error = "Skill 上传文件不能超过 20 MB。";
+            return;
+        }
+        SelectedFile = file;
     }
 
     private async Task UploadAsync()
     {
+        if (IsUploading) return;
         if (SelectedFile == null) { Error = "请先选择要上传的 Skill 文件（.md 或 .zip）。"; return; }
         if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         if (SelectedFile.Size > MaxUploadBytes) { Error = "Skill 上传文件不能超过 20 MB。"; return; }
+        IBrowserFile file = SelectedFile;
+        CancellationTokenSource cts = new();
+        UploadCts = cts;
         IsUploading = true;
         try
         {
             Error = null; Success = null;
-            await using Stream source = SelectedFile.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+            UploadProgress = 0;
+            await using Stream source = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
             using MemoryStream buffer = new();
-            await source.CopyToAsync(buffer);
-            await WebUiServices.Skills.UploadSkillAsync(new SkillUpload(SelectedFile.Name, buffer.ToArray()));
+            byte[] chunk = new byte[64 * 1024];
+            int read;
+            while ((read = await source.ReadAsync(chunk, cts.Token)) > 0)
+            {
+                await buffer.WriteAsync(chunk.AsMemory(0, read), cts.Token);
+                UploadProgress = file.Size > 0 ? (double)buffer.Length / file.Size : 0;
+                StateHasChanged();
+            }
+            await WebUiServices.Skills.UploadSkillAsync(new SkillUpload(file.Name, buffer.ToArray()));
             SelectedFile = null;
+            InputFileKey++;
             await LoadAsync();
             Success = "上传成功。";
         }
-        catch (Exception exception) { Error = $"上传失败: {exception.Message}"; }
-        finally { IsUploading = false; }
+        catch (OperationCanceledException exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill上传已取消");
+            Error = "已取消上传。";
+        }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill上传失败");
+            Error = $"上传失败: {exception.Message}";
+        }
+        finally { IsUploading = false; UploadCts?.Dispose(); UploadCts = null; UploadProgress = 0; }
+    }
+
+    private void CancelUpload()
+    {
+        UploadCts?.Cancel();
     }
 
     private async Task CloneGitAsync()
     {
+        if (IsCloning) return;
         if (string.IsNullOrWhiteSpace(GitUrl)) { Error = "请填写 Git 地址。"; return; }
         if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsCloning = true;
@@ -166,12 +230,17 @@
             await LoadAsync();
             Success = "Git 克隆成功。";
         }
-        catch (Exception exception) { Error = $"克隆失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill克隆失败");
+            Error = $"克隆失败: {exception.Message}";
+        }
         finally { IsCloning = false; }
     }
 
     private async Task UpdateGitAsync(ManagedSkill skill)
     {
+        if (IsMutating) return;
         if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
@@ -181,12 +250,17 @@
             await LoadAsync();
             Success = $"已更新 Git Skill “{skill.Name}”。";
         }
-        catch (Exception exception) { Error = $"更新失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill更新失败");
+            Error = $"更新失败: {exception.Message}";
+        }
         finally { IsMutating = false; }
     }
 
     private async Task ToggleAsync(ManagedSkill skill)
     {
+        if (IsMutating) return;
         if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
@@ -195,13 +269,27 @@
             await WebUiServices.Skills.SetSkillEnabledAsync(skill.Name, !skill.Enabled);
             await LoadAsync();
         }
-        catch (Exception exception) { Error = $"保存失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill保存失败");
+            Error = $"保存失败: {exception.Message}";
+        }
         finally { IsMutating = false; }
     }
 
     private async Task DeleteAsync(ManagedSkill skill)
     {
-        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 Skill “{skill.Name}”吗？")) return;
+        if (IsMutating) return;
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"确定删除 Skill “{skill.Name}”吗？");
+        }
+        catch
+        {
+            confirmed = false;
+        }
+        if (!confirmed) return;
         if (WebUiServices.Skills == null) { Error = "技能服务未加载或不可用。"; return; }
         IsMutating = true;
         try
@@ -210,7 +298,11 @@
             await WebUiServices.Skills.DeleteSkillAsync(skill.Name);
             await LoadAsync();
         }
-        catch (Exception exception) { Error = $"删除失败: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "Skill删除失败");
+            Error = $"删除失败: {exception.Message}";
+        }
         finally { IsMutating = false; }
     }
 

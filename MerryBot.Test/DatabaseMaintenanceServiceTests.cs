@@ -135,4 +135,71 @@ public sealed class DatabaseMaintenanceServiceTests
             Directory.Delete(directory, true);
         }
     }
+
+    [Fact]
+    public async Task Null_Arguments_Throw()
+    {
+        string directory = CreateDir();
+        Directory.CreateDirectory(Path.Combine(directory, "storage"));
+        PluginStorageDatabase pluginDb = new(Path.Combine(directory, "plugin_data.db"));
+        HistoryRecorder history = new(Path.Combine(directory, "group_history.db"), Path.Combine(directory, "storage"));
+        try
+        {
+            Assert.Throws<ArgumentNullException>(() => DatabaseMaintenanceService.GetSizes(null!, history));
+            Assert.Throws<ArgumentNullException>(() => DatabaseMaintenanceService.GetSizes(pluginDb, null!));
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                DatabaseMaintenanceService.RebuildAsync(null!, history, "all"));
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                DatabaseMaintenanceService.RebuildAsync(pluginDb, null!, "all"));
+        }
+        finally
+        {
+            history.Dispose();
+            pluginDb.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Null_Target_Means_All()
+    {
+        string directory = CreateDir();
+        (PluginStorageDatabase pluginDb, HistoryRecorder history) = await OpenDatabasesAsync(directory);
+        try
+        {
+            IReadOnlyList<RebuildResultDto> results =
+                await DatabaseMaintenanceService.RebuildAsync(pluginDb, history, null);
+
+            Assert.Equal(2, results.Count);
+        }
+        finally
+        {
+            history.Dispose();
+            pluginDb.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_Rebuild_Second_Call_Fails_With_Lock()
+    {
+        string directory = CreateDir();
+        (PluginStorageDatabase pluginDb, HistoryRecorder history) = await OpenDatabasesAsync(directory);
+        try
+        {
+            // 串行锁是进程内互斥：手动占住后第二次 Rebuild 应直接失败，而不是排队等待
+            Task<IReadOnlyList<RebuildResultDto>> first =
+                DatabaseMaintenanceService.RebuildAsync(pluginDb, history, "all");
+            InvalidOperationException conflict = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                DatabaseMaintenanceService.RebuildAsync(pluginDb, history, "all"));
+            Assert.Contains("正在执行", conflict.Message);
+            await first;
+        }
+        finally
+        {
+            history.Dispose();
+            pluginDb.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
 }

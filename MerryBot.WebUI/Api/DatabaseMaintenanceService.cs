@@ -79,6 +79,8 @@ public static class DatabaseMaintenanceService
         }
         catch (Exception ex) when (ex is not (ArgumentException or InvalidOperationException))
         {
+            // 原 DatabaseApiMapper.ToError 会记服务端日志：UI 只展示一行字，排查靠日志文件
+            SimpleLog.Default.Warn(ex, "数据库 Rebuild 失败");
             string baseMsg = ex.GetBaseException().Message ?? ex.Message;
             bool isLoop = baseMsg.Contains("loop", StringComparison.OrdinalIgnoreCase)
                 || baseMsg.Contains("Detected loop", StringComparison.OrdinalIgnoreCase);

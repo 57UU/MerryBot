@@ -131,6 +131,9 @@ else
     private string? LoadError { get; set; }
     private RangeKind Selected { get; set; } = RangeKind.Today;
 
+    // 区间切换序号守卫：并发 Load 谁新谁赢，旧响应直接丢弃（照抄 CatalogModelsDialog 的 _modelSearchSeq 模式）
+    private int _loadSeq;
+
     private List<TokenUsageBucket> PaddedBuckets { get; set; } = [];
     private List<TokenSessionSummary> Sessions { get; set; } = [];
 
@@ -151,17 +154,17 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        await LoadAsync(++_loadSeq);
     }
 
     private async Task SelectRangeAsync(RangeKind kind)
     {
         if (Selected == kind) return;
         Selected = kind;
-        await LoadAsync();
+        await LoadAsync(++_loadSeq);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(int seq)
     {
         IsLoading = true;
         LoadError = null;
@@ -180,6 +183,7 @@ else
             var bucketsTask = HistoryRecorder.AiMessages.GetTokenUsageBucketsAsync(SinceUnixSec, UntilUnixSec, BucketSeconds, LocalOffsetSeconds);
             var sessionsTask = HistoryRecorder.AiMessages.GetTokenUsageBySessionAsync(SinceUnixSec, UntilUnixSec);
             await Task.WhenAll(bucketsTask, sessionsTask);
+            if (seq != _loadSeq) return;
 
             // 补齐空桶，保持时间轴连续
             var found = bucketsTask.Result.ToDictionary(bucket => bucket.BucketStart);
@@ -196,6 +200,7 @@ else
         }
         catch (Exception ex)
         {
+            if (seq != _loadSeq) return;
             Logger.LogError(ex, "加载 Token 用量统计失败");
             PaddedBuckets = [];
             Sessions = [];
@@ -203,7 +208,7 @@ else
         }
         finally
         {
-            IsLoading = false;
+            if (seq == _loadSeq) IsLoading = false;
         }
     }
 
