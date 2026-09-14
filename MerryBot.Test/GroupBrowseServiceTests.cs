@@ -14,6 +14,8 @@ public sealed class GroupBrowseServiceTests
     {
         public IReadOnlyList<long> EnabledIds { get; set; } = [];
         public Func<long, Task<GroupNameInfoDto?>>? Resolver { get; set; }
+        public Func<IReadOnlyList<long>, Task<Dictionary<long, GroupNameInfoDto>>>? BatchResolver { get; set; }
+        public List<long>? CapturedBatchIds { get; set; }
 
         public IReadOnlyList<long> GetEnabledGroupIds() => EnabledIds;
 
@@ -23,6 +25,12 @@ public sealed class GroupBrowseServiceTests
 
         public Task<GroupNameInfoDto?> ResolveGroupNameAsync(long groupId)
             => Resolver?.Invoke(groupId) ?? Task.FromResult<GroupNameInfoDto?>(null);
+
+        public Task<Dictionary<long, GroupNameInfoDto>> ResolveGroupNamesAsync(IReadOnlyList<long> groupIds)
+        {
+            CapturedBatchIds = groupIds.ToList();
+            return BatchResolver?.Invoke(groupIds) ?? Task.FromResult(new Dictionary<long, GroupNameInfoDto>());
+        }
     }
 
     private static string CreateDir()
@@ -207,6 +215,137 @@ public sealed class GroupBrowseServiceTests
             Assert.Equal(123456L, entry.GroupId);
             Assert.Null(entry.Name);
             Assert.True(entry.Enabled);
+        }
+        finally
+        {
+            history.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Missing_Names_Use_Batch_Once()
+    {
+        string directory = CreateDir();
+        HistoryRecorder history = new(Path.Combine(directory, "group_history.db"), Path.Combine(directory, "storage"));
+        await history.MigrateAsync();
+        try
+        {
+            // 缺名群走批量接口一次，不逐群单查
+            int singleCalls = 0;
+            FakeGroupManager manager = new()
+            {
+                EnabledIds = [777L],
+                Resolver = _ =>
+                {
+                    singleCalls++;
+                    return Task.FromResult<GroupNameInfoDto?>(null);
+                },
+                BatchResolver = _ => Task.FromResult(new Dictionary<long, GroupNameInfoDto>
+                {
+                    [777L] = new GroupNameInfoDto(777L, "批量群", 10, 100),
+                }),
+            };
+
+            GroupListDto list = await GroupBrowseService.GetGroupsAsync(manager, history);
+
+            GroupEntryDto entry = Assert.Single(list.Groups);
+            Assert.Equal("批量群", entry.Name);
+            Assert.Equal(10, entry.MemberCount);
+            Assert.Equal(new List<long> { 777L }, manager.CapturedBatchIds);
+            Assert.Equal(0, singleCalls);
+        }
+        finally
+        {
+            history.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Batch_Failure_Falls_Back_To_Singles()
+    {
+        string directory = CreateDir();
+        HistoryRecorder history = new(Path.Combine(directory, "group_history.db"), Path.Combine(directory, "storage"));
+        await history.MigrateAsync();
+        try
+        {
+            // 批量抛错时回退逐群单查，结果一致
+            FakeGroupManager manager = new()
+            {
+                EnabledIds = [888L],
+                BatchResolver = _ => throw new InvalidOperationException("batch 不可用"),
+                Resolver = id => Task.FromResult<GroupNameInfoDto?>(new GroupNameInfoDto(id, "回退群", 3, 30)),
+            };
+
+            GroupListDto list = await GroupBrowseService.GetGroupsAsync(manager, history);
+
+            GroupEntryDto entry = Assert.Single(list.Groups);
+            Assert.Equal("回退群", entry.Name);
+            Assert.Equal(3, entry.MemberCount);
+        }
+        finally
+        {
+            history.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Partial_Batch_Resolves_Remainder_By_Singles()
+    {
+        string directory = CreateDir();
+        HistoryRecorder history = new(Path.Combine(directory, "group_history.db"), Path.Combine(directory, "storage"));
+        await history.MigrateAsync();
+        try
+        {
+            // 批量只命中部分群，剩余群由单查补齐
+            FakeGroupManager manager = new()
+            {
+                EnabledIds = [901L, 902L],
+                BatchResolver = _ => Task.FromResult(new Dictionary<long, GroupNameInfoDto>
+                {
+                    [901L] = new GroupNameInfoDto(901L, "批量命中", 5, 50),
+                }),
+                Resolver = id => Task.FromResult<GroupNameInfoDto?>(new GroupNameInfoDto(id, "单查补齐", 6, 60)),
+            };
+
+            GroupListDto list = await GroupBrowseService.GetGroupsAsync(manager, history);
+
+            Assert.Equal(2, list.Groups.Count);
+            Assert.Equal("批量命中", list.Groups[0].Name);
+            Assert.Equal("单查补齐", list.Groups[1].Name);
+        }
+        finally
+        {
+            history.Dispose();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task Null_Manager_Reads_Cache_Only()
+    {
+        string directory = CreateDir();
+        HistoryRecorder history = new(Path.Combine(directory, "group_history.db"), Path.Combine(directory, "storage"));
+        await history.MigrateAsync();
+        try
+        {
+            // 门面为 null（服务未加载）时只读缓存，不实时查询；无缓存的群直接缺席
+            await history.RecordOrUpdateGroupNameAsync(new GroupNameEntry
+            {
+                GroupId = 111L,
+                Name = "缓存群",
+                MemberCount = 5,
+                MaxMemberCount = 50,
+                UpdatedTime = DateTime.UtcNow,
+            });
+
+            Dictionary<long, GroupNameEntry> map =
+                await GroupBrowseService.ResolveGroupNamesAsync(null, history, [111L, 999L]);
+
+            Assert.Equal("缓存群", map[111L].Name);
+            Assert.False(map.ContainsKey(999L));
         }
         finally
         {

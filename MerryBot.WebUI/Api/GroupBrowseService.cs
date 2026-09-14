@@ -13,6 +13,25 @@ public interface IGroupManager
 
     /// <summary>实时从 napcat 查询群名/人数并写入缓存；未连接或查询失败时返回 null。</summary>
     Task<GroupNameInfoDto?> ResolveGroupNameAsync(long groupId);
+
+    /// <summary>批量实时查询并写入缓存；默认实现为并发单查扇出，Logic 用 get_group_list 覆盖为真批量。查不到的群不在字典中。</summary>
+    async Task<Dictionary<long, GroupNameInfoDto>> ResolveGroupNamesAsync(IReadOnlyList<long> groupIds)
+    {
+        Dictionary<long, GroupNameInfoDto> result = new();
+        if (groupIds.Count == 0)
+        {
+            return result;
+        }
+        GroupNameInfoDto?[] resolved = await Task.WhenAll(groupIds.Select(ResolveGroupNameAsync));
+        foreach (GroupNameInfoDto? info in resolved)
+        {
+            if (info != null)
+            {
+                result[info.GroupId] = info;
+            }
+        }
+        return result;
+    }
 }
 
 public sealed record GroupNameInfoDto(
@@ -43,32 +62,12 @@ public static class GroupBrowseService
         List<long> knownGroupIds = await historyRecorder.GetAllGroupIdsAsync();
         List<long> enabledIds = manager.GetEnabledGroupIds().OrderBy(x => x).ToList();
         HashSet<long> enabledSet = enabledIds.ToHashSet();
-        List<GroupNameEntry> names = await historyRecorder.GetAllGroupNamesAsync();
-        Dictionary<long, GroupNameEntry> nameMap = names.ToDictionary(x => x.GroupId);
-
         // 已启用的群即使还没有历史记录也一并展示；消息数并行统计，避免逐群串行拖慢响应
         List<long> allIds = knownGroupIds.Concat(enabledIds).Distinct().OrderBy(x => x).ToList();
 
         // 缓存缺名的群（通常是未启用过、Bot 从未处理过消息的群）实时向 napcat 查询并写入缓存
-        List<long> missingNameIds = allIds.Where(id => !nameMap.ContainsKey(id)).ToList();
-        if (missingNameIds.Count > 0)
-        {
-            GroupNameInfoDto?[] resolved = await Task.WhenAll(missingNameIds.Select(id => ResolveWithTimeoutAsync(manager, id)));
-            foreach (GroupNameInfoDto? info in resolved)
-            {
-                if (info != null)
-                {
-                    nameMap[info.GroupId] = new GroupNameEntry
-                    {
-                        GroupId = info.GroupId,
-                        Name = info.Name,
-                        MemberCount = info.MemberCount,
-                        MaxMemberCount = info.MaxMemberCount,
-                        UpdatedTime = DateTime.Now,
-                    };
-                }
-            }
-        }
+        Dictionary<long, GroupNameEntry> nameMap =
+            await ResolveGroupNamesAsync(manager, historyRecorder, allIds);
 
         int[] messageCounts = await Task.WhenAll(allIds.Select(historyRecorder.GetMessageCountByGroupIdAsync));
         int[] aiMessageCounts = await Task.WhenAll(allIds.Select(gid => historyRecorder.AiMessages.GetAiMessageCountBySessionKeyAsync(SessionKey.ToString(gid))));
@@ -88,6 +87,76 @@ public static class GroupBrowseService
         }
 
         return new GroupListDto(entries);
+    }
+
+    /// <summary>群名批量解析：先读本地缓存，缺名再经门面实时补齐；manager 为 null 时只读缓存。失败/超时降级为缺名，不抛。</summary>
+    public static async Task<Dictionary<long, GroupNameEntry>> ResolveGroupNamesAsync(
+        IGroupManager? manager, HistoryRecorder historyRecorder, IReadOnlyList<long> groupIds)
+    {
+        ArgumentNullException.ThrowIfNull(historyRecorder);
+        ArgumentNullException.ThrowIfNull(groupIds);
+        Dictionary<long, GroupNameEntry> nameMap = (await historyRecorder.GetAllGroupNamesAsync())
+            .GroupBy(static item => item.GroupId)
+            .ToDictionary(static group => group.Key, static group => group.First());
+        List<long> missing = groupIds.Distinct().Where(id => !nameMap.ContainsKey(id)).ToList();
+        if (missing.Count == 0 || manager == null)
+        {
+            return nameMap;
+        }
+        // 优先真批量；空结果/抛错/超时一律回退逐群单查扇出，保证与原来逐群行为一致
+        Dictionary<long, GroupNameInfoDto> batched = await CallWithTimeoutAsync(() => manager.ResolveGroupNamesAsync(missing));
+        List<long> stillMissing = missing.Where(id => !batched.ContainsKey(id)).ToList();
+        if (stillMissing.Count > 0)
+        {
+            GroupNameInfoDto?[] singled = await Task.WhenAll(stillMissing.Select(id => ResolveWithTimeoutAsync(manager, id)));
+            foreach (GroupNameInfoDto? info in singled)
+            {
+                if (info != null)
+                {
+                    batched[info.GroupId] = info;
+                }
+            }
+        }
+        foreach (KeyValuePair<long, GroupNameInfoDto> pair in batched)
+        {
+            nameMap[pair.Key] = new GroupNameEntry
+            {
+                GroupId = pair.Key,
+                Name = pair.Value.Name,
+                MemberCount = pair.Value.MemberCount,
+                MaxMemberCount = pair.Value.MaxMemberCount,
+                UpdatedTime = DateTime.Now,
+            };
+        }
+        return nameMap;
+    }
+
+    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(3);
+
+    private static async Task<Dictionary<long, GroupNameInfoDto>> CallWithTimeoutAsync(
+        Func<Task<Dictionary<long, GroupNameInfoDto>>> call)
+    {
+        Task<Dictionary<long, GroupNameInfoDto>>? task = null;
+        try
+        {
+            task = call();
+            Task completed = await Task.WhenAny(task, Task.Delay(ResolveTimeout));
+            if (completed == task)
+            {
+                return await task;
+            }
+        }
+        catch (Exception exception)
+        {
+            SimpleLog.Default.Warn(exception, "批量查询群名失败，回退单查");
+        }
+        if (task != null)
+        {
+            _ = task.ContinueWith(
+                static inner => _ = inner.Exception,
+                TaskContinuationOptions.OnlyOnFaulted);
+        }
+        return new();
     }
 
     // 单次查询最多等 3 秒：napcat 未响应时快速返回，避免列表加载被拖住。

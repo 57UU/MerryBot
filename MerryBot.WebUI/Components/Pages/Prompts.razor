@@ -190,53 +190,21 @@
         }
     }
 
-    /// <summary>群列表：历史记录群 + 已启用群并上群名；缺名群实时向 napcat 查询（3 秒超时）。逻辑照抄 GroupApiMapper（精简掉本页不用的消息计数）。</summary>
+    /// <summary>群列表：历史记录群 + 已启用群并上群名；缺名群实时向 napcat 查询（3 秒超时）。复用 GroupBrowseService 批量解析。</summary>
     private async Task<List<GroupNameInfo>> LoadGroupsAsync()
     {
         var knownGroupIds = await HistoryRecorder.GetAllGroupIdsAsync();
         var enabledIds = WebUiServices.GroupManager?.GetEnabledGroupIds().OrderBy(static id => id).ToList()
             ?? new List<long>();
-        var nameMap = (await HistoryRecorder.GetAllGroupNamesAsync())
-            .GroupBy(static item => item.GroupId)
-            .ToDictionary(group => group.Key, static group => group.First());
         var allIds = knownGroupIds.Concat(enabledIds).Distinct().OrderBy(static id => id).ToList();
 
-        // 群管理服务未加载时跳过实时查询，仅用历史缓存群名
-        var groupManager = WebUiServices.GroupManager;
-        if (groupManager is not null)
-        {
-            var missingNameIds = allIds.Where(id => !nameMap.ContainsKey(id)).ToList();
-            if (missingNameIds.Count > 0)
-            {
-                var resolved = await Task.WhenAll(missingNameIds.Select(ResolveWithTimeoutAsync));
-                foreach (var info in resolved)
-                {
-                    if (info is not null)
-                    {
-                        nameMap[info.GroupId] = new GroupNameEntry
-                        {
-                            GroupId = info.GroupId,
-                            Name = info.Name,
-                            MemberCount = info.MemberCount,
-                            MaxMemberCount = info.MaxMemberCount,
-                            UpdatedTime = DateTime.Now,
-                        };
-                    }
-                }
-            }
-        }
+        // 群管理服务未加载时共享方法内部只读历史缓存，不实时查询
+        var nameMap = await GroupBrowseService.ResolveGroupNamesAsync(
+            WebUiServices.GroupManager, HistoryRecorder, allIds);
 
         return allIds
             .Select(id => new GroupNameInfo(id, nameMap.TryGetValue(id, out var entry) ? entry.Name : null))
             .ToList();
-
-        // 单次查询最多等 3 秒：napcat 未响应时快速返回，避免列表被拖住
-        async Task<GroupNameInfoDto?> ResolveWithTimeoutAsync(long groupId)
-        {
-            var lookup = groupManager!.ResolveGroupNameAsync(groupId);
-            var completed = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(3)));
-            return completed == lookup ? await lookup : null;
-        }
     }
 
     /// <summary>全局默认提示词：从配置中心读 plugin:agent / AiPrompt（对等原 config 快照取值）。</summary>
